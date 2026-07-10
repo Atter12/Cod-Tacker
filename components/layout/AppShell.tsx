@@ -18,7 +18,7 @@ export function AppShell({
   title: string;
   breadcrumbs?: string[];
   tenantSwitcher?: ReactNode;
-  user?: { name?: string; email?: string; onLogout?: () => void };
+  user?: { name?: string; email?: string };
 }) {
   const scope = storeSlug ? "store" : "agency";
   return (

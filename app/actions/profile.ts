@@ -23,6 +23,7 @@ export async function updateProfile(input: ProfileInput): Promise<ProfileActionR
     const { error } = await supabase.from("profiles").update({ full_name: input.fullName.trim(), avatar_url: input.avatarUrl ?? null }).eq("id", user.id);
     if (error) return { error: error.message };
     revalidatePath(routes.app.dashboard);
+    revalidatePath(routes.app.profile);
     return {};
   } catch (error) {
     return { error: toUserMessage(error) };

@@ -1,17 +1,24 @@
 import { DateRangePicker, MetricCard, SectionHeader, Card, CardContent, DataTable } from "@/components/ui";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { dateRangeToBounds, parseDateRangePreset } from "@/lib/formatting/date-range";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getDashboardSummary } from "@/services/dashboard.service";
 
 const percent = (value: number) => new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 1 }).format(value);
 
-export default async function StoreDashboard({ params }: { params: Promise<{ agencySlug: string; storeSlug: string }> }) {
+export default async function StoreDashboard({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ agencySlug: string; storeSlug: string }>;
+  searchParams: Promise<{ range?: string }>;
+}) {
   const { agencySlug, storeSlug } = await params;
+  const { range } = await searchParams;
+  const preset = parseDateRangePreset(range);
+  const { from, to } = dateRangeToBounds(preset);
   const membership = await requireStoreAccess(agencySlug, storeSlug);
-  const to = new Date();
-  const from = new Date(to);
-  from.setDate(to.getDate() - 30);
   const summary = await getDashboardSummary(
     await createClient(),
     membership.agencyId,
@@ -25,7 +32,7 @@ export default async function StoreDashboard({ params }: { params: Promise<{ age
           <h1 className="text-2xl font-semibold">Resumen operativo</h1>
           <p className="text-sm text-text-secondary">Indicadores calculados con los datos disponibles.</p>
         </div>
-        <DateRangePicker />
+        <DateRangePicker value={preset} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Pedidos generados" value={String(summary.kpis.ordersGenerated)} />

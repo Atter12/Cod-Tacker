@@ -1,4 +1,37 @@
 import { type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { UserMenu } from "./UserMenu";
-export function AppTopbar({ title, breadcrumbs = [], tenantSwitcher, user }: { title: string; breadcrumbs?: string[]; tenantSwitcher?: ReactNode; user?: { name?: string; email?: string; onLogout?: () => void } }) { return <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface-elevated px-4 sm:px-6"><div className="min-w-0">{breadcrumbs.length > 0 && <div className="mb-0.5 flex items-center gap-1 text-xs text-text-secondary">{breadcrumbs.map((breadcrumb) => <span key={breadcrumb} className="flex items-center gap-1">{breadcrumb}<ChevronRight className="size-3 last:hidden" /></span>)}</div>}<h1 className="truncate text-sm font-semibold">{title}</h1></div><div className="flex items-center gap-4">{tenantSwitcher}<UserMenu {...user} /></div></header>; }
+
+export function AppTopbar({
+  title,
+  breadcrumbs = [],
+  tenantSwitcher,
+  user,
+}: {
+  title: string;
+  breadcrumbs?: string[];
+  tenantSwitcher?: ReactNode;
+  user?: { name?: string; email?: string };
+}) {
+  return (
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface-elevated px-4 sm:px-6">
+      <div className="min-w-0">
+        {breadcrumbs.length > 0 ? (
+          <div className="mb-0.5 flex items-center gap-1 text-xs text-text-secondary">
+            {breadcrumbs.map((breadcrumb) => (
+              <span key={breadcrumb} className="flex items-center gap-1">
+                {breadcrumb}
+                <ChevronRight className="size-3 last:hidden" />
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <h1 className="truncate text-sm font-semibold">{title}</h1>
+      </div>
+      <div className="flex items-center gap-4">
+        {tenantSwitcher}
+        <UserMenu {...user} />
+      </div>
+    </header>
+  );
+}
