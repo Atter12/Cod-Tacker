@@ -33,10 +33,12 @@ const copy: Record<Kind, { title: string; submit: string; description?: string }
 export function AuthForm({
   kind,
   email: initialEmail = "",
+  next,
 }: {
   kind: Kind;
   email?: string;
   purpose?: OtpPurpose;
+  next?: string;
 }) {
   const [error, setError] = useState<string>();
   const [success, setSuccess] = useState<string>();
@@ -56,7 +58,7 @@ export function AuthForm({
 
     try {
       if (kind === "login") {
-        result = await login(formEmail, String(data.get("password") ?? ""));
+        result = await login(formEmail, String(data.get("password") ?? ""), next);
       } else if (kind === "register") {
         result = await register(formEmail, String(data.get("password") ?? ""), String(data.get("fullName") ?? ""));
       } else if (kind === "verify") {

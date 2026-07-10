@@ -16,16 +16,30 @@ export default async function DashboardResolver() {
 
   if (access.kind === "pending_invite") {
     return (
-      <main className="flex min-h-[70vh] items-center justify-center px-4">
+      <main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 px-4 text-center">
         <EmptyState
-          title="Acceso pendiente"
-          description="Tu cuenta está activa, pero un administrador aún debe activar tu invitación a una agencia o tienda."
+          title="Tienes una invitación pendiente"
+          description="Usa el enlace que te compartió el administrador de la agencia. Si no lo tienes, pídeselo de nuevo."
         />
+        <Link href={routes.app.invitesAccept} className="text-sm text-brand-primary">
+          Abrir página de aceptación
+        </Link>
       </main>
     );
   }
 
   const stores = access.stores;
+  if (!stores.length) {
+    return (
+      <main className="flex min-h-[70vh] items-center justify-center px-4">
+        <EmptyState
+          title="Sin tiendas asignadas"
+          description="Tu cuenta está activa en una agencia, pero aún no tienes tiendas visibles. Pide a un administrador que te asigne acceso o cree una tienda."
+        />
+      </main>
+    );
+  }
+
   const preferred = await getActiveTenantPreference();
   const preferredStore = stores.find(
     (store) => store.agencySlug === preferred.agencySlug && store.storeSlug === preferred.storeSlug,

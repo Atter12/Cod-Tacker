@@ -1,1 +1,43 @@
-{"name":"codtracked","version":"0.1.0","private":true,"scripts":{"dev":"next dev","build":"next build","start":"next start","lint":"eslint .","typecheck":"tsc --noEmit","test:rls":"node scripts/test-rls.mjs","validate":"npm run lint && npm run typecheck && npm run build"},"dependencies":{"@supabase/ssr":"^0.12.0","@supabase/supabase-js":"^2.110.2","class-variance-authority":"^0.7.1","clsx":"^2.1.1","date-fns":"^4.4.0","lucide-react":"^1.24.0","next":"16.2.10","react":"19.2.4","react-dom":"19.2.4","recharts":"^3.9.2","server-only":"^0.0.1","tailwind-merge":"^3.6.0","zod":"^4.4.3"},"devDependencies":{"@tailwindcss/postcss":"^4","@types/node":"^20.19.43","@types/react":"^19","@types/react-dom":"^19","eslint":"^9","eslint-config-next":"16.2.10","supabase":"^2.109.1","tailwindcss":"^4","typescript":"^5"}}
+{
+  "name": "codtracked",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:rls": "node scripts/test-rls.mjs",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "clear:demo": "tsx scripts/clear-demo.ts",
+    "validate": "npm run lint && npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.110.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.9.2",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "supabase": "^2.109.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.3",
+    "typescript": "^5"
+  }
+}

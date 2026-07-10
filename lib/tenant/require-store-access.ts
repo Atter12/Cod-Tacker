@@ -1,17 +1,22 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
-import { getCurrentTenant } from "@/lib/tenant/get-current-tenant";
+import { getAccessibleStores, accessibleStoreToMembership } from "@/lib/tenant/get-accessible-stores";
 import type { TenantMembership } from "@/lib/tenant/tenant-context";
 
 /**
- * Ensures the user can enter a store. Uses the same membership resolution as
- * getAccessState (including agency-level access without store_members).
+ * Ensures the user can enter a store. Uses the same resolution as getAccessibleStores.
  */
 export async function requireStoreAccess(agencySlug: string, storeSlug: string): Promise<TenantMembership> {
-  const membership = (await getCurrentTenant()).find(
-    (item) => item.agencySlug === agencySlug && item.storeSlug === storeSlug,
-  );
-  if (!membership?.storeId) redirect("/unauthorized");
-  return membership;
+  const stores = await getAccessibleStores();
+  const match = stores.find((store) => store.agencySlug === agencySlug && store.storeSlug === storeSlug);
+  if (!match) redirect("/unauthorized");
+  return accessibleStoreToMembership(match);
+}
+
+export async function requireStoreAccessById(storeId: string): Promise<TenantMembership> {
+  const stores = await getAccessibleStores();
+  const match = stores.find((store) => store.storeId === storeId);
+  if (!match) redirect("/unauthorized");
+  return accessibleStoreToMembership(match);
 }

@@ -8,10 +8,12 @@ export function MobileNavigation({
   agencySlug,
   storeSlug,
   scope = "store",
+  roles = [],
 }: {
   agencySlug: string;
   storeSlug?: string;
   scope?: "store" | "agency" | "admin";
+  roles?: readonly import("@/config/permissions").Role[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -24,7 +26,7 @@ export function MobileNavigation({
         <Menu className="size-5" />
       </button>
       <Drawer open={open} onOpenChange={setOpen} title="CODTracked">
-        <AppSidebar agencySlug={agencySlug} storeSlug={storeSlug} scope={scope} mobile />
+        <AppSidebar agencySlug={agencySlug} storeSlug={storeSlug} scope={scope} roles={roles} mobile />
       </Drawer>
     </div>
   );

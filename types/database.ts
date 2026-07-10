@@ -16,7 +16,7 @@ export type {
 import type { Tables, TablesInsert, TablesUpdate } from "./database.generated";
 
 export type AgencyRow = Tables<"agencies">;
-export type AgencyMemberRow = Tables<"agency_members">;
+export type AgencyInvitationRow = Tables<"agency_invitations">;
 export type WhiteLabelSettingsRow = Tables<"white_label_settings">;
 export type StoreRow = Tables<"stores">;
 export type StoreMemberRow = Tables<"store_members">;

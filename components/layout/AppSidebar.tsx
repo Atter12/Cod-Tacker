@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { BarChart3, Bell, Boxes, Building2, Cable, FileText, Settings, Store } from "lucide-react";
 import { adminNavigation, agencyNavigation, storeNavigation } from "@/config/navigation";
+import type { Role } from "@/config/permissions";
 import { routes } from "@/config/routes";
+import { filterNavigationByPermission } from "@/lib/permissions/filter-navigation";
 import { cn } from "@/lib/utils/cn";
 
 const icons = [BarChart3, FileText, Boxes, BarChart3, Store, Boxes, FileText, Settings, Bell, Cable, Settings];
@@ -19,13 +21,16 @@ export function AppSidebar({
   storeSlug,
   scope = "store",
   mobile = false,
+  roles = [],
 }: {
   agencySlug: string;
   storeSlug?: string;
   scope?: "store" | "agency" | "admin";
   mobile?: boolean;
+  roles?: readonly Role[];
 }) {
-  const items = scope === "agency" ? agencyNavigation : scope === "admin" ? adminNavigation : storeNavigation;
+  const raw = scope === "agency" ? agencyNavigation : scope === "admin" ? adminNavigation : storeNavigation;
+  const items = scope === "agency" ? filterNavigationByPermission(raw, roles) : raw;
 
   return (
     <aside

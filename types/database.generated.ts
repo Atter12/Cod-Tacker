@@ -502,6 +502,62 @@ export type Database = {
           },
         ]
       }
+      agency_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          agency_id: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          revoked_at: string | null
+          role: Database["public"]["Enums"]["agency_role"]
+          status: Database["public"]["Enums"]["agency_invitation_status"]
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          agency_id: string
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          invited_by?: string | null
+          revoked_at?: string | null
+          role: Database["public"]["Enums"]["agency_role"]
+          status?: Database["public"]["Enums"]["agency_invitation_status"]
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          agency_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          revoked_at?: string | null
+          role?: Database["public"]["Enums"]["agency_role"]
+          status?: Database["public"]["Enums"]["agency_invitation_status"]
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_invitations_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           acknowledged_at: string | null
@@ -2975,14 +3031,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_agency_invitation: {
+        Args: { p_token_hash: string }
+        Returns: string
+      }
       has_agency_access: {
         Args: { target_agency_id: string }
         Returns: boolean
       }
       has_agency_role: {
         Args: {
-          allowed_roles: Database["public"]["Enums"]["agency_role"][]
           target_agency_id: string
+          allowed_roles: Database["public"]["Enums"]["agency_role"][]
         }
         Returns: boolean
       }
@@ -2998,6 +3058,7 @@ export type Database = {
     }
     Enums: {
       ad_platform: "meta" | "tiktok" | "google" | "organic" | "direct" | "other"
+      agency_invitation_status: "pending" | "accepted" | "expired" | "revoked"
       agency_role: "owner" | "admin" | "manager" | "analyst" | "viewer"
       alert_severity: "info" | "warning" | "critical"
       attribution_model:
@@ -3242,6 +3303,7 @@ export const Constants = {
   public: {
     Enums: {
       ad_platform: ["meta", "tiktok", "google", "organic", "direct", "other"],
+      agency_invitation_status: ["pending", "accepted", "expired", "revoked"],
       agency_role: ["owner", "admin", "manager", "analyst", "viewer"],
       alert_severity: ["info", "warning", "critical"],
       attribution_model: [

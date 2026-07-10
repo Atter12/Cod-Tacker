@@ -142,17 +142,27 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       throw new ValidationError(storeError?.message ?? "No se pudo crear la tienda.");
     }
 
-    const { error: storeMemberError } = await admin.from("store_members").insert({
-      store_id: store.id,
-      user_id: user.id,
-      role: "owner",
-      status: "active",
-      created_by: user.id,
+    // Owner/admin/manager access all agency stores via agency_members — no store_members row required.
+    const { writeAuditLog } = await import("@/lib/audit/write-audit");
+    await writeAuditLog({
+      action: "agency_created",
+      entityType: "agency",
+      entityId: agency.id,
+      actorId: user.id,
+      agencyId: agency.id,
+      newData: { slug: agency.slug },
+      useAdmin: true,
     });
-    if (storeMemberError) {
-      await admin.from("agencies").delete().eq("id", agency.id);
-      throw new ValidationError(storeMemberError.message);
-    }
+    await writeAuditLog({
+      action: "store_created",
+      entityType: "store",
+      entityId: store.id,
+      actorId: user.id,
+      agencyId: agency.id,
+      storeId: store.id,
+      newData: { slug: store.slug },
+      useAdmin: true,
+    });
 
     await setActiveTenantPreference(agency.slug, store.slug);
     logger.info("onboarding.completed", {

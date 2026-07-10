@@ -1,75 +1,44 @@
 import "server-only";
+
 import { getUser } from "@/lib/auth/get-session";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/config/permissions";
 import type { TenantMembership } from "@/lib/tenant/tenant-context";
+import { accessibleStoreToMembership, getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 
+/**
+ * Agency memberships (with or without store) plus accessible stores.
+ * Store rows always come from getAccessibleStores (single access rule).
+ */
 export async function getCurrentTenant(): Promise<TenantMembership[]> {
   const user = await getUser();
   if (!user) return [];
 
   const supabase = await createClient();
-  const [{ data: agencyMembers, error: agencyError }, { data: storeMembers, error: storeError }] = await Promise.all([
-    supabase.from("agency_members").select("agency_id, role").eq("user_id", user.id).eq("status", "active"),
-    supabase.from("store_members").select("store_id, role").eq("user_id", user.id).eq("status", "active"),
-  ]);
+  const { data: agencyMembers, error: agencyError } = await supabase
+    .from("agency_members")
+    .select("agency_id, role")
+    .eq("user_id", user.id)
+    .eq("status", "active");
   if (agencyError) throw agencyError;
-  if (storeError) throw storeError;
 
-  const agencyIds = agencyMembers.map((member) => member.agency_id);
-  const storeIds = storeMembers.map((member) => member.store_id);
-  const [{ data: agencies, error: agenciesError }, { data: stores, error: storesError }] = await Promise.all([
-    agencyIds.length ? supabase.from("agencies").select("id, slug").in("id", agencyIds) : Promise.resolve({ data: [], error: null }),
-    storeIds.length ? supabase.from("stores").select("id, agency_id, slug").in("id", storeIds) : Promise.resolve({ data: [], error: null }),
-  ]);
+  const agencyIds = (agencyMembers ?? []).map((member) => member.agency_id);
+  const { data: agencies, error: agenciesError } = agencyIds.length
+    ? await supabase.from("agencies").select("id, slug").in("id", agencyIds)
+    : { data: [], error: null };
   if (agenciesError) throw agenciesError;
-  if (storesError) throw storesError;
 
-  const agencyById = new Map(agencies.map((agency) => [agency.id, agency]));
-  const memberships: TenantMembership[] = agencyMembers.flatMap((member) => {
+  const agencyById = new Map((agencies ?? []).map((agency) => [agency.id, agency]));
+  const memberships: TenantMembership[] = (agencyMembers ?? []).flatMap((member) => {
     const agency = agencyById.get(member.agency_id);
-    const role = member.role as Role;
-    return agency ? [{ agencyId: agency.id, agencySlug: agency.slug, roles: [role] }] : [];
+    return agency
+      ? [{ agencyId: agency.id, agencySlug: agency.slug, roles: [member.role as Role] }]
+      : [];
   });
 
-  for (const member of storeMembers) {
-    const store = stores.find((candidate) => candidate.id === member.store_id);
-    const role = member.role as Role;
-    if (!store) continue;
-    const agency = agencyById.get(store.agency_id);
-    if (!agency) {
-      const { data: storeAgency } = await supabase.from("agencies").select("id, slug").eq("id", store.agency_id).maybeSingle();
-      if (!storeAgency) continue;
-      memberships.push({ agencyId: storeAgency.id, agencySlug: storeAgency.slug, storeId: store.id, storeSlug: store.slug, roles: [role] });
-      continue;
-    }
-    memberships.push({ agencyId: agency.id, agencySlug: agency.slug, storeId: store.id, storeSlug: store.slug, roles: [role] });
-  }
-
-  // Agency owners/admins may access stores via agency membership without a store_members row.
-  // Keep this in sync with getAccessState / requireStoreAccess.
-  const hasStoreMembership = memberships.some((item) => item.storeId);
-  if (!hasStoreMembership) {
-    const agencyOnly = memberships.filter((item) => !item.storeId);
-    if (agencyOnly.length) {
-      const agencyOnlyIds = agencyOnly.map((item) => item.agencyId);
-      const { data: agencyStores } = await supabase
-        .from("stores")
-        .select("id, slug, agency_id")
-        .in("agency_id", agencyOnlyIds)
-        .eq("is_active", true);
-      for (const store of agencyStores ?? []) {
-        const agency = agencyOnly.find((item) => item.agencyId === store.agency_id);
-        if (!agency) continue;
-        memberships.push({
-          agencyId: agency.agencyId,
-          agencySlug: agency.agencySlug,
-          storeId: store.id,
-          storeSlug: store.slug,
-          roles: agency.roles,
-        });
-      }
-    }
+  const stores = await getAccessibleStores(user.id);
+  for (const store of stores) {
+    memberships.push(accessibleStoreToMembership(store));
   }
 
   return memberships;

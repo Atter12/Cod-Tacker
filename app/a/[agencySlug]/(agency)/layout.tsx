@@ -3,8 +3,8 @@ import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 import { getProfile } from "@/lib/auth/get-profile";
 import { requireUser } from "@/lib/auth/require-user";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
+import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
-import { getCurrentTenant } from "@/lib/tenant/get-current-tenant";
 
 export default async function AgencyConsoleLayout({
   children,
@@ -14,21 +14,21 @@ export default async function AgencyConsoleLayout({
   params: Promise<{ agencySlug: string }>;
 }) {
   const { agencySlug } = await params;
-  const [user, , memberships, profile, preferred] = await Promise.all([
+  const [user, membership, stores, profile, preferred] = await Promise.all([
     requireUser(),
     requireAgencyAccess(agencySlug),
-    getCurrentTenant(),
+    getAccessibleStores(),
     getProfile(),
     getActiveTenantPreference(),
   ]);
-  const tenants = memberships
-    .filter((item) => item.agencySlug === agencySlug && item.storeId && item.storeSlug)
-    .map((item) => ({
-      id: item.storeId!,
-      name: item.storeSlug!,
+  const tenants = stores
+    .filter((store) => store.agencySlug === agencySlug)
+    .map((store) => ({
+      id: store.storeId,
+      name: store.storeName,
       type: "store" as const,
-      agencySlug: item.agencySlug,
-      storeSlug: item.storeSlug!,
+      agencySlug: store.agencySlug,
+      storeSlug: store.storeSlug,
     }));
   const currentTenantId =
     tenants.find((tenant) => tenant.agencySlug === preferred.agencySlug && tenant.storeSlug === preferred.storeSlug)
@@ -39,6 +39,7 @@ export default async function AgencyConsoleLayout({
       agencySlug={agencySlug}
       title="CODTracked"
       breadcrumbs={[agencySlug]}
+      roles={membership.roles}
       user={{
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,
