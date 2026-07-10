@@ -43,7 +43,7 @@ export async function createAgency(input: AgencyInput): Promise<AgencyActionResu
       .from("agency_members")
       .insert({ agency_id: agency.id, user_id: user.id, role: "owner", status: "active", invited_by: null, joined_at: new Date().toISOString() });
     if (membership.error) return { error: membership.error.message };
-    revalidatePath(routes.app.selectTenant);
+    revalidatePath(routes.app.dashboard);
     return { id: agency.id };
   } catch (error) {
     return { error: toUserMessage(error) };

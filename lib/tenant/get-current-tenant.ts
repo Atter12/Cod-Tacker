@@ -45,5 +45,32 @@ export async function getCurrentTenant(): Promise<TenantMembership[]> {
     }
     memberships.push({ agencyId: agency.id, agencySlug: agency.slug, storeId: store.id, storeSlug: store.slug, roles: [role] });
   }
+
+  // Agency owners/admins may access stores via agency membership without a store_members row.
+  // Keep this in sync with getAccessState / requireStoreAccess.
+  const hasStoreMembership = memberships.some((item) => item.storeId);
+  if (!hasStoreMembership) {
+    const agencyOnly = memberships.filter((item) => !item.storeId);
+    if (agencyOnly.length) {
+      const agencyOnlyIds = agencyOnly.map((item) => item.agencyId);
+      const { data: agencyStores } = await supabase
+        .from("stores")
+        .select("id, slug, agency_id")
+        .in("agency_id", agencyOnlyIds)
+        .eq("is_active", true);
+      for (const store of agencyStores ?? []) {
+        const agency = agencyOnly.find((item) => item.agencyId === store.agency_id);
+        if (!agency) continue;
+        memberships.push({
+          agencyId: agency.agencyId,
+          agencySlug: agency.agencySlug,
+          storeId: store.id,
+          storeSlug: store.slug,
+          roles: agency.roles,
+        });
+      }
+    }
+  }
+
   return memberships;
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { routes } from "@/config/routes";
 import { requireUser } from "@/lib/auth/require-user";
 import { toUserMessage } from "@/lib/errors/to-user-message";
@@ -31,6 +32,5 @@ export async function updateProfile(input: ProfileInput): Promise<ProfileActionR
 export async function completeAccountSetup(input: ProfileInput): Promise<ProfileActionResult> {
   const result = await updateProfile(input);
   if (result.error) return result;
-  revalidatePath(routes.auth.accountSetup);
-  return {};
+  redirect(routes.app.dashboard);
 }

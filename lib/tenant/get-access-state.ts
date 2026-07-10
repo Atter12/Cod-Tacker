@@ -26,35 +26,7 @@ export async function getAccessState(): Promise<AccessState> {
   if (!user) return { kind: "onboarding" };
 
   const memberships = await getCurrentTenant();
-  let stores = withStores(memberships);
-
-  // Agency owners/admins may access stores via agency membership without a store_members row.
-  if (!stores.length) {
-    const agencyOnly = memberships.filter((item) => !item.storeId);
-    if (agencyOnly.length) {
-      const supabase = await createClient();
-      const agencyIds = agencyOnly.map((item) => item.agencyId);
-      const { data: agencyStores } = await supabase
-        .from("stores")
-        .select("id, slug, agency_id")
-        .in("agency_id", agencyIds)
-        .eq("is_active", true);
-      stores = (agencyStores ?? []).flatMap((store) => {
-        const agency = agencyOnly.find((item) => item.agencyId === store.agency_id);
-        if (!agency) return [];
-        return [
-          {
-            agencyId: agency.agencyId,
-            agencySlug: agency.agencySlug,
-            storeId: store.id,
-            storeSlug: store.slug,
-            roles: agency.roles,
-          },
-        ];
-      });
-    }
-  }
-
+  const stores = withStores(memberships);
   if (stores.length) return { kind: "ready", stores };
 
   const supabase = await createClient();

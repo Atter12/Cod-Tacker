@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { authPaths } from "@/config/auth";
+import { authCallbackUrl, authPaths } from "@/config/auth";
 import { getPublicEnv } from "@/config/env";
 import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
@@ -67,7 +67,7 @@ export async function register(email: string, password: string, fullName: string
       password,
       options: {
         data: { full_name: fullName.trim() },
-        emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
+        emailRedirectTo: authCallbackUrl(appUrl, routes.app.dashboard),
       },
     });
     if (error) return { error: error.message };
@@ -103,7 +103,7 @@ export async function resendOtp(email: string): Promise<AuthActionResult> {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: normalizedEmail,
-      options: { emailRedirectTo: `${appUrl}${authPaths.verifyOtp}` },
+      options: { emailRedirectTo: authCallbackUrl(appUrl, routes.app.dashboard) },
     });
     if (error) return { error: error.message };
     return { success: "Te enviamos un nuevo código de 6 dígitos. Revisa tu correo." };
@@ -118,7 +118,7 @@ export async function forgotPassword(email: string): Promise<AuthActionResult> {
     const supabase = await createClient();
     const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${appUrl}${authPaths.resetPassword}`,
+      redirectTo: authCallbackUrl(appUrl, authPaths.resetPassword),
     });
     if (error) return { error: error.message };
     return {};
