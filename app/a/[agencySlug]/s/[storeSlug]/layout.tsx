@@ -1,5 +1,7 @@
+import { AgencyConsoleMenu } from "@/components/layout/AgencyConsoleMenu";
 import { AppShell } from "@/components/layout/AppShell";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
+import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
 import { requireUser } from "@/lib/auth/require-user";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
@@ -19,6 +21,9 @@ export default async function StoreLayout({
     getAccessibleStores(),
     getProfile(),
   ]);
+  const currentStore = stores.find((store) => store.storeId === membership.storeId);
+  const agencyName = currentStore?.agencyName ?? agencySlug;
+  const storeName = currentStore?.storeName ?? storeSlug;
   const tenants = stores.map((store) => ({
     id: store.storeId,
     name: store.storeName,
@@ -32,13 +37,27 @@ export default async function StoreLayout({
       agencySlug={agencySlug}
       storeSlug={storeSlug}
       title="CODTracked"
-      breadcrumbs={[membership.agencySlug, storeSlug]}
+      breadcrumbs={[
+        { label: agencyName, href: routes.agency.stores(agencySlug) },
+        { label: storeName },
+      ]}
       roles={membership.roles}
       user={{
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,
       }}
-      tenantSwitcher={<TenantSwitcher tenants={tenants} currentTenantId={membership.storeId} />}
+      agencyConsole={
+        <AgencyConsoleMenu agencySlug={agencySlug} agencyName={agencyName} roles={membership.roles} />
+      }
+      tenantSwitcher={
+        <TenantSwitcher
+          tenants={tenants}
+          currentTenantId={membership.storeId}
+          agencySlug={agencySlug}
+          agencyName={agencyName}
+          showAgencyConsole
+        />
+      }
     >
       {children}
     </AppShell>

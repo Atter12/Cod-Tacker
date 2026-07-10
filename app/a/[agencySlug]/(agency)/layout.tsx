@@ -21,15 +21,15 @@ export default async function AgencyConsoleLayout({
     getProfile(),
     getActiveTenantPreference(),
   ]);
-  const tenants = stores
-    .filter((store) => store.agencySlug === agencySlug)
-    .map((store) => ({
-      id: store.storeId,
-      name: store.storeName,
-      type: "store" as const,
-      agencySlug: store.agencySlug,
-      storeSlug: store.storeSlug,
-    }));
+  const agencyStores = stores.filter((store) => store.agencySlug === agencySlug);
+  const agencyName = agencyStores[0]?.agencyName ?? agencySlug;
+  const tenants = agencyStores.map((store) => ({
+    id: store.storeId,
+    name: store.storeName,
+    type: "store" as const,
+    agencySlug: store.agencySlug,
+    storeSlug: store.storeSlug,
+  }));
   const currentTenantId =
     tenants.find((tenant) => tenant.agencySlug === preferred.agencySlug && tenant.storeSlug === preferred.storeSlug)
       ?.id ?? tenants[0]?.id;
@@ -38,7 +38,7 @@ export default async function AgencyConsoleLayout({
     <AppShell
       agencySlug={agencySlug}
       title="CODTracked"
-      breadcrumbs={[agencySlug]}
+      breadcrumbs={[{ label: agencyName }]}
       roles={membership.roles}
       user={{
         name: profile?.full_name ?? undefined,

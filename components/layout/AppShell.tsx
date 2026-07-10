@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import type { Role } from "@/config/permissions";
 import { AppSidebar } from "./AppSidebar";
-import { AppTopbar } from "./AppTopbar";
+import { AppTopbar, type BreadcrumbItem } from "./AppTopbar";
 import { MobileNavigation } from "./MobileNavigation";
 
 export function AppShell({
@@ -10,6 +10,7 @@ export function AppShell({
   storeSlug,
   title,
   breadcrumbs,
+  agencyConsole,
   tenantSwitcher,
   user,
   roles = [],
@@ -18,7 +19,8 @@ export function AppShell({
   agencySlug: string;
   storeSlug?: string;
   title: string;
-  breadcrumbs?: string[];
+  breadcrumbs?: BreadcrumbItem[];
+  agencyConsole?: ReactNode;
   tenantSwitcher?: ReactNode;
   user?: { name?: string; email?: string };
   roles?: readonly Role[];
@@ -32,7 +34,13 @@ export function AppShell({
           <MobileNavigation agencySlug={agencySlug} storeSlug={storeSlug} scope={scope} roles={roles} />
           <span className="ml-2 text-sm font-semibold">CODTracked</span>
         </div>
-        <AppTopbar title={title} breadcrumbs={breadcrumbs} tenantSwitcher={tenantSwitcher} user={user} />
+        <AppTopbar
+          title={title}
+          breadcrumbs={breadcrumbs}
+          agencyConsole={agencyConsole}
+          tenantSwitcher={tenantSwitcher}
+          user={user}
+        />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
