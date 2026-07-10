@@ -1,0 +1,5 @@
+import { DataTable, EmptyState, SectionHeader } from "@/components/ui";
+import { createClient } from "@/lib/supabase/server";
+import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { listAutomationRules } from "@/services/automations.service";
+export default async function AutomationsPage({ params }: { params: Promise<{ agencySlug: string; storeSlug: string }> }) { const p = await params; const member = await requireStoreAccess(p.agencySlug, p.storeSlug); const rows = await listAutomationRules(await createClient(), member.storeId!); return <section className="space-y-5"><SectionHeader title="Automatizaciones" description="Reglas operativas configuradas para esta tienda." />{rows.length ? <DataTable data={rows} getRowId={(row) => row.id} columns={[{ id: "nombre", header: "Regla", cell: (row) => row.name }, { id: "estado", header: "Estado", cell: (row) => row.is_active ? "Activa" : "Inactiva" }]} /> : <EmptyState title="Aún no hay automatizaciones" description="La creación de reglas estará disponible próximamente." />}</section>; }

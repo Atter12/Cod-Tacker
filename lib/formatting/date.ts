@@ -1,0 +1,2 @@
+export function formatDate(value: Date | string | number, locale = "es-PE", timeZone = "America/Lima"): string { return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone }).format(new Date(value)); }
+export function formatDateTime(value: Date | string | number, locale = "es-PE", timeZone = "America/Lima"): string { return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(value)); }

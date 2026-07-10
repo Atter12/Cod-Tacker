@@ -1,0 +1,5 @@
+import "server-only";
+import { redirect } from "next/navigation";
+import { getCurrentTenant } from "@/lib/tenant/get-current-tenant";
+import type { TenantMembership } from "@/lib/tenant/tenant-context";
+export async function requireStoreAccess(agencySlug: string, storeSlug: string): Promise<TenantMembership> { const membership = (await getCurrentTenant()).find((item) => item.agencySlug === agencySlug && item.storeSlug === storeSlug); if (!membership) redirect("/unauthorized"); return membership; }

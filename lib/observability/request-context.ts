@@ -1,0 +1,2 @@
+export type RequestContext = { request_id: string; user_id?: string; agency_id?: string; store_id?: string };
+export function createRequestContext(values: Partial<RequestContext> = {}): RequestContext { return { request_id: values.request_id ?? crypto.randomUUID(), ...(values.user_id ? { user_id: values.user_id } : {}), ...(values.agency_id ? { agency_id: values.agency_id } : {}), ...(values.store_id ? { store_id: values.store_id } : {}) }; }

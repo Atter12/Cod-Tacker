@@ -1,0 +1,3 @@
+import { type ReactNode } from "react";
+import { ErrorMessage } from "@/components/feedback/ErrorMessage";
+export function FormField({ label, htmlFor, description, error, required, children }: { label: string; htmlFor: string; description?: string; error?: string; required?: boolean; children: ReactNode }) { return <div className="space-y-1.5"><label htmlFor={htmlFor} className="text-sm font-medium">{label}{required && <span className="ml-1 text-danger">*</span>}</label>{description && <p className="text-xs text-text-secondary">{description}</p>}{children}{error && <ErrorMessage message={error} />}</div>; }

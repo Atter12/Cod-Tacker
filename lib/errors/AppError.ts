@@ -1,0 +1,1 @@
+export class AppError extends Error { constructor(public readonly code: string, public readonly status: number, public readonly safeMessage: string, options?: ErrorOptions) { super(safeMessage, options); this.name = new.target.name; } }

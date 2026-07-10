@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --brand-primary: #0f766e;
+  --brand-secondary: #164e63;
+  --brand-accent: #ea580c;
+  --surface: #f8fafc;
+  --surface-elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border: #e2e8f0;
+  --success: #15803d;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --muted: #f1f5f9;
+  --ring: #0f766e;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #334155;
+  --chart-1: #0f766e;
+  --chart-2: #ea580c;
+  --chart-3: #0369a1;
+  --chart-4: #65a30d;
+  --chart-5: #a16207;
+}
+
+@theme inline {
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-muted: var(--muted);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --font-sans: var(--font-ibm-plex-sans);
+  --font-mono: var(--font-ibm-plex-mono);
+}
+
+.dark {
+  --surface: #0b1220;
+  --surface-elevated: #111c2e;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --border: #243247;
+  --muted: #172337;
+  --ring: #2dd4bf;
+  --sidebar: #0d1728;
+  --sidebar-foreground: #cbd5e1;
+  --chart-1: #2dd4bf;
+  --chart-2: #fb923c;
+  --chart-3: #38bdf8;
+  --chart-4: #a3e635;
+  --chart-5: #facc15;
+}
+
+body {
+  min-height: 100%;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans), Arial, sans-serif;
+}

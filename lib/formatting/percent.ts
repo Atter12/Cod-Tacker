@@ -1,0 +1,1 @@
+export function formatPercent(value: number, locale = "es-PE", fractionDigits = 1): string { return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: fractionDigits }).format(value); }
