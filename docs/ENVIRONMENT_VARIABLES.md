@@ -10,7 +10,7 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `NEXT_PUBLIC_DEFAULT_LOCALE` | Yes | Default locale, normally `es-PE`. |
 | `NEXT_PUBLIC_DEFAULT_TIMEZONE` | Yes | Default timezone, normally `America/Lima`. |
 | `ADMIN_ALLOWED_EMAILS` | No | Comma-separated emergency allow-list for platform admin access. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Privileged backend/admin operations; never expose to clients. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Privileged backend operations (onboarding membership bootstrap, admin jobs); never expose to clients. |
 | `ENCRYPTION_KEY` | Server only | Encryption material for sensitive server-side data. |
 | `INTERNAL_JOB_SECRET` | Server only | Authenticates internal jobs. |
 | `CRON_SECRET` | Server only | Authenticates scheduled requests. |
