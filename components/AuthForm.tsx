@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { OtpCodeInput } from "@/components/auth/OtpCodeInput";
 import { Alert, Button, FormField, Input } from "@/components/ui";
@@ -8,7 +8,6 @@ import {
   forgotPassword,
   login,
   register,
-  requestLoginOtp,
   resendOtp,
   resetPassword,
   verifyOtp,
@@ -16,20 +15,15 @@ import {
 } from "@/app/actions/auth";
 import { completeAccountSetup } from "@/app/actions/profile";
 
-type Kind = "login" | "login-otp" | "register" | "verify" | "forgot" | "reset" | "setup";
+type Kind = "login" | "register" | "verify" | "forgot" | "reset" | "setup";
 
 const copy: Record<Kind, { title: string; submit: string; description?: string }> = {
   login: { title: "Inicia sesión", submit: "Entrar" },
-  "login-otp": {
-    title: "Entrar con código",
-    submit: "Enviar código",
-    description: "Te enviaremos un código de 6 dígitos a tu correo.",
-  },
   register: { title: "Crea tu cuenta", submit: "Crear cuenta" },
   verify: {
     title: "Verifica tu correo",
     submit: "Verificar código",
-    description: "Ingresa el código de 6 dígitos que enviamos a tu correo.",
+    description: "Ingresa el código de 6 dígitos que enviamos a tu correo para activar la cuenta.",
   },
   forgot: { title: "Recupera tu contraseña", submit: "Enviar instrucciones" },
   reset: { title: "Nueva contraseña", submit: "Actualizar contraseña" },
@@ -39,7 +33,6 @@ const copy: Record<Kind, { title: string; submit: string; description?: string }
 export function AuthForm({
   kind,
   email: initialEmail = "",
-  purpose = "signup",
 }: {
   kind: Kind;
   email?: string;
@@ -51,7 +44,6 @@ export function AuthForm({
   const [resendPending, setResendPending] = useState(false);
   const [email, setEmail] = useState(initialEmail);
   const title = copy[kind];
-  const otpPurpose = useMemo<OtpPurpose>(() => purpose, [purpose]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,12 +57,10 @@ export function AuthForm({
     try {
       if (kind === "login") {
         result = await login(formEmail, String(data.get("password") ?? ""));
-      } else if (kind === "login-otp") {
-        result = await requestLoginOtp(formEmail);
       } else if (kind === "register") {
         result = await register(formEmail, String(data.get("password") ?? ""), String(data.get("fullName") ?? ""));
       } else if (kind === "verify") {
-        result = await verifyOtp(formEmail, String(data.get("token") ?? ""), otpPurpose);
+        result = await verifyOtp(formEmail, String(data.get("token") ?? ""));
       } else if (kind === "forgot") {
         result = await forgotPassword(formEmail);
       } else if (kind === "reset") {
@@ -94,7 +84,7 @@ export function AuthForm({
     setError(undefined);
     setSuccess(undefined);
     setResendPending(true);
-    const result = await resendOtp(email, otpPurpose);
+    const result = await resendOtp(email);
     setResendPending(false);
     if (result.error) setError(result.error);
     else setSuccess(result.success ?? "Código reenviado.");
@@ -178,10 +168,6 @@ export function AuthForm({
 
       {kind === "login" ? (
         <p className="text-center text-sm text-text-secondary">
-          <Link href="/login?mode=otp" className="text-brand-primary">
-            Entrar con código OTP
-          </Link>
-          {" · "}
           <Link href="/forgot-password" className="text-brand-primary">
             ¿Olvidaste tu contraseña?
           </Link>
@@ -192,10 +178,11 @@ export function AuthForm({
         </p>
       ) : null}
 
-      {kind === "login-otp" ? (
+      {kind === "register" ? (
         <p className="text-center text-sm text-text-secondary">
+          ¿Ya tienes cuenta?{" "}
           <Link href="/login" className="text-brand-primary">
-            Entrar con contraseña
+            Inicia sesión
           </Link>
         </p>
       ) : null}

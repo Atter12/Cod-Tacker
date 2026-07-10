@@ -10,7 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 import { safeRedirectPath } from "@/lib/validation/redirect";
 
 export type AuthActionResult = { error?: string; success?: string };
-export type OtpPurpose = "signup" | "email";
+/** OTP is only used to confirm email ownership during account creation. */
+export type OtpPurpose = "signup";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const otpPattern = /^\d{6}$/;
@@ -35,13 +36,9 @@ function validateOtpCode(token: string): string {
   return value;
 }
 
-function verifyOtpPath(email: string, purpose: OtpPurpose): string {
-  const params = new URLSearchParams({ email, purpose });
+function verifyOtpPath(email: string): string {
+  const params = new URLSearchParams({ email, purpose: "signup" });
   return `${authPaths.verifyOtp}?${params.toString()}`;
-}
-
-function mapOtpType(purpose: OtpPurpose): "signup" | "email" {
-  return purpose === "signup" ? "signup" : "email";
 }
 
 export async function login(email: string, password: string, next?: string): Promise<AuthActionResult> {
@@ -55,26 +52,6 @@ export async function login(email: string, password: string, next?: string): Pro
     return { error: toUserMessage(error) };
   }
   redirect(safeRedirectPath(next, routes.app.dashboard));
-}
-
-/** Sends a 6-digit email OTP for passwordless login. */
-export async function requestLoginOtp(email: string): Promise<AuthActionResult> {
-  try {
-    const normalizedEmail = validateEmail(email);
-    const supabase = await createClient();
-    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
-    const { error } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
-      },
-    });
-    if (error) return { error: error.message };
-  } catch (error) {
-    return { error: toUserMessage(error) };
-  }
-  redirect(verifyOtpPath(normalizeEmail(email), "email"));
 }
 
 export async function register(email: string, password: string, fullName: string): Promise<AuthActionResult> {
@@ -98,10 +75,10 @@ export async function register(email: string, password: string, fullName: string
   } catch (error) {
     return { error: toUserMessage(error) };
   }
-  redirect(verifyOtpPath(normalizedEmail, "signup"));
+  redirect(verifyOtpPath(normalizedEmail));
 }
 
-export async function verifyOtp(email: string, token: string, purpose: OtpPurpose = "signup"): Promise<AuthActionResult> {
+export async function verifyOtp(email: string, token: string): Promise<AuthActionResult> {
   try {
     const normalizedEmail = validateEmail(email);
     const code = validateOtpCode(token);
@@ -109,7 +86,7 @@ export async function verifyOtp(email: string, token: string, purpose: OtpPurpos
     const { error } = await supabase.auth.verifyOtp({
       email: normalizedEmail,
       token: code,
-      type: mapOtpType(purpose),
+      type: "signup",
     });
     if (error) return { error: error.message };
   } catch (error) {
@@ -118,30 +95,17 @@ export async function verifyOtp(email: string, token: string, purpose: OtpPurpos
   redirect(routes.app.dashboard);
 }
 
-export async function resendOtp(email: string, purpose: OtpPurpose = "signup"): Promise<AuthActionResult> {
+export async function resendOtp(email: string): Promise<AuthActionResult> {
   try {
     const normalizedEmail = validateEmail(email);
     const supabase = await createClient();
     const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
-
-    if (purpose === "signup") {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: normalizedEmail,
-        options: { emailRedirectTo: `${appUrl}${authPaths.verifyOtp}` },
-      });
-      if (error) return { error: error.message };
-    } else {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
-        },
-      });
-      if (error) return { error: error.message };
-    }
-
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: normalizedEmail,
+      options: { emailRedirectTo: `${appUrl}${authPaths.verifyOtp}` },
+    });
+    if (error) return { error: error.message };
     return { success: "Te enviamos un nuevo código de 6 dígitos. Revisa tu correo." };
   } catch (error) {
     return { error: toUserMessage(error) };
