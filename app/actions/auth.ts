@@ -2,25 +2,54 @@
 
 import { redirect } from "next/navigation";
 import { authPaths } from "@/config/auth";
+import { getPublicEnv } from "@/config/env";
 import { routes } from "@/config/routes";
+import { ValidationError } from "@/lib/errors";
 import { toUserMessage } from "@/lib/errors/to-user-message";
 import { createClient } from "@/lib/supabase/server";
 import { safeRedirectPath } from "@/lib/validation/redirect";
-import { ValidationError } from "@/lib/errors";
 
-export type AuthActionResult = { error?: string };
+export type AuthActionResult = { error?: string; success?: string };
+export type OtpPurpose = "signup" | "email";
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const otpPattern = /^\d{6}$/;
 
-function validateCredentials(email: string, password: string): void {
-  if (!emailPattern.test(email.trim())) throw new ValidationError("Ingresa un correo válido.");
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function validateEmail(email: string): string {
+  const value = normalizeEmail(email);
+  if (!emailPattern.test(value)) throw new ValidationError("Ingresa un correo válido.");
+  return value;
+}
+
+function validatePassword(password: string): void {
   if (password.length < 8) throw new ValidationError("La contraseña debe tener al menos 8 caracteres.");
+}
+
+function validateOtpCode(token: string): string {
+  const value = token.trim();
+  if (!otpPattern.test(value)) throw new ValidationError("Ingresa el código de 6 dígitos que recibiste por correo.");
+  return value;
+}
+
+function verifyOtpPath(email: string, purpose: OtpPurpose): string {
+  const params = new URLSearchParams({ email, purpose });
+  return `${authPaths.verifyOtp}?${params.toString()}`;
+}
+
+function mapOtpType(purpose: OtpPurpose): "signup" | "email" {
+  return purpose === "signup" ? "signup" : "email";
 }
 
 export async function login(email: string, password: string, next?: string): Promise<AuthActionResult> {
   try {
-    validateCredentials(email, password);
+    const normalizedEmail = validateEmail(email);
+    validatePassword(password);
     const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) return { error: error.message };
   } catch (error) {
     return { error: toUserMessage(error) };
@@ -28,24 +57,60 @@ export async function login(email: string, password: string, next?: string): Pro
   redirect(safeRedirectPath(next, routes.app.dashboard));
 }
 
-export async function register(email: string, password: string, fullName: string): Promise<AuthActionResult> {
+/** Sends a 6-digit email OTP for passwordless login. */
+export async function requestLoginOtp(email: string): Promise<AuthActionResult> {
   try {
-    validateCredentials(email, password);
-    if (!fullName.trim()) throw new ValidationError("Ingresa tu nombre completo.");
+    const normalizedEmail = validateEmail(email);
     const supabase = await createClient();
-    const { error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: fullName.trim() } } });
+    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
+      },
+    });
     if (error) return { error: error.message };
   } catch (error) {
     return { error: toUserMessage(error) };
   }
-  redirect(authPaths.verifyOtp);
+  redirect(verifyOtpPath(normalizeEmail(email), "email"));
 }
 
-export async function verifyOtp(email: string, token: string): Promise<AuthActionResult> {
+export async function register(email: string, password: string, fullName: string): Promise<AuthActionResult> {
+  let normalizedEmail = "";
   try {
-    if (!emailPattern.test(email.trim()) || !token.trim()) throw new ValidationError("El código de verificación no es válido.");
+    normalizedEmail = validateEmail(email);
+    validatePassword(password);
+    if (!fullName.trim()) throw new ValidationError("Ingresa tu nombre completo.");
     const supabase = await createClient();
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: "email" });
+    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: { full_name: fullName.trim() },
+        emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
+      },
+    });
+    if (error) return { error: error.message };
+    if (data.session) redirect(routes.app.dashboard);
+  } catch (error) {
+    return { error: toUserMessage(error) };
+  }
+  redirect(verifyOtpPath(normalizedEmail, "signup"));
+}
+
+export async function verifyOtp(email: string, token: string, purpose: OtpPurpose = "signup"): Promise<AuthActionResult> {
+  try {
+    const normalizedEmail = validateEmail(email);
+    const code = validateOtpCode(token);
+    const supabase = await createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email: normalizedEmail,
+      token: code,
+      type: mapOtpType(purpose),
+    });
     if (error) return { error: error.message };
   } catch (error) {
     return { error: toUserMessage(error) };
@@ -53,11 +118,44 @@ export async function verifyOtp(email: string, token: string): Promise<AuthActio
   redirect(routes.app.dashboard);
 }
 
+export async function resendOtp(email: string, purpose: OtpPurpose = "signup"): Promise<AuthActionResult> {
+  try {
+    const normalizedEmail = validateEmail(email);
+    const supabase = await createClient();
+    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+
+    if (purpose === "signup") {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: normalizedEmail,
+        options: { emailRedirectTo: `${appUrl}${authPaths.verifyOtp}` },
+      });
+      if (error) return { error: error.message };
+    } else {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${appUrl}${authPaths.verifyOtp}`,
+        },
+      });
+      if (error) return { error: error.message };
+    }
+
+    return { success: "Te enviamos un nuevo código de 6 dígitos. Revisa tu correo." };
+  } catch (error) {
+    return { error: toUserMessage(error) };
+  }
+}
+
 export async function forgotPassword(email: string): Promise<AuthActionResult> {
   try {
-    if (!emailPattern.test(email.trim())) throw new ValidationError("Ingresa un correo válido.");
+    const normalizedEmail = validateEmail(email);
     const supabase = await createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${appUrl}${authPaths.resetPassword}`,
+    });
     if (error) return { error: error.message };
     return {};
   } catch (error) {
@@ -67,7 +165,7 @@ export async function forgotPassword(email: string): Promise<AuthActionResult> {
 
 export async function resetPassword(password: string): Promise<AuthActionResult> {
   try {
-    if (password.length < 8) throw new ValidationError("La contraseña debe tener al menos 8 caracteres.");
+    validatePassword(password);
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password });
     if (error) return { error: error.message };
