@@ -4,16 +4,20 @@ import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Drawer } from "@/components/ui/Drawer";
 import { AppSidebar } from "./AppSidebar";
+import type { Role } from "@/config/permissions";
+
 export function MobileNavigation({
   agencySlug,
   storeSlug,
   scope = "store",
   roles = [],
+  returnToStore,
 }: {
   agencySlug: string;
   storeSlug?: string;
   scope?: "store" | "agency" | "admin";
-  roles?: readonly import("@/config/permissions").Role[];
+  roles?: readonly Role[];
+  returnToStore?: { href: string; storeName: string } | null;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -26,7 +30,14 @@ export function MobileNavigation({
         <Menu className="size-5" />
       </button>
       <Drawer open={open} onOpenChange={setOpen} title="CODTracked">
-        <AppSidebar agencySlug={agencySlug} storeSlug={storeSlug} scope={scope} roles={roles} mobile />
+        <AppSidebar
+          agencySlug={agencySlug}
+          storeSlug={storeSlug}
+          scope={scope}
+          roles={roles}
+          returnToStore={returnToStore}
+          mobile
+        />
       </Drawer>
     </div>
   );

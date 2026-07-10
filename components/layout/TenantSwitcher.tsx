@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronDown, Store } from "lucide-react";
+import { ArrowRight, Building2, ChevronDown, Store } from "lucide-react";
 import { setActiveStore } from "@/app/actions/stores";
 import { routes } from "@/config/routes";
 import { Dropdown, DropdownItem } from "@/components/ui/Dropdown";
@@ -22,19 +22,22 @@ export function TenantSwitcher({
   agencySlug,
   agencyName,
   showAgencyConsole = false,
+  scope = "store",
 }: {
   tenants: Tenant[];
   currentTenantId?: string;
   agencySlug?: string;
   agencyName?: string;
   showAgencyConsole?: boolean;
+  scope?: "store" | "agency";
 }) {
   const router = useRouter();
   const current = tenants.find((tenant) => tenant.id === currentTenantId) ?? tenants[0];
   const consoleHref = agencySlug ? routes.agency.stores(agencySlug) : null;
+  const inAgency = scope === "agency";
 
-  async function select(tenant: Tenant) {
-    if (tenant.id === current?.id) return;
+  async function openStore(tenant: Tenant) {
+    if (scope === "store" && tenant.id === current?.id) return;
     const result = await setActiveStore(tenant.agencySlug, tenant.storeSlug);
     if (result.error) return;
     router.push(routes.store.dashboard(tenant.agencySlug, tenant.storeSlug));
@@ -42,35 +45,50 @@ export function TenantSwitcher({
 
   return (
     <Dropdown
-      className="min-w-56"
+      className="min-w-60"
       trigger={
         <span
           className={cn(
             "inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-text-primary",
             "transition-colors hover:bg-muted",
+            inAgency && "border border-border bg-surface",
           )}
         >
           <Store className="size-4 shrink-0 text-text-secondary" aria-hidden />
-          <span className="hidden max-w-40 truncate md:inline">{current?.name ?? "Seleccionar tienda"}</span>
-          <span className="sr-only md:hidden">Cambiar tienda</span>
+          <span className="hidden max-w-40 truncate md:inline">
+            {inAgency ? "Abrir tienda" : (current?.name ?? "Seleccionar tienda")}
+          </span>
+          <span className="sr-only md:hidden">{inAgency ? "Abrir tienda" : "Cambiar tienda"}</span>
           <ChevronDown className="size-3.5 shrink-0 text-text-secondary" aria-hidden />
         </span>
       }
     >
       <div className="border-b border-border px-3 py-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">Cambiar tienda</p>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+          {inAgency ? "Ir al dashboard de tienda" : "Cambiar tienda"}
+        </p>
+        {inAgency && current ? (
+          <p className="mt-0.5 truncate text-xs text-text-secondary">Última: {current.name}</p>
+        ) : null}
       </div>
-      {tenants.map((tenant) => {
-        const active = tenant.id === current?.id;
-        return (
-          <DropdownItem key={tenant.id} onClick={() => void select(tenant)}>
-            <span className="flex w-full items-center justify-between gap-3">
-              <span className={cn("truncate", active && "font-semibold text-brand-primary")}>{tenant.name}</span>
-              <span className="shrink-0 text-xs text-text-secondary">Tienda</span>
-            </span>
-          </DropdownItem>
-        );
-      })}
+      {tenants.length === 0 ? (
+        <p className="px-3 py-2 text-sm text-text-secondary">No hay tiendas todavía.</p>
+      ) : (
+        tenants.map((tenant) => {
+          const preferred = tenant.id === current?.id;
+          return (
+            <DropdownItem key={tenant.id} onClick={() => void openStore(tenant)}>
+              <span className="flex w-full items-center justify-between gap-3">
+                <span className={cn("truncate", preferred && "font-semibold text-brand-primary")}>{tenant.name}</span>
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-text-secondary">
+                  {inAgency ? "Abrir" : "Tienda"}
+                  {inAgency ? <ArrowRight className="size-3" aria-hidden /> : null}
+                </span>
+              </span>
+            </DropdownItem>
+          );
+        })
+      )}
       {showAgencyConsole && consoleHref ? (
         <div className="mt-1 border-t border-border pt-1">
           <Link

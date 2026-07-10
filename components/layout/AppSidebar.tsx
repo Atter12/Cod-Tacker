@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Bell, Boxes, Building2, Cable, FileText, Settings, Store } from "lucide-react";
+import { ArrowLeft, BarChart3, Bell, Boxes, Building2, Cable, FileText, Settings, Store } from "lucide-react";
 import { adminNavigation, agencyNavigation, storeNavigation } from "@/config/navigation";
 import type { Role } from "@/config/permissions";
 import { routes } from "@/config/routes";
@@ -22,12 +22,14 @@ export function AppSidebar({
   scope = "store",
   mobile = false,
   roles = [],
+  returnToStore,
 }: {
   agencySlug: string;
   storeSlug?: string;
   scope?: "store" | "agency" | "admin";
   mobile?: boolean;
   roles?: readonly Role[];
+  returnToStore?: { href: string; storeName: string } | null;
 }) {
   const raw = scope === "agency" ? agencyNavigation : scope === "admin" ? adminNavigation : storeNavigation;
   const items = scope === "agency" ? filterNavigationByPermission(raw, roles) : raw;
@@ -43,7 +45,12 @@ export function AppSidebar({
         <div className="grid size-7 place-items-center rounded bg-brand-primary text-white">
           <BarChart3 className="size-4" />
         </div>
-        CODTracked
+        <div className="min-w-0">
+          <p className="truncate leading-tight">CODTracked</p>
+          {scope === "agency" ? (
+            <p className="truncate text-[11px] font-medium text-text-secondary">Consola de agencia</p>
+          ) : null}
+        </div>
       </div>
       <nav aria-label="Navegación principal" className="flex-1 space-y-1 p-3">
         {items.map((item, index) => {
@@ -68,6 +75,20 @@ export function AppSidebar({
           );
         })}
       </nav>
+      {scope === "agency" && returnToStore ? (
+        <div className="border-t border-border p-3">
+          <Link
+            href={returnToStore.href}
+            className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-muted"
+          >
+            <ArrowLeft className="size-4 shrink-0 text-brand-primary" aria-hidden />
+            <span className="min-w-0">
+              <span className="block leading-tight">Volver al dashboard</span>
+              <span className="block truncate text-xs font-normal text-text-secondary">{returnToStore.storeName}</span>
+            </span>
+          </Link>
+        </div>
+      ) : null}
     </aside>
   );
 }

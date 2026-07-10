@@ -56,6 +56,7 @@ export default async function StoreLayout({
           agencySlug={agencySlug}
           agencyName={agencyName}
           showAgencyConsole
+          scope="store"
         />
       }
     >

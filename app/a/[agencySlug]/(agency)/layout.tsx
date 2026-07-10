@@ -1,5 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
+import { BackToStoreButton } from "@/components/layout/BackToStoreButton";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
+import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
 import { requireUser } from "@/lib/auth/require-user";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
@@ -30,21 +32,33 @@ export default async function AgencyConsoleLayout({
     agencySlug: store.agencySlug,
     storeSlug: store.storeSlug,
   }));
-  const currentTenantId =
-    tenants.find((tenant) => tenant.agencySlug === preferred.agencySlug && tenant.storeSlug === preferred.storeSlug)
-      ?.id ?? tenants[0]?.id;
+  const currentTenant =
+    tenants.find((tenant) => tenant.agencySlug === preferred.agencySlug && tenant.storeSlug === preferred.storeSlug) ??
+    tenants[0];
+  const returnToStore = currentTenant
+    ? {
+        href: routes.store.dashboard(currentTenant.agencySlug, currentTenant.storeSlug),
+        storeName: currentTenant.name,
+      }
+    : null;
 
   return (
     <AppShell
       agencySlug={agencySlug}
-      title="CODTracked"
-      breadcrumbs={[{ label: agencyName }]}
+      title="Consola de agencia"
+      breadcrumbs={[{ label: agencyName, href: routes.agency.stores(agencySlug) }]}
       roles={membership.roles}
       user={{
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,
       }}
-      tenantSwitcher={<TenantSwitcher tenants={tenants} currentTenantId={currentTenantId} />}
+      returnToStore={returnToStore}
+      storeReturn={
+        returnToStore ? <BackToStoreButton href={returnToStore.href} storeName={returnToStore.storeName} /> : null
+      }
+      tenantSwitcher={
+        <TenantSwitcher tenants={tenants} currentTenantId={currentTenant?.id} scope="agency" />
+      }
     >
       {children}
     </AppShell>
