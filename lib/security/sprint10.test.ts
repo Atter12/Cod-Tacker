@@ -65,9 +65,9 @@ describe("plan access policy", () => {
     planId: "1",
     planCode: "starter",
     planName: "Starter",
-    storeLimit: 2,
-    orderLimit: 500,
-    features: { white_label: false, csv_import: true },
+    storeLimit: 1,
+    orderLimit: 300,
+    features: { api: false, whatsapp: false, automations: false, white_label: false },
     subscriptionStatus: "active",
     cancelAtPeriodEnd: false,
     trialEndsAt: null,
@@ -95,6 +95,6 @@ describe("plan access policy", () => {
 
   it("gates white-label feature", () => {
     assert.equal(planAllowsWhiteLabel(base), false);
-    assert.equal(planAllowsWhiteLabel({ ...base, features: { hide_branding: true } }), true);
+    assert.equal(planAllowsWhiteLabel({ ...base, features: { white_label: true } }), true);
   });
 });

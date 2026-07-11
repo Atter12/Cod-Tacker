@@ -1,6 +1,13 @@
 import type { DatabaseClient } from "@/services/_shared";
 import { ValidationError } from "@/lib/errors";
 
+/**
+ * Soft defaults when an agency has no subscription row yet.
+ * Must match the `starter` plan in `public.plans` (DB is source of truth).
+ */
+export const STARTER_DEFAULT_STORE_LIMIT = 1;
+export const STARTER_DEFAULT_ORDER_LIMIT = 300;
+
 export type PlanLimits = {
   planId: string;
   planCode: string;
@@ -100,7 +107,7 @@ export async function assertCanCreateStore(
     .eq("is_active", true);
   if (error) throw error;
 
-  const storeLimit = limits?.storeLimit ?? 2; // starter default when no sub
+  const storeLimit = limits?.storeLimit ?? STARTER_DEFAULT_STORE_LIMIT;
   if (storeLimit !== null && (count ?? 0) >= storeLimit) {
     throw new ValidationError(
       `Has alcanzado el límite de ${storeLimit} tienda(s) de tu plan${limits ? ` (${limits.planName})` : ""}. Mejora el plan para crear más.`,
@@ -110,6 +117,7 @@ export async function assertCanCreateStore(
 
 /**
  * Enforces monthly order_limit for bulk CSV imports (rows count as potential orders).
+ * Feature flags come from `plans.features` in the DB.
  */
 export async function assertCanImportCsvRows(
   client: DatabaseClient,
@@ -119,11 +127,12 @@ export async function assertCanImportCsvRows(
   const limits = await getAgencyPlanLimits(client, agencyId);
   assertSubscriptionAllowsAccess(limits);
 
+  // Optional explicit deny; missing key = allowed (catalog may omit csv_import).
   if (limits && limits.features.csv_import === false) {
     throw new ValidationError("Tu plan no incluye importación masiva CSV.");
   }
 
-  const orderLimit = limits?.orderLimit ?? 500;
+  const orderLimit = limits?.orderLimit ?? STARTER_DEFAULT_ORDER_LIMIT;
   if (orderLimit === null) return;
 
   const periodKey = new Date().toISOString().slice(0, 7); // YYYY-MM
@@ -161,7 +170,13 @@ export async function assertCanImportCsvRows(
 
 export function planAllowsWhiteLabel(limits: PlanLimits | null): boolean {
   if (!limits) return false;
+  // Canonical catalog uses `white_label`; keep hide_branding for older rows.
   return limits.features.white_label === true || limits.features.hide_branding === true;
+}
+
+export function planFeatureEnabled(limits: PlanLimits | null, feature: string): boolean {
+  if (!limits) return false;
+  return limits.features[feature] === true;
 }
 
 export function currentPeriodKey(date = new Date()): string {

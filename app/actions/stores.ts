@@ -51,7 +51,7 @@ export async function createStore(agencySlug: string, input: StoreInput): Promis
         country_code: input.countryCode ?? "PE",
         settings: {},
         is_active: true,
-        attribution_window_days: 30,
+        attribution_window_days: 7,
         created_by: user.id,
       })
       .select("id, slug")

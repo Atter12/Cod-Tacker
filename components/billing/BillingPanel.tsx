@@ -8,6 +8,10 @@ import {
   scheduleCancelAtPeriodEnd,
 } from "@/app/actions/billing";
 import { requestDataDeletion, requestDataExport } from "@/app/actions/privacy";
+import {
+  STARTER_DEFAULT_ORDER_LIMIT,
+  STARTER_DEFAULT_STORE_LIMIT,
+} from "@/lib/billing/limits";
 import { Button, DemoModeBadge, Card, CardContent } from "@/components/ui";
 import type { BillingOverview } from "@/services/billing.service";
 
@@ -81,13 +85,13 @@ export function BillingPanel({
             <div>
               <dt className="text-text-secondary">Uso tiendas</dt>
               <dd>
-                {overview.storeCount} / {limits?.storeLimit ?? 2}
+                {overview.storeCount} / {limits?.storeLimit ?? STARTER_DEFAULT_STORE_LIMIT}
               </dd>
             </div>
             <div>
               <dt className="text-text-secondary">Uso pedidos (mes)</dt>
               <dd>
-                {overview.orderCountThisMonth} / {limits?.orderLimit ?? 500}
+                {overview.orderCountThisMonth} / {limits?.orderLimit ?? STARTER_DEFAULT_ORDER_LIMIT}
               </dd>
             </div>
           </dl>

@@ -2,23 +2,23 @@
 -- Additive only. Existing plans/subscriptions/api_keys/white_label_settings unchanged.
 
 -- ---------------------------------------------------------------------------
--- Demo plans (idempotent)
+-- Demo plans (idempotent). Canonical values live in 20260711220000_plans_catalog_source_of_truth.sql
 -- ---------------------------------------------------------------------------
 insert into public.plans (code, name, monthly_price, annual_price, currency_code, store_limit, order_limit, features, is_active, is_public)
-select 'starter', 'Starter', 0, 0, 'USD', 2, 500,
-  '{"csv_import":true,"white_label":false,"api_keys":true,"hide_branding":false}'::jsonb,
+select 'starter', 'Starter', 49, 470, 'USD', 1, 300,
+  '{"api":false,"whatsapp":false,"automations":false,"white_label":false}'::jsonb,
   true, true
 where not exists (select 1 from public.plans where code = 'starter');
 
 insert into public.plans (code, name, monthly_price, annual_price, currency_code, store_limit, order_limit, features, is_active, is_public)
-select 'growth', 'Growth', 99, 990, 'USD', 10, 5000,
-  '{"csv_import":true,"white_label":true,"api_keys":true,"hide_branding":true}'::jsonb,
+select 'growth', 'Growth', 79, 758, 'USD', 3, 1000,
+  '{"api":false,"whatsapp":true,"automations":true,"white_label":false}'::jsonb,
   true, true
 where not exists (select 1 from public.plans where code = 'growth');
 
 insert into public.plans (code, name, monthly_price, annual_price, currency_code, store_limit, order_limit, features, is_active, is_public)
-select 'scale', 'Scale', 299, 2990, 'USD', 50, 50000,
-  '{"csv_import":true,"white_label":true,"api_keys":true,"hide_branding":true,"priority_support":true}'::jsonb,
+select 'scale', 'Scale', 189, 1814, 'USD', 5, 5000,
+  '{"api":true,"whatsapp":true,"automations":true,"white_label":false}'::jsonb,
   true, true
 where not exists (select 1 from public.plans where code = 'scale');
 

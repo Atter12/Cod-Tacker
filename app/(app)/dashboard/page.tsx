@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card, CardContent, EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/require-user";
-import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
 import { getAccessState } from "@/lib/tenant/get-access-state";
 import { routes } from "@/config/routes";
 
@@ -38,18 +37,6 @@ export default async function DashboardResolver() {
         />
       </main>
     );
-  }
-
-  const preferred = await getActiveTenantPreference();
-  const preferredStore = stores.find(
-    (store) => store.agencySlug === preferred.agencySlug && store.storeSlug === preferred.storeSlug,
-  );
-  if (preferredStore) {
-    redirect(routes.store.dashboard(preferredStore.agencySlug, preferredStore.storeSlug));
-  }
-  if (stores.length === 1) {
-    const only = stores[0];
-    if (only) redirect(routes.store.dashboard(only.agencySlug, only.storeSlug));
   }
 
   return (
