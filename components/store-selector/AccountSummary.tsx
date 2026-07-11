@@ -30,22 +30,22 @@ export function AccountSummary({
     <aside
       className={cn(
         !embedded &&
-          "rounded-[18px] border border-[rgba(76,139,170,0.2)] bg-[#09162A] p-5 shadow-[0_16px_36px_rgba(0,0,0,0.25)]",
+          "rounded-[19px] border border-[rgba(76,139,170,0.2)] bg-[#09162A] p-5 shadow-[0_12px_28px_rgba(0,0,0,0.22)]",
       )}
     >
-      <h2 className="text-[15px] font-semibold text-[#F8FAFC]">Resumen de cuenta</h2>
+      <h2 className="text-[15px] font-semibold text-[#F8FAFC]">Resumen cuenta</h2>
       {error ? (
         <p className="mt-3 text-[12.5px] text-[#FCA5A5]" role="status">
           {error}
         </p>
       ) : null}
-      <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-1 lg:gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-2.5 lg:grid-cols-1 lg:gap-5">
         {metrics.map((metric) => (
           <div
             key={metric.label}
-            className="rounded-[12px] border border-[rgba(76,139,170,0.16)] bg-[#0D1B30] px-3 py-3"
+            className="flex min-h-[64px] flex-col justify-center rounded-[12px] border border-[rgba(76,139,170,0.16)] bg-[#0D1B30] px-3.5 py-3.5 sm:min-h-[68px] sm:px-4"
           >
-            <p className="text-[22px] font-semibold tracking-tight text-[#22D3EE] sm:text-[24px]">
+            <p className="text-[23px] font-semibold tracking-tight text-[#22D3EE] sm:text-[25px]">
               {metric.value}
             </p>
             <p className="mt-1 text-[11px] leading-snug text-[#94A3B8]">{metric.label}</p>

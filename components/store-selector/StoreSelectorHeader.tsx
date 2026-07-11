@@ -13,14 +13,14 @@ export function StoreSelectorHeader({
   const initial = (userName || email || "U").slice(0, 1).toUpperCase();
 
   return (
-    <header className="border-b border-[rgba(76,139,170,0.2)] bg-[#0A1729]/90">
-      <div className="mx-auto flex h-14 max-w-[1180px] items-center justify-between gap-3 px-4 sm:h-16 sm:px-6 lg:px-8">
+    <header className="border-b border-[rgba(76,139,170,0.2)] bg-[#0A1729]">
+      <div className="mx-auto flex h-16 w-full max-w-[1520px] items-center justify-between gap-3 px-5 sm:h-[68px] sm:px-8 xl:px-10">
         <Link
           href="/dashboard"
           className="inline-flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[rgba(34,211,238,0.55)] sm:gap-3"
         >
           <span
-            className="grid size-8 shrink-0 place-items-center rounded-[10px] border border-[rgba(34,211,238,0.28)] bg-[#071426] sm:size-9"
+            className="grid size-[34px] shrink-0 place-items-center rounded-[10px] border border-[rgba(34,211,238,0.28)] bg-[#071426] sm:size-9"
             aria-hidden
           >
             <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
@@ -34,13 +34,13 @@ export function StoreSelectorHeader({
               <circle cx="9" cy="14.2" r="0.9" fill="#19C7B5" />
             </svg>
           </span>
-          <span className="truncate text-[17px] font-bold tracking-tight text-[#F8FAFC] sm:text-[19px]">
+          <span className="truncate text-[17px] font-bold tracking-tight text-[#F8FAFC] sm:text-[18px]">
             CODTracked
           </span>
         </Link>
 
         <div className="flex min-w-0 items-center gap-3">
-          <p className="hidden max-w-[180px] truncate text-[12.5px] text-[#94A3B8] sm:block">
+          <p className="hidden max-w-[200px] truncate text-[12px] text-[#94A3B8] sm:block">
             {userName}
           </p>
           {avatarUrl ? (
@@ -48,12 +48,12 @@ export function StoreSelectorHeader({
             <img
               src={avatarUrl}
               alt=""
-              className="size-8 rounded-full object-cover ring-1 ring-[rgba(76,139,170,0.35)]"
+              className="size-[30px] rounded-full object-cover ring-1 ring-[rgba(76,139,170,0.35)] sm:size-8"
             />
           ) : (
             <span
               className={cn(
-                "grid size-8 place-items-center rounded-full bg-[#19C7B5] text-xs font-semibold text-[#042F2E]",
+                "grid size-[30px] place-items-center rounded-full bg-[#19C7B5] text-xs font-semibold text-[#042F2E] sm:size-8",
               )}
               aria-hidden
             >

@@ -24,7 +24,7 @@ export function StoreSearch({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Buscar por nombre de tienda…"
-        className="h-11 w-full rounded-[11px] border border-[rgba(76,139,170,0.28)] bg-[#0B1A2C] py-2 pl-10 pr-10 text-sm text-[#F8FAFC] outline-none placeholder:text-[#64748B] focus:border-[rgba(34,211,238,0.55)] focus:ring-2 focus:ring-[rgba(34,211,238,0.3)]"
+        className="h-[42px] w-full rounded-[11px] border border-[rgba(76,139,170,0.28)] bg-[#0B1A2C] py-2 pl-10 pr-10 text-sm text-[#F8FAFC] outline-none placeholder:text-[#64748B] focus:border-[rgba(34,211,238,0.55)] focus:ring-2 focus:ring-[rgba(34,211,238,0.3)] sm:h-11"
         autoComplete="off"
       />
       {value ? (
