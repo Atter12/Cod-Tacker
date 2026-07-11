@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, CardContent, EmptyState } from "@/components/ui";
+import { StoreSelectorExperience } from "@/components/store-selector/StoreSelectorExperience";
 import { requireUser } from "@/lib/auth/require-user";
 import { getAccessState } from "@/lib/tenant/get-access-state";
+import { getStoreSelectorPageData } from "@/services/store-selector.service";
 import { routes } from "@/config/routes";
 
 export default async function DashboardResolver() {
@@ -15,48 +16,19 @@ export default async function DashboardResolver() {
 
   if (access.kind === "pending_invite") {
     return (
-      <main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 px-4 text-center">
-        <EmptyState
-          title="Tienes una invitación pendiente"
-          description="Usa el enlace que te compartió el administrador de la agencia. Si no lo tienes, pídeselo de nuevo."
-        />
-        <Link href={routes.app.invitesAccept} className="text-sm text-brand-primary">
+      <main className="store-selector-experience flex min-h-screen flex-col items-center justify-center gap-4 bg-[#050B16] px-4 text-center text-[#F8FAFC]">
+        <h1 className="text-2xl font-semibold">Tienes una invitación pendiente</h1>
+        <p className="max-w-md text-sm text-[#94A3B8]">
+          Usa el enlace que te compartió el administrador de la agencia. Si no lo tienes, pídeselo de
+          nuevo.
+        </p>
+        <Link href={routes.app.invitesAccept} className="text-sm text-[#22D3EE]">
           Abrir página de aceptación
         </Link>
       </main>
     );
   }
 
-  const stores = access.stores;
-  if (!stores.length) {
-    return (
-      <main className="flex min-h-[70vh] items-center justify-center px-4">
-        <EmptyState
-          title="Sin tiendas asignadas"
-          description="Tu cuenta está activa en una agencia, pero aún no tienes tiendas visibles. Pide a un administrador que te asigne acceso o cree una tienda."
-        />
-      </main>
-    );
-  }
-
-  return (
-    <section className="mx-auto max-w-3xl space-y-5 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold">Selecciona una tienda</h1>
-        <p className="mt-1 text-sm text-text-secondary">Elige el espacio de trabajo que quieres revisar.</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {stores.map((store) => (
-          <Link key={store.storeId} href={routes.store.dashboard(store.agencySlug, store.storeSlug)}>
-            <Card className="transition-shadow hover:shadow-md">
-              <CardContent>
-                <p className="font-medium">{store.storeSlug}</p>
-                <p className="mt-1 text-sm text-text-secondary">{store.agencySlug}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
+  const data = await getStoreSelectorPageData();
+  return <StoreSelectorExperience data={data} />;
 }

@@ -88,3 +88,17 @@ export async function setActiveStore(agencySlug: string, storeSlug: string): Pro
     return actionFail(error);
   }
 }
+
+/**
+ * Validates store access, persists the active-tenant cookie, then redirects
+ * to the store dashboard. Used by the post-login store selector.
+ */
+export async function enterStore(agencySlug: string, storeSlug: string): Promise<StoreActionResult> {
+  try {
+    await requireStoreAccess(agencySlug, storeSlug);
+    await setActiveTenantPreference(agencySlug, storeSlug);
+  } catch (error) {
+    return actionFail(error);
+  }
+  redirect(routes.store.dashboard(agencySlug, storeSlug));
+}

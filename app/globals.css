@@ -110,3 +110,18 @@ body {
 .login-auth-compact input {
   color: #f8fafc;
 }
+
+.store-selector-create-form {
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --surface-elevated: #0b1a2c;
+  --border: rgba(76, 139, 170, 0.28);
+  --ring: #22d3ee;
+  --brand-primary: #19c7b5;
+  color: #f8fafc;
+}
+
+.store-selector-create-form form {
+  border-color: rgba(76, 139, 170, 0.22);
+  background: transparent;
+}
