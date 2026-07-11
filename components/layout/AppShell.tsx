@@ -16,6 +16,7 @@ export function AppShell({
   user,
   roles = [],
   returnToStore,
+  activeAlertCount = 0,
 }: {
   children: ReactNode;
   agencySlug: string;
@@ -28,6 +29,7 @@ export function AppShell({
   user?: { name?: string; email?: string };
   roles?: readonly Role[];
   returnToStore?: { href: string; storeName: string } | null;
+  activeAlertCount?: number;
 }) {
   const scope = storeSlug ? "store" : "agency";
   return (
@@ -38,6 +40,7 @@ export function AppShell({
         scope={scope}
         roles={roles}
         returnToStore={returnToStore}
+        activeAlertCount={activeAlertCount}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center border-b border-border bg-surface-elevated px-3 lg:hidden">
@@ -47,6 +50,7 @@ export function AppShell({
             scope={scope}
             roles={roles}
             returnToStore={returnToStore}
+            activeAlertCount={activeAlertCount}
           />
           <span className="ml-2 min-w-0 truncate text-sm font-semibold">
             {scope === "agency" ? "Consola de agencia" : "CODTracked"}
@@ -59,8 +63,12 @@ export function AppShell({
           agencyConsole={agencyConsole}
           tenantSwitcher={tenantSwitcher}
           user={user}
+          agencySlug={agencySlug}
+          storeSlug={storeSlug}
+          activeAlertCount={activeAlertCount}
+          hideTitle={Boolean(storeSlug && tenantSwitcher)}
         />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-[22px]">{children}</main>
       </div>
     </div>
   );

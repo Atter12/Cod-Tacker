@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Moon, Sun, User } from "lucide-react";
+import { ChevronDown, LogOut, Moon, Sun, User } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { routes } from "@/config/routes";
 import { Dropdown, DropdownItem } from "@/components/ui/Dropdown";
@@ -9,12 +9,20 @@ import { toggleTheme } from "./ThemeProvider";
 
 export function UserMenu({ name = "Usuario", email }: { name?: string; email?: string }) {
   const router = useRouter();
+  const initial = (name || email || "U").slice(0, 1).toUpperCase();
+  const firstName = name.trim().split(/\s+/)[0] || name;
 
   return (
     <Dropdown
       trigger={
-        <span className="grid size-8 place-items-center rounded-full bg-brand-primary text-xs font-semibold text-white">
-          {(name || email || "U").slice(0, 1).toUpperCase()}
+        <span className="inline-flex h-[38px] items-center gap-2 rounded-[9px] px-1.5 text-text-primary transition-colors hover:bg-muted sm:pr-2.5">
+          <span className="grid size-8 place-items-center rounded-full bg-brand-primary text-xs font-semibold text-white">
+            {initial}
+          </span>
+          <span className="hidden max-w-[120px] truncate text-[12.5px] font-medium sm:inline">
+            {firstName}
+          </span>
+          <ChevronDown className="hidden size-3.5 text-text-secondary sm:inline" aria-hidden />
         </span>
       }
     >

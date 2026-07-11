@@ -49,17 +49,16 @@ export function TenantSwitcher({
       trigger={
         <span
           className={cn(
-            "inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-text-primary",
-            "transition-colors hover:bg-muted",
-            inAgency && "border border-border bg-surface",
+            "inline-flex h-[38px] min-w-0 items-center gap-2 rounded-[9px] border border-border bg-surface-elevated px-3 text-[12.5px] font-medium text-text-primary",
+            "transition-colors hover:bg-muted sm:min-w-[180px]",
           )}
         >
           <Store className="size-4 shrink-0 text-text-secondary" aria-hidden />
-          <span className="hidden max-w-40 truncate md:inline">
+          <span className="hidden max-w-[160px] truncate md:inline">
             {inAgency ? "Abrir tienda" : (current?.name ?? "Seleccionar tienda")}
           </span>
           <span className="sr-only md:hidden">{inAgency ? "Abrir tienda" : "Cambiar tienda"}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-text-secondary" aria-hidden />
+          <ChevronDown className="ml-auto size-3.5 shrink-0 text-text-secondary" aria-hidden />
         </span>
       }
     >

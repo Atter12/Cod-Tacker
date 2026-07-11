@@ -1,40 +1,49 @@
 @import "tailwindcss";
 
 :root {
-  --brand-primary: #0f766e;
-  --brand-secondary: #164e63;
-  --brand-accent: #ea580c;
-  --surface: #f8fafc;
+  --brand-primary: #f47a32;
+  --brand-secondary: #f5661f;
+  --brand-accent: #ff671d;
+  --brand-soft: #fff2ea;
+  --brand-softer: #fff8f3;
+  --surface: #fbfaf8;
   --surface-elevated: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --border: #e2e8f0;
-  --success: #15803d;
+  --text-primary: #202329;
+  --text-secondary: #7e858d;
+  --border: #ece7e3;
+  --success: #22a060;
+  --success-soft: #eaf8ef;
   --warning: #ca8a04;
-  --danger: #dc2626;
-  --muted: #f1f5f9;
-  --ring: #0f766e;
+  --danger: #d95f72;
+  --danger-soft: #fff0f2;
+  --muted: #f8f5f2;
+  --ring: #f47a32;
   --sidebar: #ffffff;
-  --sidebar-foreground: #334155;
-  --chart-1: #0f766e;
-  --chart-2: #ea580c;
-  --chart-3: #0369a1;
-  --chart-4: #65a30d;
-  --chart-5: #a16207;
+  --sidebar-foreground: #3a4149;
+  --chart-1: #f47a32;
+  --chart-2: #ff8645;
+  --chart-3: #ffa66f;
+  --chart-4: #f8d6c6;
+  --chart-5: #22a060;
+  --card-shadow: 0 2px 8px rgba(38, 28, 20, 0.045);
 }
 
 @theme inline {
   --color-brand-primary: var(--brand-primary);
   --color-brand-secondary: var(--brand-secondary);
   --color-brand-accent: var(--brand-accent);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-softer: var(--brand-softer);
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-border: var(--border);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-muted: var(--muted);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
@@ -49,20 +58,30 @@
 }
 
 .dark {
+  --brand-primary: #fb923c;
+  --brand-secondary: #f97316;
+  --brand-accent: #fdba74;
+  --brand-soft: rgba(249, 115, 22, 0.14);
+  --brand-softer: rgba(249, 115, 22, 0.08);
   --surface: #0b1220;
   --surface-elevated: #111c2e;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --border: #243247;
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --danger: #fb7185;
+  --danger-soft: rgba(251, 113, 133, 0.12);
   --muted: #172337;
-  --ring: #2dd4bf;
+  --ring: #fb923c;
   --sidebar: #0d1728;
   --sidebar-foreground: #cbd5e1;
-  --chart-1: #2dd4bf;
-  --chart-2: #fb923c;
-  --chart-3: #38bdf8;
-  --chart-4: #a3e635;
-  --chart-5: #facc15;
+  --chart-1: #fb923c;
+  --chart-2: #fdba74;
+  --chart-3: #fcd34d;
+  --chart-4: #78716c;
+  --chart-5: #34d399;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 body {

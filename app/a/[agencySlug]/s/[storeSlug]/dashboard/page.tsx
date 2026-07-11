@@ -1,11 +1,42 @@
-import { DateRangePicker, MetricCard, SectionHeader, Card, CardContent, DataTable } from "@/components/ui";
+import {
+  Check,
+  DollarSign,
+  Gauge,
+  Route,
+  ShoppingCart,
+  TrendingUp,
+  Truck,
+  Undo2,
+} from "lucide-react";
+import { IntegrationHealthCard } from "@/components/dashboard/IntegrationHealthCard";
+import { OperationalFunnel } from "@/components/dashboard/OperationalFunnel";
+import { PrimaryMetricCard } from "@/components/dashboard/PrimaryMetricCard";
+import { RecentOrdersCard } from "@/components/dashboard/RecentOrdersCard";
+import { RevenuePerformanceChart } from "@/components/dashboard/RevenuePerformanceChart";
+import { SecondaryMetricCard } from "@/components/dashboard/SecondaryMetricCard";
 import { formatCurrency } from "@/lib/formatting/currency";
-import { dateRangeToBounds, parseDateRangePreset } from "@/lib/formatting/date-range";
+import { dateRangeToBounds, parseDateRangePreset, type DateRangePreset } from "@/lib/formatting/date-range";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getDashboardSummary } from "@/services/dashboard.service";
 
-const percent = (value: number) => new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 1 }).format(value);
+function previousPeriodLabel(preset: DateRangePreset): string {
+  switch (preset) {
+    case "today":
+      return "día anterior";
+    case "7d":
+      return "7 días anteriores";
+    case "month":
+      return "mes anterior";
+    case "30d":
+    default:
+      return "30 días anteriores";
+  }
+}
+
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
 
 export default async function StoreDashboard({
   params,
@@ -24,71 +55,132 @@ export default async function StoreDashboard({
     membership.agencyId,
     membership.storeId!,
     { from: from.toISOString(), to: to.toISOString() },
+    { rangePreset: preset },
   );
+
+  const comparisonLabel = previousPeriodLabel(preset);
+  const series = summary.timeSeries;
+  const spark = {
+    generated: series.map((point) => point.ordersGenerated),
+    confirmed: series.map((point) => point.ordersConfirmed),
+    delivered: series.map((point) => point.ordersDelivered),
+    cash: series.map((point) => point.cashCollected),
+    returned: series.map((point) => point.ordersReturned),
+    rto: series.map((point) => point.rto),
+    roasCheckout: series.map((point) => point.roasCheckout),
+    roasDelivered: series.map((point) => point.roasDelivered),
+  };
+
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Resumen operativo</h1>
-          <p className="text-sm text-text-secondary">Indicadores calculados con los datos disponibles.</p>
-        </div>
-        <DateRangePicker value={preset} />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Pedidos generados" value={String(summary.kpis.ordersGenerated)} />
-        <MetricCard label="Confirmados" value={String(summary.kpis.ordersConfirmed)} />
-        <MetricCard label="Entregados" value={String(summary.kpis.ordersDelivered)} />
-        <MetricCard label="Devueltos" value={String(summary.kpis.ordersReturned)} />
-        <MetricCard label="Tasa confirmación" value={percent(summary.kpis.confirmationRate)} />
-        <MetricCard label="Tasa entrega" value={percent(summary.kpis.deliveryRate)} />
-        <MetricCard label="RTO" value={percent(summary.kpis.rto)} />
-        <MetricCard label="Efectivo esperado" value={formatCurrency(summary.kpis.cashExpected)} />
-        <MetricCard label="Efectivo cobrado" value={formatCurrency(summary.kpis.cashCollected)} />
-        <MetricCard label="Efectivo conciliado" value={formatCurrency(summary.kpis.cashSettled)} />
-        <MetricCard label="ROAS checkout" value={summary.kpis.roasCheckout.toFixed(2)} />
-        <MetricCard label="ROAS entregado" value={summary.kpis.roasDelivered.toFixed(2)} />
-        <MetricCard label="ROAS cobrado" value={summary.kpis.roasCollected.toFixed(2)} />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardContent>
-            <SectionHeader title="Embudo operativo" description="Generados, confirmados, entregados y devueltos." />
-            <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt className="text-text-secondary">Entregados</dt>
-                <dd className="text-xl font-semibold">{summary.kpis.ordersDelivered}</dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Devueltos</dt>
-                <dd className="text-xl font-semibold">{summary.kpis.ordersReturned}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <SectionHeader title="Estado de integraciones" description="Conexiones registradas para esta tienda." />
-            <p className="mt-4 text-sm text-text-secondary">
-              {summary.integrations.length
-                ? `${summary.integrations.length} integración(es) registrada(s).`
-                : "No hay integraciones conectadas."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-      <div>
-        <SectionHeader title="Pedidos recientes" />
-        <DataTable
-          data={summary.recentOrders}
-          getRowId={(order) => order.id}
-          columns={[
-            { id: "number", header: "Pedido", cell: (order) => order.order_number ?? order.external_order_id },
-            { id: "status", header: "Estado", cell: (order) => order.order_status },
-            { id: "total", header: "Total", cell: (order) => `${order.total_amount} ${order.currency_code}` },
-          ]}
-          emptyMessage="No hay pedidos en este período."
+    <section className="space-y-3">
+      <header className="pb-1">
+        <h1 className="text-[24px] font-bold leading-[30px] tracking-tight text-text-primary">
+          Resumen operativo
+        </h1>
+        <p className="mt-1 text-[13px] text-text-secondary">
+          Indicadores calculados con los datos disponibles.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <PrimaryMetricCard
+          label="Pedidos generados"
+          value={summary.kpis.ordersGenerated.value.toLocaleString("es-PE")}
+          metric={summary.kpis.ordersGenerated}
+          sparkline={spark.generated}
+          icon={ShoppingCart}
+          comparisonLabel={comparisonLabel}
+        />
+        <PrimaryMetricCard
+          label="Confirmados"
+          value={summary.kpis.ordersConfirmed.value.toLocaleString("es-PE")}
+          metric={summary.kpis.ordersConfirmed}
+          sparkline={spark.confirmed}
+          icon={Check}
+          comparisonLabel={comparisonLabel}
+        />
+        <PrimaryMetricCard
+          label="Entregados"
+          value={summary.kpis.ordersDelivered.value.toLocaleString("es-PE")}
+          metric={summary.kpis.ordersDelivered}
+          sparkline={spark.delivered}
+          icon={Truck}
+          comparisonLabel={comparisonLabel}
+        />
+        <PrimaryMetricCard
+          label="Efectivo cobrado"
+          value={formatCurrency(summary.kpis.cashCollected.value, summary.currencyCode)}
+          metric={summary.kpis.cashCollected}
+          sparkline={spark.cash}
+          icon={DollarSign}
+          comparisonLabel={comparisonLabel}
         />
       </div>
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.37fr)_minmax(0,0.63fr)]">
+        <OperationalFunnel
+          funnel={summary.funnel}
+          confirmationRate={summary.kpis.confirmationRate}
+          deliveryRate={summary.kpis.deliveryRate}
+        />
+        <RevenuePerformanceChart
+          timeSeries={summary.timeSeries}
+          currencyCode={summary.currencyCode}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="md:col-span-2 xl:col-span-2">
+          <IntegrationHealthCard
+            health={summary.integrationHealth}
+            agencySlug={agencySlug}
+            storeSlug={storeSlug}
+          />
+        </div>
+        <SecondaryMetricCard
+          label="RTO"
+          value={percent(summary.kpis.rto.value)}
+          metric={summary.kpis.rto}
+          sparkline={spark.rto}
+          icon={Route}
+          increaseIsGood={false}
+          comparisonLabel={comparisonLabel}
+          changeMode="pp"
+        />
+        <SecondaryMetricCard
+          label="Devueltos"
+          value={summary.kpis.ordersReturned.value.toLocaleString("es-PE")}
+          metric={summary.kpis.ordersReturned}
+          sparkline={spark.returned}
+          icon={Undo2}
+          increaseIsGood={false}
+          comparisonLabel={comparisonLabel}
+        />
+        <SecondaryMetricCard
+          label="ROAS checkout"
+          value={summary.kpis.roasCheckout.value.toFixed(2)}
+          metric={summary.kpis.roasCheckout}
+          sparkline={spark.roasCheckout}
+          icon={TrendingUp}
+          comparisonLabel={comparisonLabel}
+          changeMode="absolute"
+        />
+        <SecondaryMetricCard
+          label="ROAS entregado"
+          value={summary.kpis.roasDelivered.value.toFixed(2)}
+          metric={summary.kpis.roasDelivered}
+          sparkline={spark.roasDelivered}
+          icon={Gauge}
+          comparisonLabel={comparisonLabel}
+          changeMode="absolute"
+        />
+      </div>
+
+      <RecentOrdersCard
+        orders={summary.recentOrders}
+        agencySlug={agencySlug}
+        storeSlug={storeSlug}
+      />
     </section>
   );
 }

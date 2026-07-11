@@ -12,12 +12,14 @@ export function MobileNavigation({
   scope = "store",
   roles = [],
   returnToStore,
+  activeAlertCount = 0,
 }: {
   agencySlug: string;
   storeSlug?: string;
   scope?: "store" | "agency" | "admin";
   roles?: readonly Role[];
   returnToStore?: { href: string; storeName: string } | null;
+  activeAlertCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -36,6 +38,7 @@ export function MobileNavigation({
           scope={scope}
           roles={roles}
           returnToStore={returnToStore}
+          activeAlertCount={activeAlertCount}
           mobile
         />
       </Drawer>

@@ -4,8 +4,10 @@ import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
 import { requireUser } from "@/lib/auth/require-user";
+import { createClient } from "@/lib/supabase/server";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { getStoreActiveAlertCount } from "@/services/dashboard.service";
 
 export default async function StoreLayout({
   children,
@@ -32,6 +34,12 @@ export default async function StoreLayout({
     storeSlug: store.storeSlug,
   }));
 
+  const activeAlertCount = await getStoreActiveAlertCount(
+    await createClient(),
+    membership.agencyId,
+    membership.storeId!,
+  );
+
   return (
     <AppShell
       agencySlug={agencySlug}
@@ -46,6 +54,7 @@ export default async function StoreLayout({
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,
       }}
+      activeAlertCount={activeAlertCount}
       agencyConsole={
         <AgencyConsoleMenu agencySlug={agencySlug} agencyName={agencyName} roles={membership.roles} />
       }
