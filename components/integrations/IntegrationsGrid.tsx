@@ -9,7 +9,7 @@ export type IntegrationsGridProps = {
 
 export function IntegrationsGrid({ items, agencySlug, storeSlug }: IntegrationsGridProps) {
   return (
-    <ul className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-x-5 md:gap-y-6">
+    <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
       {items.map((item) => (
         <li key={item.id ?? item.provider}>
           <IntegrationOverviewCard

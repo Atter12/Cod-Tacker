@@ -23,12 +23,11 @@ export function IntegrationOverviewCard({
       href={href}
       aria-label={`${item.name}. ${statusLabel}. ${item.operationalMessage}`}
       className={cn(
-        "flex min-h-[95px] items-start gap-3.5 rounded-[10px] border border-border bg-surface-elevated p-4",
-        "shadow-[0_3px_10px_rgba(36,27,20,0.05)] dark:shadow-[0_3px_10px_rgba(0,0,0,0.25)]",
+        "flex min-h-[104px] items-start gap-3.5 rounded-[12px] border border-border bg-surface-elevated p-5",
+        "shadow-[var(--card-shadow)]",
         "transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out",
-        "hover:-translate-y-px hover:border-brand-primary/25 hover:bg-brand-softer/60 hover:shadow-[0_4px_14px_rgba(36,27,20,0.08)]",
+        "hover:-translate-y-px hover:border-brand-primary/25 hover:bg-brand-softer/60",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "active:shadow-[0_2px_6px_rgba(36,27,20,0.04)]",
         "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
       )}
     >
@@ -40,7 +39,7 @@ export function IntegrationOverviewCard({
         <span className="mt-1 line-clamp-2 block text-[12.5px] leading-snug text-text-secondary">
           {item.operationalMessage}
         </span>
-        <span className="mt-2 block">
+        <span className="mt-2.5 block">
           <IntegrationHealthBadge status={item.overviewStatus} />
         </span>
       </span>

@@ -16,27 +16,30 @@ function StateShell({
   description,
   action,
   className,
+  children,
 }: {
   icon: ReactNode;
   title: string;
   description: string;
   action?: StateAction;
   className?: string;
+  children?: ReactNode;
 }) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 py-14 text-center",
+        "flex w-full flex-col items-center justify-center rounded-[12px] border border-dashed border-border bg-surface-elevated px-6 py-16 text-center shadow-[var(--card-shadow)]",
         className,
       )}
     >
       <div className="mb-4 text-text-secondary">{icon}</div>
-      <h3 className="font-semibold text-text-primary">{title}</h3>
-      <p className="mt-1 max-w-sm text-sm text-text-secondary">{description}</p>
+      <h3 className="text-[15px] font-semibold text-text-primary">{title}</h3>
+      <p className="mt-1.5 max-w-md text-sm leading-relaxed text-text-secondary">{description}</p>
+      {children}
       {action?.href ? (
         <Link
           href={action.href}
-          className="mt-5 inline-flex h-9 items-center justify-center rounded-md bg-brand-primary px-4 text-sm font-medium text-white hover:bg-brand-primary/90"
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-[10px] bg-brand-primary px-4 text-sm font-medium text-white hover:bg-brand-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {action.label}
         </Link>
@@ -54,11 +57,15 @@ export function EmptyState({
   title,
   description,
   action,
+  className,
+  children,
 }: {
   icon?: ReactNode;
   title: string;
   description: string;
   action?: { label: string; onClick: () => void } | StateAction;
+  className?: string;
+  children?: ReactNode;
 }) {
   return (
     <StateShell
@@ -66,7 +73,10 @@ export function EmptyState({
       title={title}
       description={description}
       action={action}
-    />
+      className={className}
+    >
+      {children}
+    </StateShell>
   );
 }
 

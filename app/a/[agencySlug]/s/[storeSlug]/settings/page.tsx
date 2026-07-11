@@ -1,5 +1,6 @@
-import { SectionHeader, Card, CardContent } from "@/components/ui";
+import { BackToDashboardLink } from "@/components/layout/BackToDashboardLink";
 import { StoreSettingsForm } from "@/components/settings/StoreSettingsForm";
+import { Card, CardContent, PageHeader } from "@/components/ui";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -17,8 +18,12 @@ export default async function StoreSettingsPage({
   if (!view) {
     return (
       <section className="space-y-6">
-        <SectionHeader title="Configuración de tienda" description="Ajustes de operación y atribución." />
+        <PageHeader
+          title="Configuración de tienda"
+          description="Ajustes de operación y atribución."
+        />
         <p className="text-sm text-text-secondary">No se pudo cargar la tienda.</p>
+        <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
       </section>
     );
   }
@@ -27,11 +32,11 @@ export default async function StoreSettingsPage({
 
   return (
     <section className="space-y-6">
-      <SectionHeader
+      <PageHeader
         title="Configuración de tienda"
         description="Nombre, geografía, atribución, RTO, COD y preferencias. Cambios auditados."
       />
-      <Card>
+      <Card className="w-full">
         <CardContent>
           <StoreSettingsForm
             agencySlug={p.agencySlug}
@@ -49,6 +54,7 @@ export default async function StoreSettingsPage({
           />
         </CardContent>
       </Card>
+      <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
     </section>
   );
 }

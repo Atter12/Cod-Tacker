@@ -1,11 +1,10 @@
-import {
-  BackToDashboardLink,
-  IntegrationsPageHeader,
-} from "@/components/integrations/IntegrationsPageHeader";
+import { BackToDashboardLink } from "@/components/layout/BackToDashboardLink";
+import { IntegrationCatalogGrid } from "@/components/integrations/IntegrationCatalogGrid";
 import { IntegrationsEmptyState } from "@/components/integrations/IntegrationsEmptyState";
 import { IntegrationsGrid } from "@/components/integrations/IntegrationsGrid";
 import { IntegrationsLoadError } from "@/components/integrations/IntegrationsLoadError";
-import { ErrorState } from "@/components/ui";
+import { IntegrationsPageHeader } from "@/components/integrations/IntegrationsPageHeader";
+import { ErrorState, SectionHeader } from "@/components/ui";
 import {
   isAvailableCatalogItem,
   isConfiguredOverviewItem,
@@ -55,7 +54,7 @@ export default async function IntegrationsPage({
       message: error instanceof Error ? error.message : "unknown",
     });
     return (
-      <section className="space-y-5">
+      <section className="space-y-6">
         <IntegrationsPageHeader
           canManage={false}
           availableProviders={[]}
@@ -63,10 +62,8 @@ export default async function IntegrationsPage({
           storeSlug={p.storeSlug}
           demo={demo}
         />
-        <div className="w-full max-w-[680px]">
-          <IntegrationsLoadError />
-          <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
-        </div>
+        <IntegrationsLoadError />
+        <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
       </section>
     );
   }
@@ -75,7 +72,7 @@ export default async function IntegrationsPage({
   const availableProviders = items.filter(isAvailableCatalogItem);
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-8">
       <IntegrationsPageHeader
         canManage={canManage}
         availableProviders={availableProviders}
@@ -84,7 +81,8 @@ export default async function IntegrationsPage({
         demo={demo}
       />
 
-      <div className="w-full max-w-[680px]">
+      <div className="space-y-4">
+        <SectionHeader title="Conectadas" />
         {configuredItems.length > 0 ? (
           <IntegrationsGrid
             items={configuredItems}
@@ -100,9 +98,25 @@ export default async function IntegrationsPage({
             demo={demo}
           />
         )}
-
-        <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
       </div>
+
+      {availableProviders.length > 0 ? (
+        <div className="space-y-4">
+          <SectionHeader
+            title="Catálogo disponible"
+            description="Proveedores listos para conectar en esta tienda."
+          />
+          <IntegrationCatalogGrid
+            items={availableProviders}
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
+            canManage={canManage}
+            demo={demo}
+          />
+        </div>
+      ) : null}
+
+      <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
     </section>
   );
 }

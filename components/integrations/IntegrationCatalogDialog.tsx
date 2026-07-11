@@ -10,7 +10,7 @@ import type { IntegrationOverviewItem } from "@/types/integrations";
 import { IntegrationProviderIcon } from "./IntegrationProviderIcon";
 
 const triggerClassName =
-  "inline-flex h-[34px] items-center justify-center gap-1.5 rounded-[7px] border border-brand-primary bg-transparent px-3 text-[12px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-brand-primary bg-transparent px-3.5 text-[12.5px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
 export function IntegrationCatalogDialog({
   availableProviders,
@@ -19,6 +19,7 @@ export function IntegrationCatalogDialog({
   demo = false,
   triggerLabel = "Agregar integración",
   triggerClassName: triggerClassNameProp,
+  showPlusIcon = true,
 }: {
   availableProviders: IntegrationOverviewItem[];
   agencySlug: string;
@@ -26,6 +27,7 @@ export function IntegrationCatalogDialog({
   demo?: boolean;
   triggerLabel?: string;
   triggerClassName?: string;
+  showPlusIcon?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const descriptionId = useId();
@@ -37,7 +39,7 @@ export function IntegrationCatalogDialog({
         className={cn(triggerClassName, triggerClassNameProp)}
         onClick={() => setOpen(true)}
       >
-        <Plus className="size-3.5" aria-hidden />
+        {showPlusIcon ? <Plus className="size-3.5" aria-hidden /> : null}
         {triggerLabel}
       </button>
 
@@ -76,10 +78,10 @@ export function IntegrationCatalogDialog({
                   </div>
                   <Link
                     href={routes.store.integrationDetail(agencySlug, storeSlug, item.provider)}
-                    className="inline-flex h-8 shrink-0 items-center rounded-md border border-brand-primary px-2.5 text-[12px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-brand-primary px-3 text-[12.5px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => setOpen(false)}
                   >
-                    Configurar
+                    Conectar
                   </Link>
                 </li>
               ))}
