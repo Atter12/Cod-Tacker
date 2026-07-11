@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { routes } from "@/config/routes";
+import { actionFail, type ActionResult } from "@/lib/actions/action-result";
 import { requireUser } from "@/lib/auth/require-user";
 import { toUserMessage } from "@/lib/errors/to-user-message";
 import { ValidationError } from "@/lib/errors";
@@ -16,7 +17,7 @@ export type AgencyInput = {
   countryCode?: string | null;
   currencyCode?: string;
 };
-export type AgencyActionResult = { error?: string; id?: string };
+export type AgencyActionResult = ActionResult<{ id: string }>;
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function validateAgency(input: AgencyInput): void {
@@ -47,10 +48,10 @@ export async function updateAgency(agencySlug: string, input: AgencyInput): Prom
       .from("agencies")
       .update({ name: input.name.trim(), logo_url: input.logoUrl ?? null })
       .eq("id", membership.agencyId);
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
     revalidatePath(routes.agency.stores(agencySlug));
     return {};
   } catch (error) {
-    return { error: toUserMessage(error) };
+    return actionFail(error);
   }
 }

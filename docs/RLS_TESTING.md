@@ -33,5 +33,21 @@ Provide either both user JWTs (`USER_A_JWT`, `USER_B_JWT`) or both email/passwor
 - User A can read Agency A and Store A.
 - User A cannot read Agency B or Store B.
 - User B cannot read Agency A or Store A.
+- User A cannot insert a store into Agency B (unauthorized write).
+- User A cannot update Store B (unauthorized write).
+
+## Role matrix (manual / future automation)
+
+| Role | Expectation |
+| --- | --- |
+| agency owner/admin | All active stores in agency; billing/api_keys/branding manage |
+| agency manager | Store access agency-wide; limited config |
+| agency analyst/viewer | Only assigned `store_members` (or none) |
+| store operator | orders/shipments manage; no billing |
+| store analyst/viewer | read analytics/orders; no manage |
+| platform_admin | `/admin` via `requirePlatformAdmin`; UI never uses service role |
+| suspended agency/store (`is_active=false`) | Hidden from `getAccessibleStores` |
+
+Permissions are re-checked in Server Actions (`can` / `requirePermission`); hiding UI is not authorization.
 
 Add equivalent insert/update/delete tests when those policies are introduced or changed.

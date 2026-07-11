@@ -1,1 +1,1 @@
-export { listAlerts } from "@/services/alerts.service";
+export { listAlerts, listAlertsPaginated, getAlertById } from "@/services/alerts.service";

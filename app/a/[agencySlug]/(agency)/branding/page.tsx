@@ -1,42 +1,54 @@
 import { SectionHeader, Card, CardContent } from "@/components/ui";
+import { BrandingForm } from "@/components/branding/BrandingForm";
+import { BRANDING_DEFAULTS } from "@/lib/branding/schema";
+import { getAgencyPlanLimits, planAllowsWhiteLabel } from "@/lib/billing/limits";
+import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
+import { getAgencyBrandingFlags, getWhiteLabelSettings } from "@/services/branding.service";
 
-export default async function AgencyBrandingPage({ params }: { params: Promise<{ agencySlug: string }> }) {
+export default async function AgencyBrandingPage({
+  params,
+}: {
+  params: Promise<{ agencySlug: string }>;
+}) {
   const p = await params;
   const membership = await requireAgencyAccess(p.agencySlug);
-  const { data: settings } = await (await createClient())
-    .from("white_label_settings")
-    .select()
-    .eq("agency_id", membership.agencyId)
-    .maybeSingle();
+  const client = await createClient();
+  const [settings, flags, limits] = await Promise.all([
+    getWhiteLabelSettings(client, membership.agencyId),
+    getAgencyBrandingFlags(client, membership.agencyId),
+    getAgencyPlanLimits(client, membership.agencyId),
+  ]);
+
+  const canEdit = can(membership.roles, "branding.manage");
+  const whiteLabelAllowed = planAllowsWhiteLabel(limits);
+
   return (
     <section className="space-y-6">
-      <SectionHeader title="Marca y white label" description="Personalización visual de la plataforma para esta agencia." />
+      <SectionHeader
+        title="Marca y white label"
+        description="Personalización visual. Ocultar branding CODTracked según plan."
+      />
       <Card>
         <CardContent>
-          {settings ? (
-            <dl className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt className="text-text-secondary">Nombre del producto</dt>
-                <dd>{settings.product_name ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Color primario</dt>
-                <dd>{settings.primary_color ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Email de soporte</dt>
-                <dd>{settings.support_email ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Ocultar branding CODTracked</dt>
-                <dd>{settings.hide_codtracked_branding ? "Sí" : "No"}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="text-sm text-text-secondary">No hay configuración de marca. Contacta al equipo para habilitarla.</p>
-          )}
+          <BrandingForm
+            agencySlug={p.agencySlug}
+            canEdit={canEdit}
+            whiteLabelAllowed={whiteLabelAllowed}
+            initial={{
+              productName: settings?.product_name ?? BRANDING_DEFAULTS.productName,
+              primaryColor: settings?.primary_color ?? BRANDING_DEFAULTS.primaryColor,
+              secondaryColor: settings?.secondary_color ?? BRANDING_DEFAULTS.secondaryColor,
+              logoUrl: settings?.logo_url ?? "",
+              faviconUrl: settings?.favicon_url ?? "",
+              loginBackgroundUrl: settings?.login_background_url ?? "",
+              supportEmail: settings?.support_email ?? "",
+              supportWhatsapp: settings?.support_whatsapp ?? "",
+              hideCodtrackedBranding: settings?.hide_codtracked_branding ?? false,
+              isWhiteLabelEnabled: flags?.is_white_label_enabled ?? false,
+            }}
+          />
         </CardContent>
       </Card>
     </section>

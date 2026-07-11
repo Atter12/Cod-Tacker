@@ -1,1 +1,5 @@
-export { listAutomationRules } from "@/services/automations.service";
+export {
+  listAutomationRules,
+  getAutomationRuleById,
+  listAutomationRuns,
+} from "@/services/automations.service";

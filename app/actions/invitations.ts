@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { getPublicEnv } from "@/config/env";
 import { invitableAgencyRoles, type InvitableAgencyRole } from "@/config/permissions";
 import { routes } from "@/config/routes";
+import { type ActionResult } from "@/lib/actions/action-result";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
 import { ValidationError } from "@/lib/errors";
@@ -15,7 +16,7 @@ import { requirePermission } from "@/lib/permissions/require-permission";
 import { createClient } from "@/lib/supabase/server";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
 
-export type InvitationActionResult = { error?: string; inviteUrl?: string; invitationId?: string };
+export type InvitationActionResult = ActionResult<{ inviteUrl: string; invitationId: string }>;
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -85,7 +86,7 @@ export async function createAgencyInvitation(
       })
       .select("id")
       .single();
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
 
     await writeAuditLog({
       action: "invitation_created",
@@ -119,7 +120,7 @@ export async function revokeAgencyInvitation(
       .eq("id", invitationId)
       .eq("agency_id", membership.agencyId)
       .eq("status", "pending");
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
     await writeAuditLog({
       action: "invitation_revoked",
       entityType: "agency_invitation",
@@ -152,7 +153,7 @@ export async function acceptAgencyInvitation(token: string): Promise<InvitationA
       if (message.includes("invitation_email_mismatch")) {
         throw new ValidationError("Debes iniciar sesión con el correo al que se envió la invitación.");
       }
-      return { error: error.message };
+      return { error: toUserMessage(error) };
     }
 
     await writeAuditLog({
@@ -186,13 +187,13 @@ export async function updateAgencyMemberRole(
       .eq("id", memberId)
       .eq("agency_id", membership.agencyId)
       .maybeSingle();
-    if (targetError) return { error: targetError.message };
+    if (targetError) return { error: toUserMessage(targetError) };
     if (!target) throw new ValidationError("Miembro no encontrado.");
     if (target.role === "owner") throw new ValidationError("No puedes cambiar el rol del owner.");
     if (target.user_id === user.id) throw new ValidationError("No puedes cambiar tu propio rol aquí.");
 
     const { error } = await supabase.from("agency_members").update({ role: nextRole }).eq("id", target.id);
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
 
     await writeAuditLog({
       action: "member_role_changed",
@@ -227,13 +228,13 @@ export async function setAgencyMemberStatus(
       .eq("id", memberId)
       .eq("agency_id", membership.agencyId)
       .maybeSingle();
-    if (targetError) return { error: targetError.message };
+    if (targetError) return { error: toUserMessage(targetError) };
     if (!target) throw new ValidationError("Miembro no encontrado.");
     if (target.role === "owner") throw new ValidationError("No puedes suspender al owner.");
     if (target.user_id === user.id) throw new ValidationError("No puedes suspenderte a ti mismo.");
 
     const { error } = await supabase.from("agency_members").update({ status }).eq("id", target.id);
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
 
     await writeAuditLog({
       action: status === "suspended" ? "member_suspended" : "member_reactivated",

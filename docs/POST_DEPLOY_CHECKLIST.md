@@ -70,3 +70,17 @@ Redirect URLs (add all that apply):
 - [ ] `ALLOW_DEMO_SEED=true DEMO_AGENCY_ID=… DEMO_STORE_ID=… npm run seed:demo`
 - [ ] Dashboard KPIs non-zero for that store
 - [ ] `npm run clear:demo` removes only `metadata.source = demo_seed` rows
+
+## E2E matrix (Integration-Ready V1)
+
+- [ ] Walk [E2E_MATRIX.md](./E2E_MATRIX.md) steps 1–16 in mock mode (no manual DB edits)
+- [ ] `npm run e2e:matrix` (health + plans probe)
+- [ ] `ALLOW_JOB_WORKER=true npm run jobs:process` drains queue after syncs
+- [ ] Admin can retry a failed/dead-letter job
+- [ ] Suspended agency/store is inaccessible to members
+- [ ] `INTEGRATION_MODE=mock` (or unset outside prod) — no live provider calls
+
+## Quality gate
+
+- [ ] `npm run validate` (lint + typecheck + test:unit + build)
+- [ ] Migrations applied through `20260711210000_sprint10_performance_indexes.sql`

@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { authCallbackUrl, authPaths } from "@/config/auth";
 import { getPublicEnv } from "@/config/env";
 import { routes } from "@/config/routes";
+import { type ActionResult } from "@/lib/actions/action-result";
 import { ValidationError } from "@/lib/errors";
 import { toUserMessage } from "@/lib/errors/to-user-message";
 import { createClient } from "@/lib/supabase/server";
 import { safeRedirectPath } from "@/lib/validation/redirect";
 
-export type AuthActionResult = { error?: string; success?: string };
+export type AuthActionResult = ActionResult<{ success: string }>;
 /** OTP is only used to confirm email ownership during account creation. */
 export type OtpPurpose = "signup";
 
@@ -47,7 +48,7 @@ export async function login(email: string, password: string, next?: string): Pro
     validatePassword(password);
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
   } catch (error) {
     return { error: toUserMessage(error) };
   }
@@ -70,7 +71,7 @@ export async function register(email: string, password: string, fullName: string
         emailRedirectTo: authCallbackUrl(appUrl, routes.app.dashboard),
       },
     });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
     if (data.session) redirect(routes.app.dashboard);
   } catch (error) {
     return { error: toUserMessage(error) };
@@ -88,7 +89,7 @@ export async function verifyOtp(email: string, token: string): Promise<AuthActio
       token: code,
       type: "signup",
     });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
   } catch (error) {
     return { error: toUserMessage(error) };
   }
@@ -105,7 +106,7 @@ export async function resendOtp(email: string): Promise<AuthActionResult> {
       email: normalizedEmail,
       options: { emailRedirectTo: authCallbackUrl(appUrl, routes.app.dashboard) },
     });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
     return { success: "Te enviamos un nuevo código de 6 dígitos. Revisa tu correo." };
   } catch (error) {
     return { error: toUserMessage(error) };
@@ -120,7 +121,7 @@ export async function forgotPassword(email: string): Promise<AuthActionResult> {
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: authCallbackUrl(appUrl, authPaths.resetPassword),
     });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
     return {};
   } catch (error) {
     return { error: toUserMessage(error) };
@@ -132,7 +133,7 @@ export async function resetPassword(password: string): Promise<AuthActionResult>
     validatePassword(password);
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) return { error: error.message };
+    if (error) return { error: toUserMessage(error) };
   } catch (error) {
     return { error: toUserMessage(error) };
   }

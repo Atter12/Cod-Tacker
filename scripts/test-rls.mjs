@@ -52,6 +52,17 @@ async function canRead(client, table, id) {
   return data.length > 0;
 }
 
+/** Returns true when insert is rejected (RLS/policy) or never becomes visible. */
+async function unauthorizedInsertBlocked(client, table, row) {
+  const { data, error } = await client.from(table).insert(row).select("id");
+  if (error) {
+    // Expected: RLS / permission / check constraint from unprivileged client
+    return true;
+  }
+  // If insert somehow returned rows, treat as failure of isolation
+  return !(data && data.length > 0);
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
   console.log(`PASS: ${message}`);
@@ -71,6 +82,36 @@ try {
   assert(!(await canRead(userA, "stores", process.env.STORE_B_ID)), "User A cannot read Store B");
   assert(!(await canRead(userB, "agencies", process.env.AGENCY_A_ID)), "User B cannot read Agency A");
   assert(!(await canRead(userB, "stores", process.env.STORE_A_ID)), "User B cannot read Store A");
+
+  // Unauthorized cross-tenant write: User A must not create a store under Agency B
+  assert(
+    await unauthorizedInsertBlocked(userA, "stores", {
+      agency_id: process.env.AGENCY_B_ID,
+      name: "RLS Probe Store",
+      slug: `rls-probe-${Date.now()}`,
+      timezone: "America/Lima",
+      currency_code: "PEN",
+      country_code: "PE",
+      settings: {},
+      is_active: true,
+      attribution_window_days: 30,
+    }),
+    "User A cannot insert a store into Agency B",
+  );
+
+  // Unauthorized write against foreign store row (update should affect 0 rows / be denied)
+  {
+    const { data, error } = await userA
+      .from("stores")
+      .update({ name: "RLS Should Not Apply" })
+      .eq("id", process.env.STORE_B_ID)
+      .select("id");
+    if (error) {
+      assert(true, "User A cannot update Store B (error from RLS)");
+    } else {
+      assert(!(data && data.length > 0), "User A cannot update Store B (0 rows)");
+    }
+  }
 
   if (!process.env.USER_A_JWT && !process.env.USER_B_JWT) {
     await Promise.all([userA.auth.signOut(), userB.auth.signOut()]);

@@ -1,1 +1,8 @@
-export { getPlatformOverviewCounts } from "@/services/admin.service";
+export {
+  getPlatformOverviewCounts,
+  getPlatformRecords,
+  getPlatformAgencyDetail,
+  getPlatformStoreDetail,
+  getPlatformUserDetail,
+  getPlatformAuditLogs,
+} from "@/services/admin.service";

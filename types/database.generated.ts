@@ -558,11 +558,13 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711180000_alerts_automations.sql
       alerts: {
         Row: {
           acknowledged_at: string | null
           acknowledged_by: string | null
           agency_id: string
+          assigned_to: string | null
           body: string | null
           campaign_id: string | null
           created_at: string
@@ -573,14 +575,20 @@ export type Database = {
           resolved_by: string | null
           severity: Database["public"]["Enums"]["alert_severity"]
           shipment_id: string | null
+          silenced_until: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
           store_id: string | null
           title: string
           type: string
+          updated_at: string
         }
         Insert: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           agency_id: string
+          assigned_to?: string | null
           body?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -591,14 +599,20 @@ export type Database = {
           resolved_by?: string | null
           severity?: Database["public"]["Enums"]["alert_severity"]
           shipment_id?: string | null
+          silenced_until?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
           store_id?: string | null
           title: string
           type: string
+          updated_at?: string
         }
         Update: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           agency_id?: string
+          assigned_to?: string | null
           body?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -609,9 +623,14 @@ export type Database = {
           resolved_by?: string | null
           severity?: Database["public"]["Enums"]["alert_severity"]
           shipment_id?: string | null
+          silenced_until?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
           store_id?: string | null
           title?: string
           type?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -647,6 +666,45 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — 20260711180000_alerts_automations.sql
+      alert_notes: {
+        Row: {
+          agency_id: string
+          alert_id: string
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          store_id: string | null
+        }
+        Insert: {
+          agency_id: string
+          alert_id: string
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          store_id?: string | null
+        }
+        Update: {
+          agency_id?: string
+          alert_id?: string
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_notes_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
             referencedColumns: ["id"]
           },
         ]
@@ -901,6 +959,7 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — 20260711180000_alerts_automations.sql
       automation_rules: {
         Row: {
           actions: Json
@@ -909,9 +968,13 @@ export type Database = {
           cooldown_minutes: number
           created_at: string
           created_by: string | null
+          description: string | null
           id: string
           is_active: boolean
+          last_triggered_at: string | null
           name: string
+          priority: number
+          requires_manual_approval: boolean
           store_id: string | null
           trigger_type: string
           updated_at: string
@@ -923,9 +986,13 @@ export type Database = {
           cooldown_minutes?: number
           created_at?: string
           created_by?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean
+          last_triggered_at?: string | null
           name: string
+          priority?: number
+          requires_manual_approval?: boolean
           store_id?: string | null
           trigger_type: string
           updated_at?: string
@@ -937,9 +1004,13 @@ export type Database = {
           cooldown_minutes?: number
           created_at?: string
           created_by?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean
+          last_triggered_at?: string | null
           name?: string
+          priority?: number
+          requires_manual_approval?: boolean
           store_id?: string | null
           trigger_type?: string
           updated_at?: string
@@ -961,15 +1032,22 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — 20260711180000_alerts_automations.sql
       automation_runs: {
         Row: {
           action_results: Json
           agency_id: string
+          approval_status: string | null
+          approved_at: string | null
+          approved_by: string | null
           attempts: number
           created_at: string
+          entity_id: string | null
+          entity_type: string | null
           error_message: string | null
           finished_at: string | null
           id: string
+          idempotency_key: string | null
           order_id: string | null
           rule_id: string
           shipment_id: string | null
@@ -977,15 +1055,22 @@ export type Database = {
           status: string
           store_id: string | null
           trigger_payload: Json
+          updated_at: string
         }
         Insert: {
           action_results?: Json
           agency_id: string
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           attempts?: number
           created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           order_id?: string | null
           rule_id: string
           shipment_id?: string | null
@@ -993,15 +1078,22 @@ export type Database = {
           status?: string
           store_id?: string | null
           trigger_payload?: Json
+          updated_at?: string
         }
         Update: {
           action_results?: Json
           agency_id?: string
+          approval_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           attempts?: number
           created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
           order_id?: string | null
           rule_id?: string
           shipment_id?: string | null
@@ -1009,6 +1101,7 @@ export type Database = {
           status?: string
           store_id?: string | null
           trigger_payload?: Json
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1044,6 +1137,165 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711140000_background_jobs_pipeline.sql
+      background_jobs: {
+        Row: {
+          agency_id: string
+          attempts: number
+          correlation_id: string | null
+          created_at: string
+          finished_at: string | null
+          id: string
+          idempotency_key: string
+          integration_id: string | null
+          job_type: string
+          last_error_code: string | null
+          last_error_message: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          payload: Json
+          priority: number
+          queue: string
+          raw_event_id: string | null
+          run_at: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["background_job_status"]
+          store_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          agency_id: string
+          attempts?: number
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          idempotency_key: string
+          integration_id?: string | null
+          job_type: string
+          last_error_code?: string | null
+          last_error_message?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          queue?: string
+          raw_event_id?: string | null
+          run_at?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_status"]
+          store_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string
+          attempts?: number
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          idempotency_key?: string
+          integration_id?: string | null
+          job_type?: string
+          last_error_code?: string | null
+          last_error_message?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          queue?: string
+          raw_event_id?: string | null
+          run_at?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_status"]
+          store_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_raw_event_id_fkey"
+            columns: ["raw_event_id"]
+            isOneToOne: false
+            referencedRelation: "raw_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711140000_background_jobs_pipeline.sql
+      job_attempts: {
+        Row: {
+          attempt_number: number
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          job_id: string
+          result: Json | null
+          started_at: string
+          status: Database["public"]["Enums"]["job_attempt_status"]
+        }
+        Insert: {
+          attempt_number: number
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id: string
+          result?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["job_attempt_status"]
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string
+          result?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["job_attempt_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_attempts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
             referencedColumns: ["id"]
           },
         ]
@@ -1189,6 +1441,94 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "carrier_status_mappings_carrier_id_fkey"
+            columns: ["carrier_id"]
+            isOneToOne: false
+            referencedRelation: "carriers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711150000_logistics_unmapped_and_mapping_versions.sql
+      carrier_status_mapping_versions: {
+        Row: {
+          change_reason: string | null
+          changed_by: string | null
+          created_at: string
+          id: string
+          mapping_id: string
+          snapshot: Json
+        }
+        Insert: {
+          change_reason?: string | null
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          mapping_id: string
+          snapshot?: Json
+        }
+        Update: {
+          change_reason?: string | null
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          mapping_id?: string
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carrier_status_mapping_versions_mapping_id_fkey"
+            columns: ["mapping_id"]
+            isOneToOne: false
+            referencedRelation: "carrier_status_mappings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711150000_logistics_unmapped_and_mapping_versions.sql
+      unmapped_carrier_statuses: {
+        Row: {
+          agency_id: string | null
+          carrier_id: string
+          external_status_code: string
+          external_status_label: string | null
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          occurrence_count: number
+          sample_payload: Json
+        }
+        Insert: {
+          agency_id?: string | null
+          carrier_id: string
+          external_status_code: string
+          external_status_label?: string | null
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          occurrence_count?: number
+          sample_payload?: Json
+        }
+        Update: {
+          agency_id?: string | null
+          carrier_id?: string
+          external_status_code?: string
+          external_status_label?: string | null
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          occurrence_count?: number
+          sample_payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmapped_carrier_statuses_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmapped_carrier_statuses_carrier_id_fkey"
             columns: ["carrier_id"]
             isOneToOne: false
             referencedRelation: "carriers"
@@ -1690,6 +2030,264 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711120000_order_notes.sql
+      order_notes: {
+        Row: {
+          agency_id: string
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          order_id: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          agency_id: string
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          order_id: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_notes_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_notes_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_notes_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711130000_sync_runs_and_health.sql
+      integration_health_checks: {
+        Row: {
+          agency_id: string
+          checked_at: string
+          details: Json
+          id: string
+          integration_id: string
+          latency_ms: number | null
+          safe_message: string | null
+          status: string
+          store_id: string
+        }
+        Insert: {
+          agency_id: string
+          checked_at?: string
+          details?: Json
+          id?: string
+          integration_id: string
+          latency_ms?: number | null
+          safe_message?: string | null
+          status: string
+          store_id: string
+        }
+        Update: {
+          agency_id?: string
+          checked_at?: string
+          details?: Json
+          id?: string
+          integration_id?: string
+          latency_ms?: number | null
+          safe_message?: string | null
+          status?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_health_checks_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_health_checks_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integration_health_checks_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711130000_sync_runs_and_health.sql
+      sync_run_items: {
+        Row: {
+          action: string | null
+          created_at: string
+          entity_type: string
+          error: string | null
+          external_id: string | null
+          id: string
+          metadata: Json
+          status: string
+          sync_run_id: string
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string
+          entity_type: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          metadata?: Json
+          status: string
+          sync_run_id: string
+        }
+        Update: {
+          action?: string | null
+          created_at?: string
+          entity_type?: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          metadata?: Json
+          status?: string
+          sync_run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_run_items_sync_run_id_fkey"
+            columns: ["sync_run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711130000_sync_runs_and_health.sql
+      sync_runs: {
+        Row: {
+          agency_id: string
+          created_at: string
+          created_by: string | null
+          created_total: number
+          cursor_after: string | null
+          cursor_before: string | null
+          error_code: string | null
+          error_message: string | null
+          failed_total: number
+          finished_at: string | null
+          id: string
+          integration_id: string
+          metadata: Json
+          provider: string
+          received_total: number
+          skipped_total: number
+          started_at: string | null
+          status: string
+          store_id: string
+          sync_type: string
+          trigger_source: string
+          updated_total: number
+        }
+        Insert: {
+          agency_id: string
+          created_at?: string
+          created_by?: string | null
+          created_total?: number
+          cursor_after?: string | null
+          cursor_before?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          failed_total?: number
+          finished_at?: string | null
+          id?: string
+          integration_id: string
+          metadata?: Json
+          provider: string
+          received_total?: number
+          skipped_total?: number
+          started_at?: string | null
+          status?: string
+          store_id: string
+          sync_type: string
+          trigger_source: string
+          updated_total?: number
+        }
+        Update: {
+          agency_id?: string
+          created_at?: string
+          created_by?: string | null
+          created_total?: number
+          cursor_after?: string | null
+          cursor_before?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          failed_total?: number
+          finished_at?: string | null
+          id?: string
+          integration_id?: string
+          metadata?: Json
+          provider?: string
+          received_total?: number
+          skipped_total?: number
+          started_at?: string | null
+          status?: string
+          store_id?: string
+          sync_type?: string
+          trigger_source?: string
+          updated_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_runs_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_runs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_runs_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_status_history: {
         Row: {
           created_at: string
@@ -2131,20 +2729,29 @@ export type Database = {
         }
         Relationships: []
       }
+      // TEMPORARY FALLBACK — raw_events columns from 20260711140000_background_jobs_pipeline.sql
+      // (correlation_id, locked_at, locked_by, dead_lettered_at, max_attempts, error_code, payload_hash)
       raw_events: {
         Row: {
           agency_id: string
           attempts: number
+          correlation_id: string | null
           created_at: string
+          dead_lettered_at: string | null
+          error_code: string | null
           event_type: string
           external_event_id: string | null
           id: string
           idempotency_key: string
           integration_id: string | null
           last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
           next_retry_at: string | null
           occurred_at: string | null
           payload: Json
+          payload_hash: string | null
           processed_at: string | null
           provider: Database["public"]["Enums"]["integration_provider"]
           received_at: string
@@ -2155,16 +2762,23 @@ export type Database = {
         Insert: {
           agency_id: string
           attempts?: number
+          correlation_id?: string | null
           created_at?: string
+          dead_lettered_at?: string | null
+          error_code?: string | null
           event_type: string
           external_event_id?: string | null
           id?: string
           idempotency_key: string
           integration_id?: string | null
           last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
           next_retry_at?: string | null
           occurred_at?: string | null
           payload: Json
+          payload_hash?: string | null
           processed_at?: string | null
           provider: Database["public"]["Enums"]["integration_provider"]
           received_at?: string
@@ -2175,16 +2789,23 @@ export type Database = {
         Update: {
           agency_id?: string
           attempts?: number
+          correlation_id?: string | null
           created_at?: string
+          dead_lettered_at?: string | null
+          error_code?: string | null
           event_type?: string
           external_event_id?: string | null
           id?: string
           idempotency_key?: string
           integration_id?: string | null
           last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
           next_retry_at?: string | null
           occurred_at?: string | null
           payload?: Json
+          payload_hash?: string | null
           processed_at?: string | null
           provider?: Database["public"]["Enums"]["integration_provider"]
           received_at?: string
@@ -2216,10 +2837,13 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711160000_reconciliation_csv_matching.sql
       settlement_batches: {
         Row: {
           adjustments_amount: number
           agency_id: string
+          approved_at: string | null
+          approved_by: string | null
           carrier_id: string | null
           created_at: string
           currency_code: string
@@ -2227,11 +2851,15 @@ export type Database = {
           fees_amount: number
           gross_amount: number
           id: string
+          import_error_count: number | null
+          import_row_count: number | null
           metadata: Json
           net_amount: number
           paid_at: string | null
           period_end: string | null
           period_start: string | null
+          processing_finished_at: string | null
+          processing_started_at: string | null
           reference: string | null
           source_file_path: string | null
           status: Database["public"]["Enums"]["reconciliation_status"]
@@ -2241,6 +2869,8 @@ export type Database = {
         Insert: {
           adjustments_amount?: number
           agency_id: string
+          approved_at?: string | null
+          approved_by?: string | null
           carrier_id?: string | null
           created_at?: string
           currency_code: string
@@ -2248,11 +2878,15 @@ export type Database = {
           fees_amount?: number
           gross_amount?: number
           id?: string
+          import_error_count?: number | null
+          import_row_count?: number | null
           metadata?: Json
           net_amount?: number
           paid_at?: string | null
           period_end?: string | null
           period_start?: string | null
+          processing_finished_at?: string | null
+          processing_started_at?: string | null
           reference?: string | null
           source_file_path?: string | null
           status?: Database["public"]["Enums"]["reconciliation_status"]
@@ -2262,6 +2896,8 @@ export type Database = {
         Update: {
           adjustments_amount?: number
           agency_id?: string
+          approved_at?: string | null
+          approved_by?: string | null
           carrier_id?: string | null
           created_at?: string
           currency_code?: string
@@ -2269,11 +2905,15 @@ export type Database = {
           fees_amount?: number
           gross_amount?: number
           id?: string
+          import_error_count?: number | null
+          import_row_count?: number | null
           metadata?: Json
           net_amount?: number
           paid_at?: string | null
           period_end?: string | null
           period_start?: string | null
+          processing_finished_at?: string | null
+          processing_started_at?: string | null
           reference?: string | null
           source_file_path?: string | null
           status?: Database["public"]["Enums"]["reconciliation_status"]
@@ -2304,22 +2944,39 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711160000_reconciliation_csv_matching.sql
       settlement_items: {
         Row: {
           agency_id: string
           batch_id: string
+          collected_applied_at: string | null
           created_at: string
+          currency_code: string | null
           difference_amount: number | null
+          discrepancy_reason: string | null
           expected_amount: number | null
+          external_order_id: string | null
+          external_shipment_id: string | null
           fee_amount: number
           id: string
+          match_confidence: number | null
+          match_method: Database["public"]["Enums"]["settlement_match_method"] | null
+          match_status: Database["public"]["Enums"]["settlement_match_status"]
           matched_at: string | null
           matched_by: string | null
           metadata: Json
           notes: string | null
           order_id: string | null
+          order_number: string | null
+          raw_row: Json
+          resolution_status: Database["public"]["Enums"]["settlement_match_status"] | null
+          resolved_at: string | null
+          resolved_by: string | null
+          row_occurred_at: string | null
           settled_amount: number
+          settled_applied_at: string | null
           shipment_id: string | null
+          source_row_number: number | null
           status: Database["public"]["Enums"]["reconciliation_status"]
           store_id: string
           tracking_number: string | null
@@ -2328,18 +2985,34 @@ export type Database = {
         Insert: {
           agency_id: string
           batch_id: string
+          collected_applied_at?: string | null
           created_at?: string
+          currency_code?: string | null
           difference_amount?: number | null
+          discrepancy_reason?: string | null
           expected_amount?: number | null
+          external_order_id?: string | null
+          external_shipment_id?: string | null
           fee_amount?: number
           id?: string
+          match_confidence?: number | null
+          match_method?: Database["public"]["Enums"]["settlement_match_method"] | null
+          match_status?: Database["public"]["Enums"]["settlement_match_status"]
           matched_at?: string | null
           matched_by?: string | null
           metadata?: Json
           notes?: string | null
           order_id?: string | null
+          order_number?: string | null
+          raw_row?: Json
+          resolution_status?: Database["public"]["Enums"]["settlement_match_status"] | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          row_occurred_at?: string | null
           settled_amount: number
+          settled_applied_at?: string | null
           shipment_id?: string | null
+          source_row_number?: number | null
           status?: Database["public"]["Enums"]["reconciliation_status"]
           store_id: string
           tracking_number?: string | null
@@ -2348,18 +3021,34 @@ export type Database = {
         Update: {
           agency_id?: string
           batch_id?: string
+          collected_applied_at?: string | null
           created_at?: string
+          currency_code?: string | null
           difference_amount?: number | null
+          discrepancy_reason?: string | null
           expected_amount?: number | null
+          external_order_id?: string | null
+          external_shipment_id?: string | null
           fee_amount?: number
           id?: string
+          match_confidence?: number | null
+          match_method?: Database["public"]["Enums"]["settlement_match_method"] | null
+          match_status?: Database["public"]["Enums"]["settlement_match_status"]
           matched_at?: string | null
           matched_by?: string | null
           metadata?: Json
           notes?: string | null
           order_id?: string | null
+          order_number?: string | null
+          raw_row?: Json
+          resolution_status?: Database["public"]["Enums"]["settlement_match_status"] | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          row_occurred_at?: string | null
           settled_amount?: number
+          settled_applied_at?: string | null
           shipment_id?: string | null
+          source_row_number?: number | null
           status?: Database["public"]["Enums"]["reconciliation_status"]
           store_id?: string
           tracking_number?: string | null
@@ -2794,6 +3483,58 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711190000_whatsapp_templates.sql
+      whatsapp_templates: {
+        Row: {
+          agency_id: string
+          body: string
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          language: string
+          metadata: Json
+          name: string
+          status: string
+          store_id: string | null
+          updated_at: string
+          variables: Json
+        }
+        Insert: {
+          agency_id: string
+          body: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          language?: string
+          metadata?: Json
+          name: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+          variables?: Json
+        }
+        Update: {
+          agency_id?: string
+          body?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          language?: string
+          metadata?: Json
+          name?: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+          variables?: Json
+        }
+        Relationships: []
+      }
       whatsapp_conversations: {
         Row: {
           agency_id: string
@@ -2804,11 +3545,13 @@ export type Database = {
           id: string
           integration_id: string
           last_message_at: string | null
+          last_message_preview: string | null
           metadata: Json
           order_id: string | null
           phone: string
           started_at: string
           store_id: string
+          unread_count: number
           updated_at: string
         }
         Insert: {
@@ -2820,11 +3563,13 @@ export type Database = {
           id?: string
           integration_id: string
           last_message_at?: string | null
+          last_message_preview?: string | null
           metadata?: Json
           order_id?: string | null
           phone: string
           started_at?: string
           store_id: string
+          unread_count?: number
           updated_at?: string
         }
         Update: {
@@ -2836,11 +3581,13 @@ export type Database = {
           id?: string
           integration_id?: string
           last_message_at?: string | null
+          last_message_preview?: string | null
           metadata?: Json
           order_id?: string | null
           phone?: string
           started_at?: string
           store_id?: string
+          unread_count?: number
           updated_at?: string
         }
         Relationships: [
@@ -2901,6 +3648,7 @@ export type Database = {
           sent_at: string | null
           status: string
           store_id: string
+          template_id: string | null
         }
         Insert: {
           agency_id: string
@@ -2921,6 +3669,7 @@ export type Database = {
           sent_at?: string | null
           status: string
           store_id: string
+          template_id?: string | null
         }
         Update: {
           agency_id?: string
@@ -2941,6 +3690,7 @@ export type Database = {
           sent_at?: string | null
           status?: string
           store_id?: string
+          template_id?: string | null
         }
         Relationships: [
           {
@@ -3026,6 +3776,208 @@ export type Database = {
           },
         ]
       }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711200000_sprint9_settings_billing_privacy.sql
+      invoice_records: {
+        Row: {
+          id: string
+          agency_id: string
+          subscription_id: string | null
+          invoice_number: string
+          status: string
+          currency_code: string
+          amount_cents: number
+          period_start: string | null
+          period_end: string | null
+          issued_at: string
+          paid_at: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          agency_id: string
+          subscription_id?: string | null
+          invoice_number: string
+          status?: string
+          currency_code?: string
+          amount_cents?: number
+          period_start?: string | null
+          period_end?: string | null
+          issued_at?: string
+          paid_at?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          agency_id?: string
+          subscription_id?: string | null
+          invoice_number?: string
+          status?: string
+          currency_code?: string
+          amount_cents?: number
+          period_start?: string | null
+          period_end?: string | null
+          issued_at?: string
+          paid_at?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      usage_counters: {
+        Row: {
+          id: string
+          agency_id: string
+          store_id: string | null
+          metric: string
+          period_key: string
+          quantity: number
+          updated_at: string
+          metadata: Json
+        }
+        Insert: {
+          id?: string
+          agency_id: string
+          store_id?: string | null
+          metric: string
+          period_key: string
+          quantity?: number
+          updated_at?: string
+          metadata?: Json
+        }
+        Update: {
+          id?: string
+          agency_id?: string
+          store_id?: string | null
+          metric?: string
+          period_key?: string
+          quantity?: number
+          updated_at?: string
+          metadata?: Json
+        }
+        Relationships: []
+      }
+      api_key_rate_limits: {
+        Row: {
+          id: string
+          api_key_id: string
+          agency_id: string
+          window_start: string
+          window_seconds: number
+          request_count: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          api_key_id: string
+          agency_id: string
+          window_start: string
+          window_seconds?: number
+          request_count?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          api_key_id?: string
+          agency_id?: string
+          window_start?: string
+          window_seconds?: number
+          request_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      data_export_requests: {
+        Row: {
+          id: string
+          agency_id: string
+          store_id: string | null
+          requested_by: string | null
+          scope: string
+          status: string
+          job_id: string | null
+          artifact_summary: Json
+          error_message: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agency_id: string
+          store_id?: string | null
+          requested_by?: string | null
+          scope?: string
+          status?: string
+          job_id?: string | null
+          artifact_summary?: Json
+          error_message?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          agency_id?: string
+          store_id?: string | null
+          requested_by?: string | null
+          scope?: string
+          status?: string
+          job_id?: string | null
+          artifact_summary?: Json
+          error_message?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      data_deletion_requests: {
+        Row: {
+          id: string
+          agency_id: string
+          store_id: string | null
+          requested_by: string | null
+          scope: string
+          reason: string | null
+          status: string
+          reviewed_by: string | null
+          reviewed_at: string | null
+          review_notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agency_id: string
+          store_id?: string | null
+          requested_by?: string | null
+          scope?: string
+          reason?: string | null
+          status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          review_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          agency_id?: string
+          store_id?: string | null
+          requested_by?: string | null
+          scope?: string
+          reason?: string | null
+          status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          review_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -3034,6 +3986,16 @@ export type Database = {
       accept_agency_invitation: {
         Args: { p_token_hash: string }
         Returns: string
+      }
+      // TEMPORARY FALLBACK — regenerate via `supabase gen types` after applying 20260711140000_background_jobs_pipeline.sql
+      // setof background_jobs — supabase-js surfaces the result as an array of rows.
+      claim_background_jobs: {
+        Args: {
+          p_worker_id: string
+          p_limit?: number
+          p_queue?: string
+        }
+        Returns: Database["public"]["Tables"]["background_jobs"]["Row"][]
       }
       has_agency_access: {
         Args: { target_agency_id: string }
@@ -3055,6 +4017,64 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: never; Returns: boolean }
+      // TEMPORARY FALLBACK — 20260711170000_attribution_analytics_rpcs.sql
+      rpc_store_order_funnel: {
+        Args: { p_store_id: string; p_from: string; p_to: string }
+        Returns: {
+          orders_total: number
+          confirmed: number
+          shipped: number
+          delivered: number
+          rejected: number
+          returned: number
+          revenue_generated: number
+          delivered_value: number
+          collected_value: number
+          settled_value: number
+        }[]
+      }
+      rpc_store_campaign_performance: {
+        Args: { p_store_id: string; p_from: string; p_to: string }
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          platform: Database["public"]["Enums"]["ad_platform"]
+          spend: number
+          impressions: number
+          clicks: number
+          orders_attributed: number
+          revenue_generated: number
+          delivered_value: number
+          collected_value: number
+          settled_value: number
+          avg_confidence: number
+        }[]
+      }
+      rpc_store_rto_breakdown: {
+        Args: {
+          p_store_id: string
+          p_from: string
+          p_to: string
+          p_dimension?: string
+        }
+        Returns: {
+          dimension_key: string
+          dimension_label: string
+          shipments_total: number
+          rto_count: number
+          delivered_count: number
+          rto_rate: number
+        }[]
+      }
+      rpc_store_ads_daily_trend: {
+        Args: { p_store_id: string; p_from: string; p_to: string }
+        Returns: {
+          metric_date: string
+          spend: number
+          attributed_revenue: number
+          orders_attributed: number
+        }[]
+      }
     }
     Enums: {
       ad_platform: "meta" | "tiktok" | "google" | "organic" | "direct" | "other"
@@ -3070,6 +4090,15 @@ export type Database = {
         | "time_decay"
         | "manual"
         | "unattributed"
+      // TEMPORARY FALLBACK — 20260711140000_background_jobs_pipeline.sql
+      background_job_status:
+        | "queued"
+        | "processing"
+        | "completed"
+        | "retry_scheduled"
+        | "failed"
+        | "dead_letter"
+        | "cancelled"
       confirmation_status:
         | "not_requested"
         | "pending"
@@ -3114,6 +4143,8 @@ export type Database = {
         | "error"
         | "disconnected"
         | "revoked"
+      // TEMPORARY FALLBACK — 20260711140000_background_jobs_pipeline.sql
+      job_attempt_status: "started" | "completed" | "failed" | "cancelled"
       member_status: "invited" | "active" | "suspended" | "revoked"
       order_status:
         | "created"
@@ -3153,6 +4184,21 @@ export type Database = {
         | "matched"
         | "disputed"
         | "closed"
+      // TEMPORARY FALLBACK — 20260711160000_reconciliation_csv_matching.sql
+      settlement_match_method:
+        | "tracking"
+        | "external_shipment_id"
+        | "external_order_id"
+        | "order_number"
+        | "amount_time_suggestion"
+        | "manual"
+      settlement_match_status:
+        | "matched"
+        | "unmatched"
+        | "difference"
+        | "duplicate"
+        | "disputed"
+        | "resolved"
       shipment_status:
         | "created"
         | "label_generated"
@@ -3316,6 +4362,16 @@ export const Constants = {
         "manual",
         "unattributed",
       ],
+      // TEMPORARY FALLBACK — 20260711140000_background_jobs_pipeline.sql
+      background_job_status: [
+        "queued",
+        "processing",
+        "completed",
+        "retry_scheduled",
+        "failed",
+        "dead_letter",
+        "cancelled",
+      ],
       confirmation_status: [
         "not_requested",
         "pending",
@@ -3365,6 +4421,8 @@ export const Constants = {
         "disconnected",
         "revoked",
       ],
+      // TEMPORARY FALLBACK — 20260711140000_background_jobs_pipeline.sql
+      job_attempt_status: ["started", "completed", "failed", "cancelled"],
       member_status: ["invited", "active", "suspended", "revoked"],
       order_status: [
         "created",
@@ -3407,6 +4465,23 @@ export const Constants = {
         "matched",
         "disputed",
         "closed",
+      ],
+      // TEMPORARY FALLBACK — 20260711160000_reconciliation_csv_matching.sql
+      settlement_match_method: [
+        "tracking",
+        "external_shipment_id",
+        "external_order_id",
+        "order_number",
+        "amount_time_suggestion",
+        "manual",
+      ],
+      settlement_match_status: [
+        "matched",
+        "unmatched",
+        "difference",
+        "duplicate",
+        "disputed",
+        "resolved",
       ],
       shipment_status: [
         "created",

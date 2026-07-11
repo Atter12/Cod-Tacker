@@ -1,18 +1,33 @@
 import Link from "next/link";
-import { ArrowLeft, BarChart3, Bell, Boxes, Building2, Cable, FileText, Settings, Store } from "lucide-react";
+import { Activity, ArrowLeft, BarChart3, Bell, Boxes, Building2, Cable, FileText, Settings, Store } from "lucide-react";
 import { adminNavigation, agencyNavigation, storeNavigation } from "@/config/navigation";
 import type { Role } from "@/config/permissions";
 import { routes } from "@/config/routes";
 import { filterNavigationByPermission } from "@/lib/permissions/filter-navigation";
 import { cn } from "@/lib/utils/cn";
 
-const icons = [BarChart3, FileText, Boxes, BarChart3, Store, Boxes, FileText, Settings, Bell, Cable, Settings];
+const icons = [BarChart3, FileText, Boxes, BarChart3, Store, Boxes, FileText, Settings, Bell, Cable, Activity, Settings];
+
+const storeNavBuilders: Record<string, (agencySlug: string, storeSlug: string) => string> = {
+  orders: routes.store.orders,
+  attribution: routes.store.attribution,
+  campaigns: routes.store.campaigns,
+  logistics: routes.store.logistics,
+  rto: routes.store.rto,
+  reconciliation: routes.store.reconciliation,
+  automations: routes.store.automations,
+  alerts: routes.store.alerts,
+  whatsapp: routes.store.whatsapp,
+  integrations: routes.store.integrations,
+  operations: routes.store.operations,
+  settings: routes.store.settings,
+};
 
 function storeHref(agencySlug: string, storeSlug: string, path: string): string {
   if (!path) return routes.store.dashboard(agencySlug, storeSlug);
-  const key = path.replace(/^\//, "") as keyof typeof routes.store;
-  const builder = routes.store[key];
-  if (typeof builder === "function") return builder(agencySlug, storeSlug);
+  const key = path.replace(/^\//, "");
+  const builder = storeNavBuilders[key];
+  if (builder) return builder(agencySlug, storeSlug);
   return `${routes.store.dashboard(agencySlug, storeSlug).replace(/\/dashboard$/, "")}${path}`;
 }
 

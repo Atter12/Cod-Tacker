@@ -33,12 +33,21 @@ async function main() {
   const orderIds = (orders ?? []).map((order) => order.id);
 
   if (orderIds.length) {
+    const { data: shipments } = await supabase.from("shipments").select("id").in("order_id", orderIds);
+    const shipmentIds = (shipments ?? []).map((row) => row.id);
+    if (shipmentIds.length) {
+      await supabase.from("shipment_events").delete().in("shipment_id", shipmentIds);
+    }
     await supabase.from("settlement_items").delete().in("order_id", orderIds);
     await supabase.from("order_attributions").delete().in("order_id", orderIds);
+    await supabase.from("order_notes").delete().in("order_id", orderIds);
+    await supabase.from("order_status_history").delete().in("order_id", orderIds);
+    await supabase.from("order_items").delete().in("order_id", orderIds);
     await supabase.from("shipments").delete().in("order_id", orderIds);
     await supabase.from("orders").delete().in("id", orderIds);
   }
 
+  await supabase.from("customers").delete().eq("store_id", storeId).contains("metadata", { source: "demo_seed" });
   await supabase.from("settlement_batches").delete().eq("store_id", storeId).contains("metadata", { source: "demo_seed" });
   await supabase.from("alerts").delete().eq("store_id", storeId).eq("type", "demo_seed");
 

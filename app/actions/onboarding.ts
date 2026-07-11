@@ -143,6 +143,36 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
     }
 
     // Owner/admin/manager access all agency stores via agency_members — no store_members row required.
+
+    // Demo trial subscription on Starter plan (mock billing).
+    const { data: starterPlan } = await admin
+      .from("plans")
+      .select("id")
+      .eq("code", "starter")
+      .maybeSingle();
+    if (starterPlan) {
+      const trialEnd = new Date(Date.now() + 14 * 86400000);
+      await admin.from("subscriptions").insert({
+        agency_id: agency.id,
+        plan_id: starterPlan.id,
+        status: "trialing",
+        billing_provider: "demo",
+        trial_ends_at: trialEnd.toISOString(),
+        current_period_start: new Date().toISOString(),
+        current_period_end: trialEnd.toISOString(),
+        cancel_at_period_end: false,
+        metadata: { demo: true, source: "onboarding" },
+      });
+      await admin.from("white_label_settings").upsert({
+        agency_id: agency.id,
+        product_name: "CODTracked",
+        primary_color: "#0F766E",
+        secondary_color: "#134E4A",
+        hide_codtracked_branding: false,
+        metadata: { schema_version: 1 },
+      });
+    }
+
     const { writeAuditLog } = await import("@/lib/audit/write-audit");
     await writeAuditLog({
       action: "agency_created",

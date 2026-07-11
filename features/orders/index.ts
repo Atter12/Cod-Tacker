@@ -1,1 +1,1 @@
-export { listOrders } from "@/services/orders.service";
+export { listOrders, getOrderById, getOrderDetail } from "@/services/orders.service";

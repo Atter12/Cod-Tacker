@@ -1,15 +1,19 @@
 import type { Enums, Tables } from "./database.generated"
-import type { DateRange } from "./dashboard"
 
 export type Shipment = Tables<"shipments">
 export type ShipmentEvent = Tables<"shipment_events">
 export type ShipmentStatus = Enums<"shipment_status">
 
-export type ShipmentFilters = DateRange & {
+export type ShipmentFilters = {
+  from?: string
+  to?: string
+  timezone?: string
   storeIds?: string[]
   carrierIds?: string[]
   statuses?: ShipmentStatus[]
   search?: string
+  isRto?: boolean
+  isTerminal?: boolean
 }
 
 export type DeliveryKpis = {

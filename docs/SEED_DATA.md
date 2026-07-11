@@ -24,6 +24,17 @@ Record the four UUIDs as `AGENCY_A_ID`, `STORE_A_ID`, `AGENCY_B_ID`, and `STORE_
 
 Do not give either test account a platform-admin role or include it in `ADMIN_ALLOWED_EMAILS`; platform access intentionally bypasses tenant isolation.
 
+## Demo seed (operational fixtures)
+
+For a single agency/store already created via onboarding:
+
+```bash
+ALLOW_DEMO_SEED=true DEMO_AGENCY_ID=… DEMO_STORE_ID=… npm run seed:demo
+npm run clear:demo
+```
+
+`seed:demo` tags rows with `metadata.source = demo_seed`. It does **not** replace the A/B RLS fixtures above.
+
 ## Optional automation
 
-If a seed script is added later, it may use `SUPABASE_SERVICE_ROLE_KEY` only to call `auth.admin.createUser`. Keep it server-side, outside the browser bundle, and use the returned user IDs for membership inserts. It must not bypass RLS for the test assertions themselves.
+If extending seed scripts, they may use `SUPABASE_SERVICE_ROLE_KEY` only for `auth.admin.createUser`. Keep them server-side and use returned user IDs for membership inserts. RLS assertions themselves must use the anon key + user JWTs.

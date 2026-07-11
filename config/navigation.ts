@@ -10,7 +10,9 @@ export const storeNavigation: NavigationItem[] = [
   { label: "Conciliación", href: "/reconciliation" },
   { label: "Automatizaciones", href: "/automations" },
   { label: "Alertas", href: "/alerts" },
+  { label: "WhatsApp", href: "/whatsapp", permission: "whatsapp.view" },
   { label: "Integraciones", href: "/integrations" },
+  { label: "Operaciones", href: "/operations" },
   { label: "Configuración", href: "/settings" },
 ];
 
