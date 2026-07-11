@@ -11,7 +11,11 @@ import { cn } from "@/lib/utils/cn";
 const presets = Object.keys(dateRangeLabels) as DateRangePreset[];
 
 function isDateRangeRoute(pathname: string): boolean {
-  return pathname.endsWith("/dashboard") || pathname.endsWith("/orders");
+  return (
+    pathname.endsWith("/dashboard") ||
+    pathname.endsWith("/orders") ||
+    pathname.endsWith("/integrations")
+  );
 }
 
 export function TopbarDateRange() {

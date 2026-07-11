@@ -36,7 +36,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
   },
   {
     provider: "whatsapp",
-    name: "WhatsApp",
+    name: "WhatsApp Business",
     description: "Conversaciones y confirmaciones COD.",
     kind: "messaging",
   },
@@ -54,7 +54,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
   },
   {
     provider: "custom_payment",
-    name: "Pagos / liquidación",
+    name: "Pagos y conciliación",
     description: "Lotes de cobro y conciliación COD.",
     kind: "settlement",
   },

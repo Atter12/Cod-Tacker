@@ -1,17 +1,21 @@
 import {
-  DemoModeBadge,
-  EmptyState,
-  ErrorState,
-  IntegrationCard,
-  SectionHeader,
-} from "@/components/ui";
-import { routes } from "@/config/routes";
-import { INTEGRATION_CATALOG, labelIntegrationStatus } from "@/lib/integrations/catalog";
+  BackToDashboardLink,
+  IntegrationsPageHeader,
+} from "@/components/integrations/IntegrationsPageHeader";
+import { IntegrationsEmptyState } from "@/components/integrations/IntegrationsEmptyState";
+import { IntegrationsGrid } from "@/components/integrations/IntegrationsGrid";
+import { IntegrationsLoadError } from "@/components/integrations/IntegrationsLoadError";
+import { ErrorState } from "@/components/ui";
+import {
+  isAvailableCatalogItem,
+  isConfiguredOverviewItem,
+} from "@/lib/integrations/overview";
 import { isDemoIntegrationMode } from "@/lib/integrations/registry";
 import { can } from "@/lib/permissions/can";
+import { logger } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
-import { listIntegrations } from "@/services/integrations.service";
+import { listIntegrationOverviews } from "@/services/integrations.service";
 
 export default async function IntegrationsPage({
   params,
@@ -27,70 +31,77 @@ export default async function IntegrationsPage({
     return <ErrorState title="Tienda inválida" description="No se pudo resolver la tienda activa." />;
   }
 
-  let rows;
+  const canManage = can(member.roles, "integrations.manage");
+  const demo = isDemoIntegrationMode();
+  const client = await createClient();
+
+  const storeResult = await client
+    .from("stores")
+    .select("timezone")
+    .eq("id", member.storeId)
+    .eq("agency_id", member.agencyId)
+    .maybeSingle();
+  const timeZone = storeResult.data?.timezone?.trim() || "America/Lima";
+
+  let items;
   try {
-    rows = await listIntegrations(await createClient(), member.agencyId, member.storeId);
-  } catch {
+    items = await listIntegrationOverviews(client, member.agencyId, member.storeId, {
+      timeZone,
+    });
+  } catch (error) {
+    logger.error("integrations.overview.load_failed", {
+      agencyId: member.agencyId,
+      storeId: member.storeId,
+      message: error instanceof Error ? error.message : "unknown",
+    });
     return (
-      <ErrorState title="Error al cargar integraciones" description="Inténtalo de nuevo en unos momentos." />
+      <section className="space-y-5">
+        <IntegrationsPageHeader
+          canManage={false}
+          availableProviders={[]}
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          demo={demo}
+        />
+        <div className="w-full max-w-[680px]">
+          <IntegrationsLoadError />
+          <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
+        </div>
+      </section>
     );
   }
 
-  const demo = isDemoIntegrationMode();
-  const connectedProviders = new Set(rows.map((row) => row.provider));
+  const configuredItems = items.filter(isConfiguredOverviewItem);
+  const availableProviders = items.filter(isAvailableCatalogItem);
 
   return (
     <section className="space-y-5">
-      <SectionHeader
-        title="Integraciones"
-        description="Conexiones mock de esta tienda. El estado conectado proviene de la base de datos."
-        action={demo ? <DemoModeBadge /> : null}
+      <IntegrationsPageHeader
+        canManage={canManage}
+        availableProviders={availableProviders}
+        agencySlug={p.agencySlug}
+        storeSlug={p.storeSlug}
+        demo={demo}
       />
 
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-text-secondary">Conectadas</h3>
-        {rows.length === 0 ? (
-          <EmptyState
-            title="Sin integraciones conectadas"
-            description="Conecta un proveedor mock desde el catálogo para empezar."
+      <div className="w-full max-w-[680px]">
+        {configuredItems.length > 0 ? (
+          <IntegrationsGrid
+            items={configuredItems}
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
           />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {rows.map((row) => {
-              const catalog = INTEGRATION_CATALOG.find((entry) => entry.provider === row.provider);
-              return (
-                <IntegrationCard
-                  key={row.id}
-                  name={row.display_name || catalog?.name || row.provider}
-                  description={catalog?.description ?? "Integración de la tienda."}
-                  status={row.status}
-                  statusLabel={labelIntegrationStatus(row.status)}
-                  demo={demo || Boolean((row.metadata as { demo?: boolean } | null)?.demo)}
-                  href={routes.store.integrationDetail(p.agencySlug, p.storeSlug, row.provider)}
-                  actionLabel="Revisar"
-                />
-              );
-            })}
-          </div>
+          <IntegrationsEmptyState
+            canManage={canManage}
+            availableProviders={availableProviders}
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
+            demo={demo}
+          />
         )}
-      </div>
 
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-text-secondary">Catálogo disponible</h3>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {INTEGRATION_CATALOG.filter((entry) => !connectedProviders.has(entry.provider)).map((entry) => (
-            <IntegrationCard
-              key={entry.provider}
-              name={entry.name}
-              description={entry.description}
-              status="disconnected"
-              statusLabel="No conectado"
-              demo={demo}
-              href={routes.store.integrationDetail(p.agencySlug, p.storeSlug, entry.provider)}
-              actionLabel="Conectar"
-            />
-          ))}
-        </div>
+        <BackToDashboardLink agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
       </div>
     </section>
   );

@@ -8,10 +8,19 @@ import type {
 } from "@/lib/integrations/contracts/common";
 import {
   getCatalogEntry,
+  INTEGRATION_CATALOG,
   isStoreIntegrationProvider,
   type HealthCheckStatus,
+  type StoreIntegrationProvider,
   type SyncType,
 } from "@/lib/integrations/catalog";
+import {
+  compareOverviewItems,
+  deriveIntegrationOverviewStatus,
+  getIntegrationCredentialExpiry,
+  getIntegrationOperationalMessage,
+  normalizeHealthStatus,
+} from "@/lib/integrations/overview";
 import {
   getAdsProvider,
   getCarrierProvider,
@@ -31,6 +40,7 @@ import type {
   SyncRunRow,
 } from "@/types/database";
 import type { Enums, Json } from "@/types/database.generated";
+import type { IntegrationOverviewItem } from "@/types/integrations";
 import { requireValue, throwQueryError, type DatabaseClient } from "./_shared";
 
 type SyncAdapter = {
@@ -137,6 +147,121 @@ export async function listIntegrations(
   const result = await query.order("created_at", { ascending: false });
   throwQueryError(result.error);
   return result.data ?? [];
+}
+
+/**
+ * Builds catalog + store integration overviews with a single health-check batch query (no N+1).
+ */
+export async function listIntegrationOverviews(
+  client: DatabaseClient,
+  agencyId: string,
+  storeId: string,
+  options?: { timeZone?: string; now?: Date },
+): Promise<IntegrationOverviewItem[]> {
+  const scope = assertStoreScope(agencyId, storeId);
+  const timeZone = options?.timeZone?.trim() || "America/Lima";
+  const now = options?.now ?? new Date();
+
+  const integrations = await listIntegrations(client, scope.agencyId, scope.storeId);
+  const byProvider = new Map<StoreIntegrationProvider, IntegrationRow>();
+  for (const row of integrations) {
+    if (!isStoreIntegrationProvider(row.provider)) continue;
+    const existing = byProvider.get(row.provider);
+    if (!existing) {
+      byProvider.set(row.provider, row);
+      continue;
+    }
+    // Prefer the newest non-disconnected row when duplicates exist.
+    if (existing.status === "disconnected" && row.status !== "disconnected") {
+      byProvider.set(row.provider, row);
+    }
+  }
+
+  const integrationIds = [...byProvider.values()].map((row) => row.id);
+  const latestHealthByIntegrationId = new Map<string, IntegrationHealthCheckRow>();
+
+  if (integrationIds.length > 0) {
+    const healthResult = await client
+      .from("integration_health_checks")
+      .select()
+      .eq("agency_id", scope.agencyId)
+      .eq("store_id", scope.storeId)
+      .in("integration_id", integrationIds)
+      .order("checked_at", { ascending: false });
+    throwQueryError(healthResult.error);
+
+    for (const health of healthResult.data ?? []) {
+      if (!latestHealthByIntegrationId.has(health.integration_id)) {
+        latestHealthByIntegrationId.set(health.integration_id, health);
+      }
+    }
+  }
+
+  const catalogOrder = INTEGRATION_CATALOG.map((entry) => entry.provider);
+  const items: IntegrationOverviewItem[] = INTEGRATION_CATALOG.map((entry) => {
+    const row = byProvider.get(entry.provider) ?? null;
+    const healthRow = row ? latestHealthByIntegrationId.get(row.id) ?? null : null;
+    const healthStatus = normalizeHealthStatus(healthRow?.status ?? null);
+    const credentialExpiresAt = row
+      ? getIntegrationCredentialExpiry(row.metadata, row.settings)
+      : null;
+    const persistedStatus = row?.status ?? null;
+    const overviewStatus = deriveIntegrationOverviewStatus({
+      persistedStatus,
+      lastSuccessAt: row?.last_success_at ?? null,
+      lastErrorAt: row?.last_error_at ?? null,
+      latestHealthStatus: healthStatus,
+    });
+
+    const latestHealth =
+      healthRow && healthStatus
+        ? {
+            status: healthStatus,
+            checkedAt: healthRow.checked_at,
+            latencyMs: healthRow.latency_ms,
+            safeMessage: healthRow.safe_message,
+          }
+        : null;
+
+    const demo =
+      isDemoIntegrationMode() ||
+      Boolean(
+        row &&
+          typeof row.metadata === "object" &&
+          row.metadata !== null &&
+          !Array.isArray(row.metadata) &&
+          row.metadata.demo === true,
+      );
+
+    const base: IntegrationOverviewItem = {
+      id: row?.id ?? null,
+      provider: entry.provider,
+      name: row?.display_name?.trim() || entry.name,
+      kind: entry.kind,
+      description: entry.description,
+      connected:
+        !!row && row.status !== "disconnected" && row.status !== "revoked",
+      persistedStatus,
+      overviewStatus,
+      operationalMessage: "",
+      lastSuccessAt: row?.last_success_at ?? null,
+      lastErrorAt: row?.last_error_at ?? null,
+      lastErrorMessage: row?.last_error_message ?? null,
+      latestHealth,
+      credentialExpiresAt,
+      demo,
+    };
+
+    return {
+      ...base,
+      operationalMessage: getIntegrationOperationalMessage(
+        { ...base, timeZone },
+        now,
+      ),
+    };
+  });
+
+  return items.sort((a, b) => compareOverviewItems(a, b, catalogOrder));
 }
 
 export async function getByProvider(

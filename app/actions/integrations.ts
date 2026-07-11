@@ -43,6 +43,7 @@ function revalidateIntegrationPaths(agencySlug: string, storeSlug: string, provi
   revalidatePath(routes.store.integrations(agencySlug, storeSlug));
   revalidatePath(routes.store.integrationDetail(agencySlug, storeSlug, provider));
   revalidatePath(routes.store.operations(agencySlug, storeSlug));
+  revalidatePath(routes.store.dashboard(agencySlug, storeSlug));
 }
 
 export async function connectIntegrationAction(
