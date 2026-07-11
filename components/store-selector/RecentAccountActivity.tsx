@@ -10,20 +10,37 @@ const toneDot: Record<RecentAccountEvent["tone"], string> = {
   info: "bg-[#22D3EE]",
 };
 
-export function RecentAccountActivity({ events }: { events: RecentAccountEvent[] }) {
+export function RecentAccountActivity({
+  events,
+  fill = false,
+}: {
+  events: RecentAccountEvent[];
+  fill?: boolean;
+}) {
   return (
-    <section className="mt-8" aria-labelledby="recent-activity-heading">
+    <section
+      className={cn(
+        "flex flex-col rounded-[16px] border border-[rgba(76,139,170,0.16)] bg-[#0A1729]/55 p-5",
+        fill && "min-h-0 flex-1",
+      )}
+      aria-labelledby="recent-activity-heading"
+    >
       <h2 id="recent-activity-heading" className="text-[15px] font-semibold text-[#F8FAFC]">
         Actividad reciente de la cuenta
       </h2>
       {events.length === 0 ? (
-        <p className="mt-3 text-[13px] text-[#64748B]">Todavía no hay actividad reciente.</p>
+        <div className={cn("mt-4 flex flex-1 flex-col justify-center", fill && "py-8")}>
+          <p className="text-[13px] text-[#64748B]">Todavía no hay actividad reciente.</p>
+          <p className="mt-1 max-w-md text-[12px] leading-relaxed text-[#475569]">
+            Cuando haya sincronizaciones, alertas o revisiones de integraciones, aparecerán aquí.
+          </p>
+        </div>
       ) : (
         <ul className="mt-3 space-y-2.5">
           {events.map((event) => (
             <li
               key={event.id}
-              className="flex items-start gap-3 rounded-xl border border-[rgba(76,139,170,0.14)] bg-[#0A1729]/70 px-3.5 py-3"
+              className="flex items-start gap-3 rounded-xl border border-[rgba(76,139,170,0.14)] bg-[#071426]/80 px-3.5 py-3"
             >
               <span
                 className={cn("mt-1.5 size-2 shrink-0 rounded-full", toneDot[event.tone])}
