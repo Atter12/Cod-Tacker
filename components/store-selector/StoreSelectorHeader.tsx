@@ -14,13 +14,13 @@ export function StoreSelectorHeader({
 
   return (
     <header className="border-b border-[rgba(76,139,170,0.2)] bg-[#0A1729]/90">
-      <div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between gap-4 px-4 sm:h-[68px] sm:px-8 lg:px-10">
+      <div className="mx-auto flex h-14 max-w-[1180px] items-center justify-between gap-3 px-4 sm:h-16 sm:px-6 lg:px-8">
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[rgba(34,211,238,0.55)]"
+          className="inline-flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[rgba(34,211,238,0.55)] sm:gap-3"
         >
           <span
-            className="grid size-9 place-items-center rounded-[10px] border border-[rgba(34,211,238,0.28)] bg-[#071426]"
+            className="grid size-8 shrink-0 place-items-center rounded-[10px] border border-[rgba(34,211,238,0.28)] bg-[#071426] sm:size-9"
             aria-hidden
           >
             <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
@@ -34,7 +34,9 @@ export function StoreSelectorHeader({
               <circle cx="9" cy="14.2" r="0.9" fill="#19C7B5" />
             </svg>
           </span>
-          <span className="text-[19px] font-bold tracking-tight text-[#F8FAFC]">CODTracked</span>
+          <span className="truncate text-[17px] font-bold tracking-tight text-[#F8FAFC] sm:text-[19px]">
+            CODTracked
+          </span>
         </Link>
 
         <div className="flex min-w-0 items-center gap-3">

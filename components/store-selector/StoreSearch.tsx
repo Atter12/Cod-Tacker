@@ -10,7 +10,7 @@ export function StoreSearch({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="relative w-full max-w-[440px]">
+    <div className="relative w-full">
       <label htmlFor="store-search" className="sr-only">
         Buscar por nombre de tienda
       </label>

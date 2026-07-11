@@ -56,46 +56,47 @@ export function StoreSelectorExperience({ data }: { data: StoreSelectorPageData 
   }
 
   return (
-    <div className="store-selector-experience relative flex min-h-screen flex-col overflow-x-hidden bg-[#050B16] text-[#F8FAFC]">
+    <div className="store-selector-experience relative flex min-h-dvh flex-col overflow-x-hidden bg-[#050B16] text-[#F8FAFC]">
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         <div className="login-experience-grid absolute inset-0 opacity-[0.03]" />
         <div className="absolute -right-24 top-[-6%] size-[380px] rounded-full bg-[#164E63]/30 blur-3xl" />
         <div className="absolute -left-24 bottom-[-8%] size-[340px] rounded-full bg-[#19C7B5]/14 blur-3xl" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#050B16] to-transparent" />
       </div>
 
-      <div className="relative z-10 flex min-h-screen flex-col">
+      <div className="relative z-10 flex min-h-dvh flex-col">
         <StoreSelectorHeader
           userName={displayName}
           email={data.user.email}
           avatarUrl={data.user.avatarUrl}
         />
 
-        <main className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col px-4 py-8 sm:px-8 lg:px-10 lg:py-9">
-          <div className="grid flex-1 gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-stretch lg:gap-10 xl:gap-12">
-            <div className="flex min-w-0 flex-col">
-              <h1 className="max-w-[18ch] text-[30px] font-bold leading-[1.15] tracking-tight text-[#F8FAFC] sm:text-[34px]">
+        <main className="mx-auto flex w-full max-w-[1180px] flex-1 flex-col justify-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          <div className="w-full">
+            <div className="max-w-xl">
+              <h1 className="text-[28px] font-bold leading-[1.15] tracking-tight text-[#F8FAFC] sm:text-[32px] lg:text-[34px]">
                 Elige una tienda para continuar
               </h1>
-              <p className="mt-3 max-w-[600px] text-[14.5px] leading-relaxed text-[#94A3B8]">
+              <p className="mt-2.5 text-[14px] leading-relaxed text-[#94A3B8] sm:text-[14.5px]">
                 CODTracked organiza varias tiendas dentro de una misma plataforma. Selecciona el
                 negocio que quieres monitorear ahora.
               </p>
+            </div>
 
-              <div className="mt-5">
-                <StoreSearch value={query} onChange={setQuery} />
-              </div>
+            <div className="mt-5 w-full max-w-md">
+              <StoreSearch value={query} onChange={setQuery} />
+            </div>
 
-              <div className="mt-4" aria-live="polite">
-                {error ? (
-                  <Alert variant="danger" title="No se pudo abrir la tienda">
-                    {error}
-                  </Alert>
-                ) : null}
-              </div>
+            <div className="mt-4" aria-live="polite">
+              {error ? (
+                <Alert variant="danger" title="No se pudo abrir la tienda">
+                  {error}
+                </Alert>
+              ) : null}
+            </div>
 
-              {data.stores.length === 0 ? (
-                <div className="mt-6">
+            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(220px,260px)] lg:items-start lg:gap-8">
+              <div className="order-1 min-w-0 space-y-5">
+                {data.stores.length === 0 ? (
                   <EmptyStoresState
                     canCreate={data.createStore.visible && data.createStore.enabled}
                     createHref={
@@ -104,66 +105,74 @@ export function StoreSelectorExperience({ data }: { data: StoreSelectorPageData 
                         : null
                     }
                   />
-                </div>
-              ) : filtered.length === 0 ? (
-                <p className="mt-8 text-sm text-[#94A3B8]">No encontramos tiendas con ese nombre.</p>
-              ) : (
-                <div className="mt-5 grid gap-[18px] sm:grid-cols-2 xl:grid-cols-3">
-                  {filtered.map((store) => (
-                    <StoreCard
-                      key={store.storeId}
-                      store={store}
-                      pending={pendingId === store.storeId}
-                      disabled={pending && pendingId !== store.storeId}
-                      onSelect={() => selectStore(store.agencySlug, store.storeSlug, store.storeId)}
-                    />
-                  ))}
-                  {!query ? (
-                    <CreateStoreCard
-                      eligibility={data.createStore}
-                      onOpen={() => setShowCreate(true)}
-                    />
-                  ) : null}
-                </div>
-              )}
-
-              {data.createStore.visible &&
-              data.createStore.enabled &&
-              data.createStore.agencySlug &&
-              showCreate ? (
-                <div className="mt-6 rounded-[16px] border border-[rgba(76,139,170,0.22)] bg-[#0D1B30] p-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold text-[#F8FAFC]">Crear nueva tienda</h2>
-                    <button
-                      type="button"
-                      className="text-xs text-[#94A3B8] hover:text-[#F8FAFC]"
-                      onClick={() => setShowCreate(false)}
-                    >
-                      Cerrar
-                    </button>
+                ) : filtered.length === 0 ? (
+                  <p className="rounded-xl border border-[rgba(76,139,170,0.16)] bg-[#0A1729]/60 px-4 py-6 text-sm text-[#94A3B8]">
+                    No encontramos tiendas con ese nombre.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 xl:grid-cols-3">
+                    {filtered.map((store) => (
+                      <StoreCard
+                        key={store.storeId}
+                        store={store}
+                        pending={pendingId === store.storeId}
+                        disabled={pending && pendingId !== store.storeId}
+                        onSelect={() =>
+                          selectStore(store.agencySlug, store.storeSlug, store.storeId)
+                        }
+                      />
+                    ))}
+                    {!query ? (
+                      <CreateStoreCard
+                        eligibility={data.createStore}
+                        onOpen={() => setShowCreate(true)}
+                      />
+                    ) : null}
                   </div>
-                  <div className="store-selector-create-form">
-                    <CreateStoreForm agencySlug={data.createStore.agencySlug} />
-                  </div>
-                </div>
-              ) : null}
+                )}
 
-              <div className="mt-6 flex min-h-[180px] flex-1 flex-col lg:min-h-[220px]">
-                <RecentAccountActivity events={data.activity} fill />
+                {data.createStore.visible &&
+                data.createStore.enabled &&
+                data.createStore.agencySlug &&
+                showCreate ? (
+                  <div className="rounded-[16px] border border-[rgba(76,139,170,0.22)] bg-[#0D1B30] p-4 sm:p-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-semibold text-[#F8FAFC]">Crear nueva tienda</h2>
+                      <button
+                        type="button"
+                        className="text-xs text-[#94A3B8] hover:text-[#F8FAFC]"
+                        onClick={() => setShowCreate(false)}
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                    <div className="store-selector-create-form">
+                      <CreateStoreForm agencySlug={data.createStore.agencySlug} />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="hidden lg:block">
+                  <RecentAccountActivity events={data.activity} />
+                </div>
               </div>
-            </div>
 
-            <div className="order-last flex min-h-0 flex-col lg:order-none">
-              <div className="flex h-full min-h-[420px] flex-1 flex-col rounded-[20px] border border-[rgba(76,139,170,0.2)] bg-[#09162A] p-5 shadow-[0_20px_40px_rgba(0,0,0,0.25)] lg:min-h-0 lg:sticky lg:top-6 lg:max-h-[calc(100vh-5.5rem)]">
-                <AccountSummary summary={data.summary} error={data.summaryError} embedded />
-                <div className="mt-auto border-t border-[rgba(76,139,170,0.16)] pt-4">
-                  <StoreSelectorLogout />
+              <aside className="order-2 space-y-3 lg:sticky lg:top-6">
+                <div className="rounded-[18px] border border-[rgba(76,139,170,0.2)] bg-[#09162A] p-4 shadow-[0_16px_36px_rgba(0,0,0,0.25)] sm:p-5">
+                  <AccountSummary summary={data.summary} error={data.summaryError} embedded />
+                  <div className="mt-4 border-t border-[rgba(76,139,170,0.16)] pt-4">
+                    <StoreSelectorLogout />
+                  </div>
                 </div>
+              </aside>
+
+              <div className="order-3 lg:hidden">
+                <RecentAccountActivity events={data.activity} />
               </div>
             </div>
           </div>
 
-          <p className="mt-8 border-t border-[rgba(76,139,170,0.12)] pt-4 text-center text-[11px] text-[#475569] lg:mt-6 lg:text-left">
+          <p className="mt-8 text-center text-[11px] text-[#475569] sm:mt-6 lg:text-left">
             Selecciona una tienda para continuar a tu espacio operativo.
           </p>
         </main>
