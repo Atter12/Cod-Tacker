@@ -10,18 +10,27 @@ import { cn } from "@/lib/utils/cn";
 
 const presets = Object.keys(dateRangeLabels) as DateRangePreset[];
 
+function isDateRangeRoute(pathname: string): boolean {
+  return pathname.endsWith("/dashboard") || pathname.endsWith("/orders");
+}
+
 export function TopbarDateRange() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  if (!pathname.endsWith("/dashboard")) return null;
+  if (!isDateRangeRoute(pathname)) return null;
 
+  const hasCustomDates = Boolean(searchParams.get("from") || searchParams.get("to"));
   const value = parseDateRangePreset(searchParams.get("range"));
+  const label = hasCustomDates ? "Rango personalizado" : dateRangeLabels[value];
 
   function setRange(next: DateRangePreset) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("range", next);
+    params.delete("from");
+    params.delete("to");
+    params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
   }
 
@@ -31,7 +40,7 @@ export function TopbarDateRange() {
       trigger={
         <span className="inline-flex h-[38px] items-center gap-2 rounded-[9px] border border-border bg-surface-elevated px-3 text-[12.5px] font-medium text-text-primary transition-colors hover:bg-muted">
           <CalendarDays className="size-4 text-text-secondary" aria-hidden />
-          <span className="hidden sm:inline">{dateRangeLabels[value]}</span>
+          <span className="hidden sm:inline">{label}</span>
           <span className="sr-only sm:hidden">Rango de fechas</span>
           <ChevronDown className="size-3.5 text-text-secondary" aria-hidden />
         </span>
@@ -39,7 +48,11 @@ export function TopbarDateRange() {
     >
       {presets.map((preset) => (
         <DropdownItem key={preset} onClick={() => setRange(preset)}>
-          <span className={cn(preset === value && "font-semibold text-brand-primary")}>
+          <span
+            className={cn(
+              !hasCustomDates && preset === value && "font-semibold text-brand-primary",
+            )}
+          >
             {dateRangeLabels[preset]}
           </span>
         </DropdownItem>

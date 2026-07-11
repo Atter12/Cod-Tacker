@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import {
   CONFIRMATION_STATUS_OPTIONS,
-  ORDER_STATUS_OPTIONS,
   PAYMENT_STATUS_OPTIONS,
 } from "@/lib/orders/labels";
 
@@ -17,7 +16,6 @@ export function OrdersFiltersForm({
 }: {
   initial: {
     q?: string;
-    status?: string;
     payment?: string;
     confirmation?: string;
     city?: string;
@@ -34,8 +32,6 @@ export function OrdersFiltersForm({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [q, setQ] = useState(initial.q ?? "");
-  const [status, setStatus] = useState(initial.status ?? "");
   const [payment, setPayment] = useState(initial.payment ?? "");
   const [confirmation, setConfirmation] = useState(initial.confirmation ?? "");
   const [city, setCity] = useState(initial.city ?? "");
@@ -50,8 +46,6 @@ export function OrdersFiltersForm({
   function apply() {
     const params = new URLSearchParams(searchParams.toString());
     const entries: Record<string, string> = {
-      q,
-      status,
       payment,
       confirmation,
       city,
@@ -67,44 +61,47 @@ export function OrdersFiltersForm({
       if (value.trim()) params.set(key, value.trim());
       else params.delete(key);
     }
+    if (from.trim() || to.trim()) {
+      params.delete("range");
+    }
     params.delete("page");
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`);
     });
   }
 
-  function clear() {
+  function clearAdvanced() {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const key of [
+      "payment",
+      "confirmation",
+      "city",
+      "district",
+      "minAmount",
+      "maxAmount",
+      "from",
+      "to",
+      "sortBy",
+      "sortDir",
+      "status",
+    ]) {
+      params.delete(key);
+    }
+    if (!params.get("range")) params.set("range", "30d");
+    params.delete("page");
     startTransition(() => {
-      router.push(pathname);
+      router.push(`${pathname}?${params.toString()}`);
     });
   }
 
   return (
     <form
-      className="grid gap-3 rounded-lg border border-border bg-surface-elevated p-4 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-3 rounded-[10px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)] sm:grid-cols-2 lg:grid-cols-4"
       onSubmit={(event) => {
         event.preventDefault();
         apply();
       }}
     >
-      <FormField label="Buscar" htmlFor="orders-q">
-        <Input
-          id="orders-q"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Nº, externo, cliente…"
-        />
-      </FormField>
-      <FormField label="Estado" htmlFor="orders-status">
-        <Select id="orders-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Todos</option>
-          {ORDER_STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </Select>
-      </FormField>
       <FormField label="Pago" htmlFor="orders-payment">
         <Select id="orders-payment" value={payment} onChange={(e) => setPayment(e.target.value)}>
           <option value="">Todos</option>
@@ -116,7 +113,11 @@ export function OrdersFiltersForm({
         </Select>
       </FormField>
       <FormField label="Confirmación" htmlFor="orders-confirmation">
-        <Select id="orders-confirmation" value={confirmation} onChange={(e) => setConfirmation(e.target.value)}>
+        <Select
+          id="orders-confirmation"
+          value={confirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
+        >
           <option value="">Todas</option>
           {CONFIRMATION_STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -138,10 +139,20 @@ export function OrdersFiltersForm({
         <Input id="orders-district" value={district} onChange={(e) => setDistrict(e.target.value)} />
       </FormField>
       <FormField label="Monto mín." htmlFor="orders-min">
-        <Input id="orders-min" inputMode="decimal" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+        <Input
+          id="orders-min"
+          inputMode="decimal"
+          value={minAmount}
+          onChange={(e) => setMinAmount(e.target.value)}
+        />
       </FormField>
       <FormField label="Monto máx." htmlFor="orders-max">
-        <Input id="orders-max" inputMode="decimal" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+        <Input
+          id="orders-max"
+          inputMode="decimal"
+          value={maxAmount}
+          onChange={(e) => setMaxAmount(e.target.value)}
+        />
       </FormField>
       <FormField label="Ordenar por" htmlFor="orders-sort">
         <Select id="orders-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -160,8 +171,8 @@ export function OrdersFiltersForm({
         <Button type="submit" disabled={pending}>
           {pending ? "Aplicando…" : "Aplicar filtros"}
         </Button>
-        <Button type="button" variant="outline" onClick={clear} disabled={pending}>
-          Limpiar
+        <Button type="button" variant="outline" onClick={clearAdvanced} disabled={pending}>
+          Limpiar avanzados
         </Button>
       </div>
     </form>

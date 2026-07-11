@@ -4,6 +4,7 @@ import type {
   Order,
   OrderDetailBundle,
   OrderFilters,
+  OrderListRow,
   OrderNote,
   OrderSortField,
   PaginatedOrders,
@@ -63,6 +64,7 @@ export async function listOrders(client: DatabaseClient, options: ListOrdersOpti
     const orParts = [
       `order_number.ilike.%${search}%`,
       `external_order_id.ilike.%${search}%`,
+      `source_name.ilike.%${search}%`,
       ...(customerIds.length ? [`customer_id.in.(${customerIds.join(",")})`] : []),
     ];
     query = query.or(orParts.join(","));
@@ -73,6 +75,46 @@ export async function listOrders(client: DatabaseClient, options: ListOrdersOpti
     .range((page - 1) * pageSize, page * pageSize - 1);
   throwQueryError(result.error);
   return { data: (result.data ?? []) as Order[], total: result.count ?? 0, page, pageSize };
+}
+
+/** Attaches customer display fields for list/table rendering. */
+export async function enrichOrdersWithCustomers(
+  client: DatabaseClient,
+  storeId: string,
+  orders: Order[],
+): Promise<OrderListRow[]> {
+  const customerIds = [
+    ...new Set(orders.map((order) => order.customer_id).filter((id): id is string => Boolean(id))),
+  ];
+  if (!customerIds.length) {
+    return orders.map((order) => ({ ...order, customerName: null, customerEmail: null }));
+  }
+
+  const customersResult = await client
+    .from("customers")
+    .select("id, first_name, last_name, email")
+    .eq("store_id", requireValue(storeId, "Tienda inválida."))
+    .in("id", customerIds);
+  throwQueryError(customersResult.error);
+
+  const byId = new Map(
+    (customersResult.data ?? []).map((customer) => [
+      customer.id,
+      {
+        name: [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() || null,
+        email: customer.email,
+      },
+    ]),
+  );
+
+  return orders.map((order) => {
+    const customer = order.customer_id ? byId.get(order.customer_id) : undefined;
+    return {
+      ...order,
+      customerName: customer?.name ?? null,
+      customerEmail: customer?.email ?? null,
+    };
+  });
 }
 
 /**

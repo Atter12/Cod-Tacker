@@ -1,36 +1,43 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { OrdersFiltersForm } from "@/components/orders/OrdersFiltersForm";
-import {
-  ConfirmationStatusBadge,
-  DataTable,
-  EmptyState,
-  ErrorState,
-  OrderStatusBadge,
-  PaymentStatusBadge,
-  SectionHeader,
-  Skeleton,
-} from "@/components/ui";
+import { OrdersStatusTabs } from "@/components/orders/OrdersStatusTabs";
+import { OrdersTable } from "@/components/orders/OrdersTable";
+import { OrdersToolbar } from "@/components/orders/OrdersToolbar";
+import { ErrorState, Skeleton } from "@/components/ui";
 import { routes } from "@/config/routes";
-import { formatCurrency } from "@/lib/formatting/currency";
-import { parseDateParam, parsePaginationParams, parseStringParam, type SearchParamsRecord } from "@/lib/http/search-params";
+import { dateRangeToBounds, parseDateRangePreset } from "@/lib/formatting/date-range";
+import {
+  parseDateParam,
+  parsePaginationParams,
+  parseStringParam,
+  type SearchParamsRecord,
+} from "@/lib/http/search-params";
+import { parseOrderListView, statusesForOrderListView } from "@/lib/orders/list-view";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
-import { listOrders } from "@/services/orders.service";
-import type { ConfirmationStatus, OrderSortField, OrderStatus, PaymentStatus, SortDirection } from "@/types/orders";
+import { enrichOrdersWithCustomers, listOrders } from "@/services/orders.service";
+import type {
+  ConfirmationStatus,
+  OrderSortField,
+  OrderStatus,
+  PaymentStatus,
+  SortDirection,
+} from "@/types/orders";
 
-function activeFilterSummary(params: SearchParamsRecord): string[] {
-  const labels: string[] = [];
-  if (parseStringParam(params, "q")) labels.push("búsqueda");
-  if (parseStringParam(params, "status")) labels.push("estado");
-  if (parseStringParam(params, "payment")) labels.push("pago");
-  if (parseStringParam(params, "confirmation")) labels.push("confirmación");
-  if (parseStringParam(params, "city")) labels.push("ciudad");
-  if (parseStringParam(params, "district")) labels.push("distrito");
-  if (parseStringParam(params, "minAmount") || parseStringParam(params, "maxAmount")) labels.push("monto");
-  if (parseDateParam(params, "from") || parseDateParam(params, "to")) labels.push("fechas");
-  return labels;
+function hasAdvancedFilters(params: SearchParamsRecord): boolean {
+  return Boolean(
+    parseStringParam(params, "payment") ||
+      parseStringParam(params, "confirmation") ||
+      parseStringParam(params, "city") ||
+      parseStringParam(params, "district") ||
+      parseStringParam(params, "minAmount") ||
+      parseStringParam(params, "maxAmount") ||
+      parseDateParam(params, "from") ||
+      parseDateParam(params, "to") ||
+      (parseStringParam(params, "sortBy") && parseStringParam(params, "sortBy") !== "created_at_source") ||
+      (parseStringParam(params, "sortDir") && parseStringParam(params, "sortDir") !== "desc"),
+  );
 }
 
 export default async function OrdersPage({
@@ -51,7 +58,8 @@ export default async function OrdersPage({
   }
 
   const pagination = parsePaginationParams(sp, { pageSize: 25 });
-  const status = parseStringParam(sp, "status") as OrderStatus | undefined;
+  const view = parseOrderListView(parseStringParam(sp, "view"));
+  const statusParam = parseStringParam(sp, "status") as OrderStatus | undefined;
   const payment = parseStringParam(sp, "payment") as PaymentStatus | undefined;
   const confirmation = parseStringParam(sp, "confirmation") as ConfirmationStatus | undefined;
   const sortBy = (parseStringParam(sp, "sortBy") as OrderSortField | undefined) ?? "created_at_source";
@@ -60,145 +68,140 @@ export default async function OrdersPage({
   const maxAmountRaw = parseStringParam(sp, "maxAmount");
   const minAmount = minAmountRaw != null ? Number(minAmountRaw) : undefined;
   const maxAmount = maxAmountRaw != null ? Number(maxAmountRaw) : undefined;
-  const from = parseDateParam(sp, "from");
-  const to = parseDateParam(sp, "to");
-  const filtersActive = activeFilterSummary(sp);
+  const customFrom = parseDateParam(sp, "from");
+  const customTo = parseDateParam(sp, "to");
+  const rangePreset = parseDateRangePreset(parseStringParam(sp, "range"));
+  const advancedActive = hasAdvancedFilters(sp);
+
+  let fromIso: string | undefined;
+  let toIso: string | undefined;
+  if (customFrom || customTo) {
+    fromIso = customFrom ? new Date(customFrom).toISOString() : undefined;
+    toIso = customTo ? new Date(`${customTo}T23:59:59.999`).toISOString() : undefined;
+  } else {
+    const bounds = dateRangeToBounds(rangePreset);
+    fromIso = bounds.from.toISOString();
+    toIso = bounds.to.toISOString();
+  }
+
+  const viewStatuses = statusesForOrderListView(view);
+  const statuses = statusParam ? [statusParam] : viewStatuses;
 
   let result;
   try {
-    result = await listOrders(await createClient(), {
+    const client = await createClient();
+    result = await listOrders(client, {
       storeId: member.storeId,
       page: pagination.page,
       pageSize: pagination.pageSize,
       search: parseStringParam(sp, "q"),
-      statuses: status ? [status] : undefined,
+      statuses,
       paymentStatuses: payment ? [payment] : undefined,
       confirmationStatuses: confirmation ? [confirmation] : undefined,
       city: parseStringParam(sp, "city"),
       district: parseStringParam(sp, "district"),
       minAmount: Number.isFinite(minAmount) ? minAmount : undefined,
       maxAmount: Number.isFinite(maxAmount) ? maxAmount : undefined,
-      from: from ? new Date(from).toISOString() : undefined,
-      to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+      from: fromIso,
+      to: toIso,
       sortBy,
       sortDir,
     });
+    result = {
+      ...result,
+      data: await enrichOrdersWithCustomers(client, member.storeId, result.data),
+    };
   } catch {
     return <ErrorState title="Error al cargar pedidos" description="Inténtalo de nuevo en unos momentos." />;
   }
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
   const buildPageHref = (page: number) => {
-    const params = new URLSearchParams();
+    const next = new URLSearchParams();
     for (const [key, value] of Object.entries(sp)) {
       const v = Array.isArray(value) ? value[0] : value;
-      if (v) params.set(key, v);
+      if (v) next.set(key, v);
     }
-    params.set("page", String(page));
-    return `${routes.store.orders(p.agencySlug, p.storeSlug)}?${params.toString()}`;
+    if (!next.get("range") && !next.get("from") && !next.get("to")) {
+      next.set("range", rangePreset);
+    }
+    next.set("page", String(page));
+    return `${routes.store.orders(p.agencySlug, p.storeSlug)}?${next.toString()}`;
   };
 
   return (
-    <section className="space-y-5">
-      <SectionHeader
-        title="Pedidos"
-        description={`${result.total} pedido(s)${filtersActive.length ? ` · filtros: ${filtersActive.join(", ")}` : ""}.`}
-      />
-      <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-        <OrdersFiltersForm
+    <section className="space-y-4">
+      <header>
+        <h1 className="text-[24px] font-bold leading-[30px] tracking-tight text-text-primary">Pedidos</h1>
+        <p className="mt-0.5 text-[13px] text-text-secondary">
+          Gestión de pedidos, estados y entregas recientes.
+        </p>
+      </header>
+
+      <Suspense fallback={<Skeleton className="h-9 w-full max-w-xl" />}>
+        <OrdersStatusTabs activeView={view} />
+      </Suspense>
+
+      <Suspense fallback={<Skeleton className="h-11 w-full" />}>
+        <OrdersToolbar
+          advancedActive={advancedActive}
           initial={{
             q: parseStringParam(sp, "q"),
-            status,
             payment,
             confirmation,
             city: parseStringParam(sp, "city"),
             district: parseStringParam(sp, "district"),
             minAmount: minAmountRaw,
             maxAmount: maxAmountRaw,
-            from,
-            to,
+            from: customFrom,
+            to: customTo,
             sortBy,
             sortDir,
           }}
         />
       </Suspense>
 
-      {result.total === 0 ? (
-        <EmptyState
-          title="Sin pedidos"
-          description="No hay pedidos que coincidan con los filtros actuales."
-        />
-      ) : (
-        <DataTable
-          data={result.data}
-          getRowId={(row) => row.id}
-          emptyMessage="No hay pedidos para mostrar."
-          columns={[
-            {
-              id: "pedido",
-              header: "Pedido",
-              cell: (row) => (
-                <Link
-                  className="font-medium text-brand-primary hover:underline"
-                  href={routes.store.orderDetail(p.agencySlug, p.storeSlug, row.id)}
-                >
-                  {row.order_number ?? row.external_order_id}
-                </Link>
-              ),
-            },
-            {
-              id: "estado",
-              header: "Estado",
-              cell: (row) => <OrderStatusBadge status={row.order_status} />,
-            },
-            {
-              id: "pago",
-              header: "Pago",
-              cell: (row) => <PaymentStatusBadge status={row.payment_status} />,
-            },
-            {
-              id: "confirmacion",
-              header: "Confirmación",
-              cell: (row) => <ConfirmationStatusBadge status={row.confirmation_status} />,
-            },
-            {
-              id: "ciudad",
-              header: "Ciudad",
-              cell: (row) => row.shipping_city ?? "—",
-            },
-            {
-              id: "total",
-              header: "Total",
-              cell: (row) => formatCurrency(Number(row.total_amount), row.currency_code),
-            },
-            {
-              id: "fecha",
-              header: "Fecha",
-              cell: (row) => new Date(row.created_at_source).toLocaleString("es-PE"),
-            },
-          ]}
-        />
-      )}
+      <OrdersTable
+        orders={result.data}
+        agencySlug={p.agencySlug}
+        storeSlug={p.storeSlug}
+      />
 
-      {totalPages > 1 ? (
-        <nav aria-label="Paginación" className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-text-secondary">
-            Página {result.page} de {totalPages}
-          </span>
-          <div className="flex gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[12.5px] text-text-secondary">
+          {result.total.toLocaleString("es-PE")} pedido{result.total === 1 ? "" : "s"}
+          {totalPages > 1 ? ` · Página ${result.page} de ${totalPages}` : null}
+        </p>
+        {totalPages > 1 ? (
+          <nav aria-label="Paginación" className="flex gap-2 text-[12.5px]">
             {result.page > 1 ? (
-              <Link className="rounded-md border border-border px-3 py-1.5 hover:bg-muted" href={buildPageHref(result.page - 1)}>
+              <Link
+                className="rounded-md border border-border bg-surface-elevated px-3 py-1.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                href={buildPageHref(result.page - 1)}
+              >
                 Anterior
               </Link>
             ) : null}
             {result.page < totalPages ? (
-              <Link className="rounded-md border border-border px-3 py-1.5 hover:bg-muted" href={buildPageHref(result.page + 1)}>
+              <Link
+                className="rounded-md border border-border bg-surface-elevated px-3 py-1.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                href={buildPageHref(result.page + 1)}
+              >
                 Siguiente
               </Link>
             ) : null}
-          </div>
-        </nav>
-      ) : null}
+          </nav>
+        ) : null}
+      </div>
+
+      <div>
+        <Link
+          href={routes.store.dashboard(p.agencySlug, p.storeSlug)}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-brand-primary px-3.5 text-[12.5px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Volver al resumen
+        </Link>
+      </div>
     </section>
   );
 }

@@ -10,6 +10,13 @@ export type OrderStatusHistory = Tables<"order_status_history">;
 export type OrderSortField = "created_at_source" | "total_amount" | "order_status";
 export type SortDirection = "asc" | "desc";
 
+export type OrderListView = "all" | "pending" | "confirmed" | "delivered" | "returned";
+
+export type OrderListRow = Order & {
+  customerName: string | null;
+  customerEmail: string | null;
+};
+
 export type OrderFilters = {
   from?: string;
   to?: string;
