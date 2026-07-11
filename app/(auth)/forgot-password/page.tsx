@@ -1,2 +1,10 @@
 import { AuthForm } from "@/components/AuthForm";
-export default function ForgotPasswordPage() { return <AuthForm kind="forgot" />; }
+import { CompactAuthShell } from "@/components/auth/CompactAuthShell";
+
+export default function ForgotPasswordPage() {
+  return (
+    <CompactAuthShell>
+      <AuthForm kind="forgot" />
+    </CompactAuthShell>
+  );
+}

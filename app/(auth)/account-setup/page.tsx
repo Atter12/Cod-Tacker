@@ -1,2 +1,10 @@
 import { AuthForm } from "@/components/AuthForm";
-export default function AccountSetupPage() { return <AuthForm kind="setup" />; }
+import { CompactAuthShell } from "@/components/auth/CompactAuthShell";
+
+export default function AccountSetupPage() {
+  return (
+    <CompactAuthShell>
+      <AuthForm kind="setup" />
+    </CompactAuthShell>
+  );
+}

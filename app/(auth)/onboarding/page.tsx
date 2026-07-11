@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { CompactAuthShell } from "@/components/auth/CompactAuthShell";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { requireUser } from "@/lib/auth/require-user";
 import { getAccessState } from "@/lib/tenant/get-access-state";
@@ -16,5 +17,9 @@ export default async function OnboardingPage() {
     redirect(routes.app.dashboard);
   }
 
-  return <OnboardingWizard />;
+  return (
+    <CompactAuthShell>
+      <OnboardingWizard />
+    </CompactAuthShell>
+  );
 }

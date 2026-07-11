@@ -1,4 +1,4 @@
-import { AuthForm } from "@/components/AuthForm";
+import { LoginExperience } from "@/components/auth/LoginExperience";
 
 export default async function LoginPage({
   searchParams,
@@ -6,5 +6,5 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  return <AuthForm kind="login" next={next} />;
+  return <LoginExperience next={next} />;
 }

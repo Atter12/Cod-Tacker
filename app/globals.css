@@ -71,3 +71,42 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans), Arial, sans-serif;
 }
+
+/* Login experience — local tokens only; does not alter dashboard theme */
+.login-experience-grid {
+  background-image:
+    linear-gradient(to right, #94a3b8 1px, transparent 1px),
+    linear-gradient(to bottom, #94a3b8 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-form-card {
+    animation: none !important;
+  }
+}
+
+.login-auth-compact {
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --surface-elevated: #0b1a2c;
+  --border: rgba(76, 139, 170, 0.28);
+  --ring: #22d3ee;
+  --brand-primary: #22d3ee;
+  color: #f8fafc;
+}
+
+.login-auth-compact input {
+  color: #f8fafc;
+}
