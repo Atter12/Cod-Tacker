@@ -75,7 +75,7 @@ export default async function StoreLayout({
       title={brand.productName}
       brand={brand}
       breadcrumbs={[
-        { label: agencyName, href: routes.agency.stores(agencySlug) },
+        { label: agencyName, href: routes.agency.overview(agencySlug) },
         { label: storeName },
       ]}
       roles={membership.roles}

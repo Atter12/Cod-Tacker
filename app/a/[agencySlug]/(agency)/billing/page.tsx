@@ -27,7 +27,7 @@ export default async function AgencyBillingPage({
     <section className="space-y-6">
       <SectionHeader
         title="Facturación"
-        description="Plan, uso, límites e historial mock. Sin pasarela de pago real."
+        description="Planes, límites de uso e historial de facturación de la agencia."
       />
       <BillingPanel
         agencySlug={p.agencySlug}

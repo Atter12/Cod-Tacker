@@ -10,17 +10,20 @@ import {
   Bell,
   Boxes,
   Cable,
+  CreditCard,
   FileText,
+  KeyRound,
   LayoutDashboard,
   MessageCircle,
+  Palette,
   Route,
   Settings,
   ShoppingCart,
   Store,
   Target,
   Truck,
+  Users,
   Workflow,
-  Palette,
   type LucideIcon,
 } from "lucide-react";
 import { adminNavigation, agencyNavigation, storeNavigation } from "@/config/navigation";
@@ -94,11 +97,12 @@ const storeIcons: Record<string, LucideIcon> = {
 };
 
 const agencyIcons: Record<string, LucideIcon> = {
+  "/overview": LayoutDashboard,
   "/stores": Store,
-  "/team": Boxes,
+  "/team": Users,
   "/branding": Palette,
-  "/billing": FileText,
-  "/api-keys": Cable,
+  "/billing": CreditCard,
+  "/api-keys": KeyRound,
 };
 
 const storeNavBuilders: Record<string, (agencySlug: string, storeSlug: string) => string> = {
@@ -273,7 +277,7 @@ export function AppSidebar({
       className={cn(
         "shrink-0 border-r border-border bg-sidebar transition-[width] duration-200",
         mobile ? "flex h-full w-full flex-col" : "hidden lg:flex lg:flex-col",
-        !mobile && (compact ? "w-[68px]" : "w-[180px]"),
+        !mobile && (compact ? "w-[68px]" : scope === "agency" ? "w-[220px]" : "w-[180px]"),
       )}
     >
       <BrandMark collapsed={compact} brand={brand} />

@@ -33,7 +33,7 @@ export function TenantSwitcher({
 }) {
   const router = useRouter();
   const current = tenants.find((tenant) => tenant.id === currentTenantId) ?? tenants[0];
-  const consoleHref = agencySlug ? routes.agency.stores(agencySlug) : null;
+  const consoleHref = agencySlug ? routes.agency.overview(agencySlug) : null;
   const inAgency = scope === "agency";
 
   async function openStore(tenant: Tenant) {

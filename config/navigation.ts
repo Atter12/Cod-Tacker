@@ -17,6 +17,7 @@ export const storeNavigation: NavigationItem[] = [
 ];
 
 export const agencyNavigation: NavigationItem[] = [
+  { label: "Resumen", href: "/overview", permission: "agency.view" },
   { label: "Tiendas", href: "/stores", permission: "store.view" },
   { label: "Equipo", href: "/team", permission: "agency.team.view" },
   { label: "Marca", href: "/branding", permission: "branding.manage" },

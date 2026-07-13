@@ -1,4 +1,4 @@
-import { SectionHeader, Card, CardContent } from "@/components/ui";
+import { SectionHeader } from "@/components/ui";
 import { BrandingForm } from "@/components/branding/BrandingForm";
 import { BRANDING_DEFAULTS } from "@/lib/branding/schema";
 import { getAgencyPlanLimits, planAllowsWhiteLabel } from "@/lib/billing/limits";
@@ -26,31 +26,34 @@ export default async function AgencyBrandingPage({
 
   return (
     <section className="space-y-5">
+      <nav aria-label="Breadcrumb" className="text-[12.5px] text-text-secondary">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>Inicio</li>
+          <li aria-hidden>/</li>
+          <li className="font-medium text-text-primary">Marca</li>
+        </ol>
+      </nav>
       <SectionHeader
         title="Marca y white label"
         description="Personaliza cómo se ve la plataforma para tu agencia. Los cambios se aplican en la consola y en todas tus tiendas."
       />
-      <Card>
-        <CardContent className="p-4 sm:p-5">
-          <BrandingForm
-            agencySlug={p.agencySlug}
-            canEdit={canEdit}
-            whiteLabelAllowed={whiteLabelAllowed}
-            initial={{
-              productName: settings?.product_name ?? BRANDING_DEFAULTS.productName,
-              primaryColor: settings?.primary_color ?? BRANDING_DEFAULTS.primaryColor,
-              secondaryColor: settings?.secondary_color ?? BRANDING_DEFAULTS.secondaryColor,
-              logoUrl: settings?.logo_url ?? "",
-              faviconUrl: settings?.favicon_url ?? "",
-              loginBackgroundUrl: settings?.login_background_url ?? "",
-              supportEmail: settings?.support_email ?? "",
-              supportWhatsapp: settings?.support_whatsapp ?? "",
-              hideCodtrackedBranding: settings?.hide_codtracked_branding ?? false,
-              isWhiteLabelEnabled: flags?.is_white_label_enabled ?? false,
-            }}
-          />
-        </CardContent>
-      </Card>
+      <BrandingForm
+        agencySlug={p.agencySlug}
+        canEdit={canEdit}
+        whiteLabelAllowed={whiteLabelAllowed}
+        initial={{
+          productName: settings?.product_name ?? BRANDING_DEFAULTS.productName,
+          primaryColor: settings?.primary_color ?? BRANDING_DEFAULTS.primaryColor,
+          secondaryColor: settings?.secondary_color ?? BRANDING_DEFAULTS.secondaryColor,
+          logoUrl: settings?.logo_url ?? "",
+          faviconUrl: settings?.favicon_url ?? "",
+          loginBackgroundUrl: settings?.login_background_url ?? "",
+          supportEmail: settings?.support_email ?? "",
+          supportWhatsapp: settings?.support_whatsapp ?? "",
+          hideCodtrackedBranding: settings?.hide_codtracked_branding ?? false,
+          isWhiteLabelEnabled: flags?.is_white_label_enabled ?? false,
+        }}
+      />
     </section>
   );
 }

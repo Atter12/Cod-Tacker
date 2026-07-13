@@ -65,7 +65,14 @@ export const routes = {
       `${storeBase(a, s)}/operations/sync-runs/${encodeURIComponent(runId)}`,
     settings: (a: string, s: string) => `${storeBase(a, s)}/settings`,
   },
-  agency: { stores: (s: string) => `${agencyBase(s)}/stores`, team: (s: string) => `${agencyBase(s)}/team`, branding: (s: string) => `${agencyBase(s)}/branding`, billing: (s: string) => `${agencyBase(s)}/billing`, apiKeys: (s: string) => `${agencyBase(s)}/api-keys` },
+  agency: {
+    overview: (s: string) => `${agencyBase(s)}/overview`,
+    stores: (s: string) => `${agencyBase(s)}/stores`,
+    team: (s: string) => `${agencyBase(s)}/team`,
+    branding: (s: string) => `${agencyBase(s)}/branding`,
+    billing: (s: string) => `${agencyBase(s)}/billing`,
+    apiKeys: (s: string) => `${agencyBase(s)}/api-keys`,
+  },
   admin: {
     login: `${adminBase}/login`,
     overview: adminBase,

@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, ChevronDown, CreditCard, KeyRound, Palette, Store, Users } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  CreditCard,
+  KeyRound,
+  LayoutDashboard,
+  Palette,
+  Store,
+  Users,
+} from "lucide-react";
 import { agencyNavigation } from "@/config/navigation";
 import type { Role } from "@/config/permissions";
 import { routes } from "@/config/routes";
@@ -13,6 +22,11 @@ const itemMeta: Record<
   string,
   { icon: typeof Store; description: string; href: (agencySlug: string) => string }
 > = {
+  "/overview": {
+    icon: LayoutDashboard,
+    description: "Resumen y acciones rápidas",
+    href: routes.agency.overview,
+  },
   "/stores": {
     icon: Store,
     description: "Crear y administrar tiendas",

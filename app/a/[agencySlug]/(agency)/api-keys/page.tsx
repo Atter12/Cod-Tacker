@@ -18,8 +18,8 @@ export default async function AgencyApiKeysPage({
   return (
     <section className="space-y-5">
       <SectionHeader
-        title="API Keys"
-        description="Claves de acceso programático. El valor completo solo se muestra una vez."
+        title="Claves API"
+        description="Crea y administra claves de acceso programático para integraciones."
       />
       <ApiKeysManager agencySlug={p.agencySlug} canManage={canManage} keys={keys} />
     </section>

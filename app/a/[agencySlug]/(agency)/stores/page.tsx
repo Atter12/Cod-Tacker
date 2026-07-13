@@ -1,43 +1,48 @@
-import { CreateStoreForm } from "@/components/agency/CreateStoreForm";
-import { DataTable, SectionHeader } from "@/components/ui";
+import { AgencyStoresPanel } from "@/components/agency/AgencyStoresPanel";
+import { SectionHeader } from "@/components/ui";
+import {
+  STARTER_DEFAULT_ORDER_LIMIT,
+} from "@/lib/billing/limits";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
-import Link from "next/link";
-import { routes } from "@/config/routes";
+import { getBillingOverview } from "@/services/billing.service";
 
-export default async function AgencyStoresPage({ params }: { params: Promise<{ agencySlug: string }> }) {
+export default async function AgencyStoresPage({
+  params,
+}: {
+  params: Promise<{ agencySlug: string }>;
+}) {
   const p = await params;
   const membership = await requireAgencyAccess(p.agencySlug);
   const canCreate = can(membership.roles, "store.create");
-  const { data: stores } = await (await createClient())
-    .from("stores")
-    .select("id, name, slug, currency_code, is_active, created_at")
-    .eq("agency_id", membership.agencyId)
-    .order("name");
+  const client = await createClient();
+  const [storesRes, overview] = await Promise.all([
+    client
+      .from("stores")
+      .select("id, name, slug, country_code, currency_code, timezone, is_active, created_at")
+      .eq("agency_id", membership.agencyId)
+      .order("name"),
+    getBillingOverview(client, membership.agencyId),
+  ]);
+
+  const orderLimit = overview.limits?.orderLimit ?? STARTER_DEFAULT_ORDER_LIMIT;
 
   return (
     <section className="space-y-6">
-      <SectionHeader title="Tiendas" description="Tiendas registradas en esta agencia." />
-      {canCreate ? <CreateStoreForm agencySlug={p.agencySlug} /> : null}
-      <DataTable
-        data={stores ?? []}
-        getRowId={(row) => row.id}
-        columns={[
-          {
-            id: "nombre",
-            header: "Nombre",
-            cell: (row) => (
-              <Link className="text-brand-primary" href={routes.store.dashboard(p.agencySlug, row.slug)}>
-                {row.name}
-              </Link>
-            ),
-          },
-          { id: "slug", header: "Slug", cell: (row) => row.slug },
-          { id: "moneda", header: "Moneda", cell: (row) => row.currency_code },
-          { id: "estado", header: "Estado", cell: (row) => (row.is_active ? "Activa" : "Inactiva") },
-        ]}
-        emptyMessage="No hay tiendas registradas."
+      <SectionHeader
+        title="Tiendas"
+        description="Crea y administra todas las tiendas de tu agencia."
+      />
+      <AgencyStoresPanel
+        agencySlug={p.agencySlug}
+        canCreate={canCreate}
+        orderLimit={orderLimit}
+        stores={(storesRes.data ?? []).map((store) => ({
+          ...store,
+          orderCount: undefined,
+          orderLimit,
+        }))}
       />
     </section>
   );

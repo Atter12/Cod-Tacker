@@ -75,7 +75,7 @@ export default async function AgencyConsoleLayout({
     <AppShell
       agencySlug={agencySlug}
       title="Consola de agencia"
-      breadcrumbs={[{ label: agencyName, href: routes.agency.stores(agencySlug) }]}
+      breadcrumbs={[{ label: agencyName, href: routes.agency.overview(agencySlug) }]}
       roles={membership.roles}
       brand={brand}
       user={{

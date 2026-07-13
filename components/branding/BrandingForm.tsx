@@ -38,7 +38,7 @@ export function BrandingForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState(initial);
-  const [previewWidth, setPreviewWidth] = useState<"mobile" | "tablet" | "desktop">("desktop");
+  const [previewWidth, setPreviewWidth] = useState<"mobile" | "tablet" | "desktop">("mobile");
 
   function save() {
     setError(null);
@@ -321,30 +321,33 @@ export function BrandingForm({
       </div>
 
       <aside className="space-y-3 xl:sticky xl:top-4 xl:self-start">
-        <div className="flex gap-1.5 rounded-[10px] border border-border bg-surface-elevated p-1">
-          {(
-            [
-              { id: "mobile", label: "Móvil", Icon: Smartphone },
-              { id: "tablet", label: "Tablet", Icon: Tablet },
-              { id: "desktop", label: "Escritorio", Icon: Monitor },
-            ] as const
-          ).map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPreviewWidth(id)}
-              className={cn(
-                "inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[11.5px] font-medium transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                previewWidth === id
-                  ? "bg-brand-soft text-brand-primary"
-                  : "text-text-secondary hover:bg-muted hover:text-text-primary",
-              )}
-            >
-              <Icon className="size-3.5" aria-hidden />
-              {label}
-            </button>
-          ))}
+        <div className="rounded-[12px] border border-border bg-surface-elevated p-3 shadow-[var(--card-shadow)]">
+          <p className="mb-2.5 text-[13px] font-semibold text-text-primary">Vista previa en vivo</p>
+          <div className="flex gap-1.5 rounded-[10px] border border-border bg-muted/30 p-1">
+            {(
+              [
+                { id: "mobile", label: "Móvil", Icon: Smartphone },
+                { id: "tablet", label: "Tablet", Icon: Tablet },
+                { id: "desktop", label: "Escritorio", Icon: Monitor },
+              ] as const
+            ).map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPreviewWidth(id)}
+                className={cn(
+                  "inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[11.5px] font-medium transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  previewWidth === id
+                    ? "bg-brand-soft text-brand-primary"
+                    : "text-text-secondary hover:bg-muted hover:text-text-primary",
+                )}
+              >
+                <Icon className="size-3.5" aria-hidden />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div
@@ -352,82 +355,72 @@ export function BrandingForm({
             "mx-auto overflow-hidden rounded-[12px] border border-border shadow-[var(--card-shadow)]",
             previewMax,
           )}
-          style={{
-            background: form.loginBackgroundUrl
-              ? `center/cover url(${form.loginBackgroundUrl})`
-              : `linear-gradient(145deg, ${form.primaryColor || "#F47A32"}, ${form.secondaryColor || "#F5661F"})`,
-          }}
         >
-          <div className="flex items-center gap-2 border-b border-black/10 bg-surface-elevated/90 px-3 py-2 backdrop-blur-sm">
-            <div className="flex gap-1" aria-hidden>
-              <span className="size-2 rounded-full bg-black/15" />
-              <span className="size-2 rounded-full bg-black/15" />
-              <span className="size-2 rounded-full bg-black/15" />
-            </div>
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-muted/80 px-2 py-1">
-              {form.faviconUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.faviconUrl} alt="" className="size-3.5 shrink-0 object-contain" />
-              ) : (
-                <span
-                  className="grid size-3.5 shrink-0 place-items-center rounded-[3px] text-[8px] font-bold text-white"
-                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
-                  aria-hidden
-                >
-                  {(form.productName || "C").charAt(0).toUpperCase()}
-                </span>
-              )}
-              <span className="truncate text-[11px] text-text-secondary">
-                {form.productName || "CODTracked"}
-              </span>
-            </div>
-          </div>
-          <div className="m-5 rounded-[10px] bg-surface-elevated/95 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              {form.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.logoUrl} alt="" className="h-9 max-w-[120px] object-contain" />
-              ) : (
-                <span
-                  className="grid size-9 place-items-center rounded-lg text-[14px] font-bold text-white"
-                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
-                  aria-hidden
-                >
-                  {(form.productName || "C").charAt(0).toUpperCase()}
-                </span>
-              )}
-              <div className="min-w-0">
+          <div
+            className="relative flex min-h-[420px] flex-col justify-between p-4"
+            style={{
+              background: form.loginBackgroundUrl
+                ? `center/cover url(${form.loginBackgroundUrl})`
+                : `linear-gradient(160deg, ${form.secondaryColor || "#8E1D3F"}, ${form.primaryColor || "#FF4D6D"})`,
+            }}
+          >
+            <div className="rounded-[14px] bg-surface-elevated/96 p-5 shadow-sm backdrop-blur-sm">
+              <div className="flex flex-col items-center text-center">
+                {form.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.logoUrl} alt="" className="h-10 max-w-[140px] object-contain" />
+                ) : (
+                  <span
+                    className="grid size-11 place-items-center rounded-xl text-[16px] font-bold text-white"
+                    style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                    aria-hidden
+                  >
+                    {(form.productName || "C").charAt(0).toUpperCase()}
+                  </span>
+                )}
                 <p
-                  className="truncate text-[15px] font-semibold"
+                  className="mt-3 text-[16px] font-semibold"
                   style={{ color: form.primaryColor || undefined }}
                 >
                   {form.productName || "CODTracked"}
                 </p>
-                <p className="text-[12px] text-text-secondary">Vista previa de marca</p>
+                <p className="mt-1 text-[12.5px] text-text-secondary">Inicia sesión en tu cuenta</p>
               </div>
+              <div className="mt-5 space-y-2.5" aria-hidden>
+                <div className="h-10 rounded-lg border border-border bg-surface px-3 text-[12px] leading-10 text-text-secondary">
+                  Email
+                </div>
+                <div className="h-10 rounded-lg border border-border bg-surface px-3 text-[12px] leading-10 text-text-secondary">
+                  Contraseña
+                </div>
+                <p
+                  className="text-right text-[11.5px] font-medium"
+                  style={{ color: form.primaryColor || "#F47A32" }}
+                >
+                  ¿Olvidaste tu contraseña?
+                </p>
+                <div
+                  className="flex h-10 items-center justify-center rounded-lg text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                >
+                  Iniciar sesión
+                </div>
+              </div>
+              {!form.hideCodtrackedBranding ? (
+                <p className="mt-4 text-center text-[11px] text-text-secondary">Powered by CODTracked</p>
+              ) : (
+                <p className="mt-4 text-center text-[11px] text-text-secondary">
+                  © {form.productName || "Tu marca"}
+                </p>
+              )}
             </div>
-            <div
-              className="mt-5 h-10 rounded-lg"
-              style={{ backgroundColor: form.primaryColor || "#F47A32" }}
-            />
-            <div className="mt-2 h-8 rounded-lg bg-muted" />
-            {!form.hideCodtrackedBranding ? (
-              <p className="mt-4 text-[11px] text-text-secondary">Powered by CODTracked</p>
-            ) : null}
-            {(form.supportEmail || form.supportWhatsapp) && (
-              <p className="mt-2 text-[11px] text-text-secondary">
-                Soporte: {form.supportEmail || "—"}
-                {form.supportWhatsapp ? ` · WA ${form.supportWhatsapp}` : null}
-              </p>
-            )}
+            <p className="mt-3 text-center text-[11px] text-white/85">Vista referencial · no envía login</p>
           </div>
         </div>
         <p className="text-[11.5px] leading-relaxed text-text-secondary">
-          Al guardar, colores y logo se aplican de inmediato en la consola. El favicon aparece en la
-          pestaña del navegador (puede hacer falta un refresco duro si el navegador lo cachea). El
-          fondo de login se ve en{" "}
-          <code className="text-[11px]">/login?agency=tu-slug</code> o al volver a entrar con{" "}
-          <code className="text-[11px]">?next=/a/tu-slug/…</code>.
+          Esta es una vista referencial. Algunos elementos pueden variar según el dispositivo. Al
+          guardar, colores y logo se aplican de inmediato en la consola. El fondo de login se ve en{" "}
+          <code className="text-[11px]">/login?agency=tu-slug</code>.
         </p>
       </aside>
     </div>

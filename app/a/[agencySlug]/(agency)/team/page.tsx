@@ -38,7 +38,10 @@ export default async function AgencyTeamPage({ params }: { params: Promise<{ age
 
   return (
     <section className="space-y-5">
-      <SectionHeader title="Equipo" description="Miembros e invitaciones de esta agencia." />
+      <SectionHeader
+        title="Equipo y permisos"
+        description="Invita miembros y define roles de acceso para la agencia."
+      />
       <TeamManager
         agencySlug={p.agencySlug}
         members={enriched}
