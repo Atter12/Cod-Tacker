@@ -66,6 +66,7 @@ export type AuditAction =
   | "store_settings_updated"
   | "branding_updated"
   | "branding_defaults_restored"
+  | "branding_asset_uploaded"
   | "api_key_created"
   | "api_key_rotated"
   | "api_key_revoked"

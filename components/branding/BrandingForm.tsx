@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ImageIcon, Mail, MessageCircle, Monitor, Smartphone, Tablet } from "lucide-react";
 import { restoreBrandingDefaults, updateAgencyBranding } from "@/app/actions/branding";
+import { BrandAssetDropzone } from "@/components/branding/BrandAssetDropzone";
 import { BrandColorPicker } from "@/components/branding/BrandColorPicker";
 import { Button, Checkbox, FormField, Input } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -116,36 +117,67 @@ export function BrandingForm({
                 onChange={(e) => setForm((f) => ({ ...f, productName: e.target.value }))}
               />
             </FormField>
-            <FormField
-              label="Logo (URL)"
-              htmlFor="logo"
-              hint="URL pública (https). Ideal: PNG o SVG transparente."
-            >
-              <div className="flex items-center gap-3">
-                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
-                  {form.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={form.logoUrl} alt="" className="max-h-9 max-w-9 object-contain" />
-                  ) : (
-                    <ImageIcon className="size-4 text-text-secondary" aria-hidden />
-                  )}
-                </span>
-                <Input
-                  id="logo"
-                  value={form.logoUrl}
-                  placeholder="https://…"
-                  onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-                />
-              </div>
-            </FormField>
-            <FormField label="Favicon (URL)" htmlFor="favicon">
-              <Input
-                id="favicon"
-                value={form.faviconUrl}
-                placeholder="https://…"
-                onChange={(e) => setForm((f) => ({ ...f, faviconUrl: e.target.value }))}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <BrandAssetDropzone
+                agencySlug={agencySlug}
+                kind="logo"
+                label="Logo"
+                hint="PNG o SVG transparente · se sube a Storage"
+                value={form.logoUrl}
+                disabled={!canEdit || pending}
+                onUploaded={(url) => {
+                  setForm((f) => ({ ...f, logoUrl: url }));
+                  setSuccess("Logo subido. Ya se aplica en la consola.");
+                }}
+                onCleared={() => setForm((f) => ({ ...f, logoUrl: "" }))}
               />
-            </FormField>
+              <BrandAssetDropzone
+                agencySlug={agencySlug}
+                kind="favicon"
+                label="Favicon"
+                hint="ICO o PNG cuadrado"
+                value={form.faviconUrl}
+                disabled={!canEdit || pending}
+                onUploaded={(url) => {
+                  setForm((f) => ({ ...f, faviconUrl: url }));
+                  setSuccess("Favicon subido.");
+                }}
+                onCleared={() => setForm((f) => ({ ...f, faviconUrl: "" }))}
+              />
+            </div>
+            <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+              <summary className="cursor-pointer text-[12px] font-medium text-text-secondary">
+                Usar URL manual (opcional)
+              </summary>
+              <div className="mt-3 space-y-3">
+                <FormField label="Logo (URL)" htmlFor="logo" hint="Si ya tienes una URL pública">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
+                      {form.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={form.logoUrl} alt="" className="max-h-9 max-w-9 object-contain" />
+                      ) : (
+                        <ImageIcon className="size-4 text-text-secondary" aria-hidden />
+                      )}
+                    </span>
+                    <Input
+                      id="logo"
+                      value={form.logoUrl}
+                      placeholder="https://…"
+                      onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                    />
+                  </div>
+                </FormField>
+                <FormField label="Favicon (URL)" htmlFor="favicon">
+                  <Input
+                    id="favicon"
+                    value={form.faviconUrl}
+                    placeholder="https://…"
+                    onChange={(e) => setForm((f) => ({ ...f, faviconUrl: e.target.value }))}
+                  />
+                </FormField>
+              </div>
+            </details>
           </section>
 
           <section className="space-y-3 rounded-[12px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
@@ -166,14 +198,34 @@ export function BrandingForm({
                 Opcional. Fondo de login y canales de ayuda para tu marca.
               </p>
             </div>
-            <FormField label="Fondo de login (URL)" htmlFor="login-bg">
-              <Input
-                id="login-bg"
-                value={form.loginBackgroundUrl}
-                placeholder="https://…"
-                onChange={(e) => setForm((f) => ({ ...f, loginBackgroundUrl: e.target.value }))}
-              />
-            </FormField>
+            <BrandAssetDropzone
+              agencySlug={agencySlug}
+              kind="login_background"
+              label="Fondo de login"
+              hint="Imagen ancha · se sube a Storage"
+              value={form.loginBackgroundUrl}
+              disabled={!canEdit || pending}
+              onUploaded={(url) => {
+                setForm((f) => ({ ...f, loginBackgroundUrl: url }));
+                setSuccess("Fondo de login subido.");
+              }}
+              onCleared={() => setForm((f) => ({ ...f, loginBackgroundUrl: "" }))}
+            />
+            <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+              <summary className="cursor-pointer text-[12px] font-medium text-text-secondary">
+                URL manual de fondo (opcional)
+              </summary>
+              <div className="mt-3">
+                <FormField label="Fondo de login (URL)" htmlFor="login-bg">
+                  <Input
+                    id="login-bg"
+                    value={form.loginBackgroundUrl}
+                    placeholder="https://…"
+                    onChange={(e) => setForm((f) => ({ ...f, loginBackgroundUrl: e.target.value }))}
+                  />
+                </FormField>
+              </div>
+            </details>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Email de soporte" htmlFor="support-email">
                 <div className="relative">
