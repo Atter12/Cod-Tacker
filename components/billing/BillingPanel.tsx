@@ -61,7 +61,7 @@ export function BillingPanel({
   const orderRatio = orderLimit > 0 ? overview.orderCountThisMonth / orderLimit : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <DemoModeBadge />
         <AgencyStatusPill label="Facturación de demostración" tone="brand" />
@@ -112,7 +112,7 @@ export function BillingPanel({
 
       <div className="space-y-3">
         <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes</h3>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="-mx-1 flex min-w-0 gap-3 overflow-x-auto px-1 pb-2 snap-x snap-mandatory sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 sm:snap-none xl:grid-cols-3 2xl:grid-cols-5">
           {overview.availablePlans.map((plan) => {
             const current = limits?.planCode === plan.code;
             const features = Array.isArray(plan.features)
@@ -124,7 +124,10 @@ export function BillingPanel({
             return (
               <Card
                 key={plan.id}
-                className={cn(current && "border-brand-primary shadow-[0_0_0_1px_var(--brand-primary)]")}
+                className={cn(
+                  "min-w-[260px] shrink-0 snap-start sm:min-w-0 sm:shrink",
+                  current && "border-brand-primary shadow-[0_0_0_1px_var(--brand-primary)]",
+                )}
               >
                 <CardContent className="flex h-full flex-col gap-3 p-4">
                   <div>
@@ -182,14 +185,14 @@ export function BillingPanel({
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden">
+      <Card className="min-w-0 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
           <h3 className="text-[15px] font-semibold text-text-primary">Historial de facturación</h3>
         </div>
         {overview.invoices.length === 0 ? (
           <p className="px-5 py-8 text-sm text-text-secondary">Sin facturas aún.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-text-secondary">
                 <tr>
@@ -228,9 +231,9 @@ export function BillingPanel({
             <p className="text-xs text-text-secondary">
               Exportación vía job. El borrado/anominización requiere aprobación y nunca es inmediato.
             </p>
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <select
-                className="h-9 rounded-md border border-border bg-surface-elevated px-2 text-sm"
+                className="h-9 w-full min-w-0 rounded-md border border-border bg-surface-elevated px-2 text-sm sm:w-auto sm:min-w-[160px]"
                 aria-label="Tienda a exportar"
                 value={exportStoreId}
                 onChange={(e) => setExportStoreId(e.target.value)}
@@ -244,6 +247,7 @@ export function BillingPanel({
               <Button
                 size="sm"
                 variant="outline"
+                className="w-full sm:w-auto"
                 disabled={pending || !exportStoreId}
                 onClick={() =>
                   run(() => requestDataExport(agencySlug, { scope: "store", storeId: exportStoreId }))
@@ -254,6 +258,7 @@ export function BillingPanel({
               <Button
                 size="sm"
                 variant="outline"
+                className="w-full sm:w-auto"
                 disabled={pending}
                 onClick={() => run(() => requestDataExport(agencySlug, { scope: "agency" }))}
               >
@@ -262,7 +267,7 @@ export function BillingPanel({
               <Button
                 size="sm"
                 variant="danger"
-                className="bg-danger/10 text-danger hover:bg-danger/20"
+                className="w-full bg-danger/10 text-danger hover:bg-danger/20 sm:w-auto"
                 disabled={pending || !exportStoreId}
                 onClick={() => {
                   if (!confirm("¿Solicitar borrado/anominización? Requiere aprobación admin.")) return;

@@ -93,19 +93,19 @@ export function AgencyOverview({
   ].filter((a) => a.show);
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="min-w-0 space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <SectionHeader
           title="Resumen de la agencia"
           description={`Bienvenido de vuelta, ${userName}`}
         />
-        <div className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-surface-elevated px-3 py-2 text-[12.5px] font-medium text-text-primary">
-          <Store className="size-3.5 text-brand-primary" aria-hidden />
-          <span className="max-w-[180px] truncate">{agencyName}</span>
+        <div className="inline-flex max-w-full items-center gap-2 rounded-[10px] border border-border bg-surface-elevated px-3 py-2 text-[12.5px] font-medium text-text-primary">
+          <Store className="size-3.5 shrink-0 text-brand-primary" aria-hidden />
+          <span className="min-w-0 max-w-[180px] truncate">{agencyName}</span>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="space-y-1 p-4 sm:p-5">
             <p className="text-[12.5px] text-text-secondary">Tiendas activas</p>
@@ -146,7 +146,7 @@ export function AgencyOverview({
       {quickActions.length > 0 ? (
         <div className="space-y-3">
           <h2 className="text-[14px] font-semibold text-text-primary">Acciones rápidas</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             {quickActions.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href + label}
@@ -167,7 +167,7 @@ export function AgencyOverview({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         <Card>
           <CardContent className="space-y-4 p-4 sm:p-5">
             <h2 className="text-[15px] font-semibold text-text-primary">Actividad reciente</h2>

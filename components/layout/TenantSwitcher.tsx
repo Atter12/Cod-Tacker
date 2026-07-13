@@ -49,12 +49,12 @@ export function TenantSwitcher({
       trigger={
         <span
           className={cn(
-            "inline-flex h-[38px] min-w-0 items-center gap-2 rounded-[9px] border border-border bg-surface-elevated px-3 text-[12.5px] font-medium text-text-primary",
-            "transition-colors hover:bg-muted sm:min-w-[180px]",
+            "inline-flex h-[38px] max-w-full min-w-0 items-center gap-2 rounded-[9px] border border-border bg-surface-elevated px-2.5 text-[12.5px] font-medium text-text-primary sm:px-3",
+            "transition-colors hover:bg-muted sm:max-w-[220px]",
           )}
         >
           <Store className="size-4 shrink-0 text-text-secondary" aria-hidden />
-          <span className="hidden max-w-[160px] truncate md:inline">
+          <span className="hidden min-w-0 truncate md:inline">
             {inAgency ? "Abrir tienda" : (current?.name ?? "Seleccionar tienda")}
           </span>
           <span className="sr-only md:hidden">{inAgency ? "Abrir tienda" : "Cambiar tienda"}</span>

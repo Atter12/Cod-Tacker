@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { getUser } from "@/lib/auth/get-session";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/config/permissions";
@@ -9,8 +10,9 @@ import { accessibleStoreToMembership, getAccessibleStores } from "@/lib/tenant/g
 /**
  * Agency memberships (with or without store) plus accessible stores.
  * Store rows always come from getAccessibleStores (single access rule).
+ * Request-scoped via React cache() to dedupe nested layout/page guards.
  */
-export async function getCurrentTenant(): Promise<TenantMembership[]> {
+export const getCurrentTenant = cache(async (): Promise<TenantMembership[]> => {
   const user = await getUser();
   if (!user) return [];
 
@@ -36,10 +38,11 @@ export async function getCurrentTenant(): Promise<TenantMembership[]> {
       : [];
   });
 
-  const stores = await getAccessibleStores(user.id);
+  // Same cache key as layout callers (`getAccessibleStores()` with no args).
+  const stores = await getAccessibleStores();
   for (const store of stores) {
     memberships.push(accessibleStoreToMembership(store));
   }
 
   return memberships;
-}
+});

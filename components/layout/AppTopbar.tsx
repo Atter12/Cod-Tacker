@@ -20,6 +20,8 @@ export function AppTopbar({
   storeSlug,
   activeAlertCount = 0,
   hideTitle = false,
+  mobileNav,
+  mobileLabel,
 }: {
   title: string;
   breadcrumbs?: BreadcrumbItem[];
@@ -31,14 +33,26 @@ export function AppTopbar({
   storeSlug?: string;
   activeAlertCount?: number;
   hideTitle?: boolean;
+  mobileNav?: ReactNode;
+  mobileLabel?: string;
 }) {
+  const showDesktopTitle = !hideTitle && (!tenantSwitcher || !storeSlug);
+
   return (
-    <header className="flex h-[58px] shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-elevated px-4 sm:h-[60px] sm:px-6">
-      <div className="flex min-w-0 items-center gap-3">
-        {storeReturn}
-        {tenantSwitcher}
-        {!hideTitle && !tenantSwitcher ? (
-          <div className="min-w-0">
+    <div className="flex h-[52px] min-w-0 items-center justify-between gap-2 px-3 sm:h-[60px] sm:gap-3 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        {mobileNav}
+        {mobileLabel ? (
+          <span className="min-w-0 truncate text-sm font-semibold text-text-primary lg:hidden">
+            {mobileLabel}
+          </span>
+        ) : null}
+        {storeReturn ? <div className="hidden min-w-0 lg:block">{storeReturn}</div> : null}
+        {tenantSwitcher ? (
+          <div className="hidden min-w-0 shrink sm:block">{tenantSwitcher}</div>
+        ) : null}
+        {showDesktopTitle ? (
+          <div className="hidden min-w-0 lg:block">
             {breadcrumbs.length > 0 ? (
               <nav aria-label="Miga de pan" className="mb-0.5 flex items-center gap-1 text-xs text-text-secondary">
                 {breadcrumbs.map((breadcrumb, index) => {
@@ -65,7 +79,7 @@ export function AppTopbar({
           </div>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
         <Suspense fallback={null}>
           <TopbarDateRange />
         </Suspense>
@@ -74,9 +88,9 @@ export function AppTopbar({
           storeSlug={storeSlug}
           activeAlertCount={activeAlertCount}
         />
-        {agencyConsole}
+        {agencyConsole ? <div className="hidden md:block">{agencyConsole}</div> : null}
         <UserMenu {...user} />
       </div>
-    </header>
+    </div>
   );
 }

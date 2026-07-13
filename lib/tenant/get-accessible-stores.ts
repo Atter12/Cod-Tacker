@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/auth/get-session";
 import type { AgencyRole, Role, StoreRoleValue } from "@/config/permissions";
@@ -26,8 +27,9 @@ function isAgencyWideRole(role: string): role is AgencyRole {
  * Canonical list of stores the signed-in user may enter.
  * owner/admin/manager → all active stores of their agencies;
  * analyst/viewer (and store-only members) → only active store_members rows.
+ * Request-scoped via React cache() to dedupe layout + page lookups.
  */
-export async function getAccessibleStores(userId?: string): Promise<AccessibleStore[]> {
+export const getAccessibleStores = cache(async (userId?: string): Promise<AccessibleStore[]> => {
   const user = userId ? { id: userId } : await getUser();
   if (!user) return [];
 
@@ -112,7 +114,7 @@ export async function getAccessibleStores(userId?: string): Promise<AccessibleSt
   }
 
   return [...byStoreId.values()].sort((a, b) => a.storeName.localeCompare(b.storeName, "es"));
-}
+});
 
 export async function getEffectiveStoreRole(
   storeId: string,

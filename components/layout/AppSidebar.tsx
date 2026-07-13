@@ -193,6 +193,7 @@ export function AppSidebar({
   returnToStore,
   activeAlertCount = 0,
   brand,
+  onNavigate,
 }: {
   agencySlug: string;
   storeSlug?: string;
@@ -202,6 +203,7 @@ export function AppSidebar({
   returnToStore?: { href: string; storeName: string } | null;
   activeAlertCount?: number;
   brand?: AgencyBrandTheme | null;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebar, getSidebarCollapsed, () => false);
@@ -217,6 +219,8 @@ export function AppSidebar({
     scope === "store" ? items.filter((item) => !PRIMARY_STORE_LABELS.has(item.label)) : [];
 
   const compact = !mobile && collapsed;
+  /** Constant desktop widths — never driven by main content size. */
+  const desktopWidth = compact ? "w-[68px]" : scope === "agency" ? "w-[220px]" : "w-[180px]";
 
   function renderItem(item: (typeof items)[number]) {
     const href =
@@ -236,7 +240,9 @@ export function AppSidebar({
     const link = (
       <Link
         href={href}
+        prefetch
         aria-current={active ? "page" : undefined}
+        onClick={() => onNavigate?.()}
         className={cn(
           "relative flex h-[41px] items-center gap-3 px-[18px] text-[12.5px] transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -276,12 +282,21 @@ export function AppSidebar({
     <aside
       className={cn(
         "shrink-0 border-r border-border bg-sidebar transition-[width] duration-200",
-        mobile ? "flex h-full w-full flex-col" : "hidden lg:flex lg:flex-col",
-        !mobile && (compact ? "w-[68px]" : scope === "agency" ? "w-[220px]" : "w-[180px]"),
+        mobile
+          ? "flex h-full w-full min-w-0 flex-col"
+          : cn(
+              "sticky top-0 z-40 hidden h-dvh self-start lg:flex lg:flex-col",
+              desktopWidth,
+            ),
       )}
     >
-      <BrandMark collapsed={compact} brand={brand} />
-      <nav aria-label="Navegación principal" className="flex-1 space-y-0.5 overflow-y-auto py-3">
+      <div className="shrink-0">
+        {!mobile ? <BrandMark collapsed={compact} brand={brand} /> : null}
+      </div>
+      <nav
+        aria-label="Navegación principal"
+        className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain py-3"
+      >
         {primaryItems.map(renderItem)}
         {secondaryItems.length > 0 ? (
           <>
@@ -298,9 +313,11 @@ export function AppSidebar({
       </nav>
 
       {scope === "agency" && returnToStore ? (
-        <div className="border-t border-border p-3">
+        <div className="shrink-0 border-t border-border p-3">
           <Link
             href={returnToStore.href}
+            prefetch
+            onClick={() => onNavigate?.()}
             className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-muted"
           >
             <ArrowLeft className="size-4 shrink-0 text-brand-primary" aria-hidden />
@@ -317,7 +334,7 @@ export function AppSidebar({
       ) : null}
 
       {!mobile ? (
-        <div className="border-t border-border p-2">
+        <div className="shrink-0 border-t border-border p-2">
           <button
             type="button"
             onClick={toggleCollapsed}

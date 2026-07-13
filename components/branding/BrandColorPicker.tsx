@@ -33,7 +33,7 @@ export function BrandColorPicker({
       </div>
 
       <div
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5"
+        className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
         role="listbox"
         aria-label="Paletas de color"
       >

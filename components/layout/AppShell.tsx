@@ -8,6 +8,7 @@ import {
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar, type BreadcrumbItem } from "./AppTopbar";
 import { MobileNavigation } from "./MobileNavigation";
+import { PageContainer } from "./PageContainer";
 
 export function AppShell({
   children,
@@ -44,50 +45,54 @@ export function AppShell({
   const brandStyle = brand ? (agencyBrandCssVars(brand) as CSSProperties) : undefined;
 
   return (
-    <div className="flex min-h-screen bg-surface" style={brandStyle}>
+    <div className="min-h-dvh bg-surface" style={brandStyle}>
       <BrandFavicon href={brand?.faviconUrl} />
-      <AppSidebar
-        agencySlug={agencySlug}
-        storeSlug={storeSlug}
-        scope={scope}
-        roles={roles}
-        returnToStore={returnToStore}
-        activeAlertCount={activeAlertCount}
-        brand={brand}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center border-b border-border bg-surface-elevated px-3 lg:hidden">
-          <MobileNavigation
-            agencySlug={agencySlug}
-            storeSlug={storeSlug}
-            scope={scope}
-            roles={roles}
-            returnToStore={returnToStore}
-            activeAlertCount={activeAlertCount}
-            brand={brand}
-          />
-          <span className="ml-2 min-w-0 truncate text-sm font-semibold text-text-primary">
-            {mobileLabel}
-          </span>
-        </div>
-        <AppTopbar
-          title={title}
-          breadcrumbs={breadcrumbs}
-          storeReturn={storeReturn}
-          agencyConsole={agencyConsole}
-          tenantSwitcher={tenantSwitcher}
-          user={user}
+      <div className="flex min-h-dvh">
+        <AppSidebar
           agencySlug={agencySlug}
           storeSlug={storeSlug}
+          scope={scope}
+          roles={roles}
+          returnToStore={returnToStore}
           activeAlertCount={activeAlertCount}
-          hideTitle={Boolean(storeSlug && tenantSwitcher)}
+          brand={brand}
         />
-        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-[22px]">{children}</main>
-        {brand && !brand.hideCodtrackedBranding ? (
-          <footer className="border-t border-border px-4 py-2 text-center text-[10.5px] text-text-secondary sm:px-6">
-            Powered by CODTracked
-          </footer>
-        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 border-b border-border bg-surface-elevated">
+            <AppTopbar
+              title={title}
+              breadcrumbs={breadcrumbs}
+              storeReturn={storeReturn}
+              agencyConsole={agencyConsole}
+              tenantSwitcher={tenantSwitcher}
+              user={user}
+              agencySlug={agencySlug}
+              storeSlug={storeSlug}
+              activeAlertCount={activeAlertCount}
+              hideTitle={Boolean(storeSlug && tenantSwitcher)}
+              mobileLabel={mobileLabel}
+              mobileNav={
+                <MobileNavigation
+                  agencySlug={agencySlug}
+                  storeSlug={storeSlug}
+                  scope={scope}
+                  roles={roles}
+                  returnToStore={returnToStore}
+                  activeAlertCount={activeAlertCount}
+                  brand={brand}
+                />
+              }
+            />
+          </header>
+          <main className="min-w-0 flex-1">
+            <PageContainer>{children}</PageContainer>
+          </main>
+          {brand && !brand.hideCodtrackedBranding ? (
+            <footer className="border-t border-border px-4 py-2 text-center text-[10.5px] text-text-secondary sm:px-6">
+              Powered by CODTracked
+            </footer>
+          ) : null}
+        </div>
       </div>
     </div>
   );

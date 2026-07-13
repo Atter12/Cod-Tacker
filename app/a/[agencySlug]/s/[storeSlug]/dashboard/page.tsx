@@ -8,17 +8,30 @@ import {
   Truck,
   Undo2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { IntegrationHealthCard } from "@/components/dashboard/IntegrationHealthCard";
 import { OperationalFunnel } from "@/components/dashboard/OperationalFunnel";
 import { PrimaryMetricCard } from "@/components/dashboard/PrimaryMetricCard";
 import { RecentOrdersCard } from "@/components/dashboard/RecentOrdersCard";
-import { RevenuePerformanceChart } from "@/components/dashboard/RevenuePerformanceChart";
 import { SecondaryMetricCard } from "@/components/dashboard/SecondaryMetricCard";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { dateRangeToBounds, parseDateRangePreset, type DateRangePreset } from "@/lib/formatting/date-range";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getDashboardSummary } from "@/services/dashboard.service";
+
+const RevenuePerformanceChart = dynamic(
+  () =>
+    import("@/components/dashboard/RevenuePerformanceChart").then((mod) => mod.RevenuePerformanceChart),
+  {
+    loading: () => (
+      <div
+        className="min-h-[320px] animate-pulse rounded-[11px] border border-border bg-muted/40"
+        aria-hidden
+      />
+    ),
+  },
+);
 
 function previousPeriodLabel(preset: DateRangePreset): string {
   switch (preset) {
@@ -72,7 +85,7 @@ export default async function StoreDashboard({
   };
 
   return (
-    <section className="space-y-3">
+    <section className="min-w-0 space-y-3">
       <header className="pb-1">
         <h1 className="text-[24px] font-bold leading-[30px] tracking-tight text-text-primary">
           Resumen operativo

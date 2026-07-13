@@ -128,14 +128,14 @@ export function AgencyStoresPanel({
                   ) : null}
                 </FormField>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <FormField label="País" htmlFor="countryCode">
                   <Input id="countryCode" name="countryCode" defaultValue="PE" className="h-11" />
                 </FormField>
                 <FormField label="Moneda" htmlFor="currencyCode">
                   <Input id="currencyCode" name="currencyCode" defaultValue="PEN" className="h-11" />
                 </FormField>
-                <FormField label="Timezone" htmlFor="timezone">
+                <FormField label="Timezone" htmlFor="timezone" className="sm:col-span-2 lg:col-span-1">
                   <Select id="timezone" name="timezone" defaultValue="America/Lima" className="h-11">
                     <option value="America/Lima">America/Lima</option>
                     <option value="America/Bogota">America/Bogota</option>
@@ -152,8 +152,8 @@ export function AgencyStoresPanel({
       ) : null}
 
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-          <label className="relative min-w-[220px] flex-1">
+        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
+          <label className="relative w-full min-w-0 sm:max-w-md sm:flex-1">
             <span className="sr-only">Buscar tiendas</span>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-text-secondary"
@@ -163,14 +163,14 @@ export function AgencyStoresPanel({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar tiendas..."
-              className="h-10 pl-9"
+              className="h-10 w-full pl-9"
             />
           </label>
           <Select
             aria-label="Filtrar por estado"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="h-10 w-auto min-w-[160px]"
+            className="h-10 w-full sm:w-auto sm:min-w-[160px]"
           >
             <option value="all">Estado: Todos</option>
             <option value="active">Estado: Activas</option>
@@ -178,7 +178,7 @@ export function AgencyStoresPanel({
           </Select>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="w-full min-w-0 overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-text-secondary">
               <tr>

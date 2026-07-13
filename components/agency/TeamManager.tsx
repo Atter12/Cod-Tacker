@@ -110,8 +110,8 @@ export function TeamManager({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+    <div className="min-w-0 space-y-6">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {canInvite ? (
           <Card>
             <CardContent className="space-y-4 p-4 sm:p-5">
@@ -180,11 +180,11 @@ export function TeamManager({
         </Card>
       </div>
 
-      <Card className="overflow-hidden">
+      <Card className="min-w-0 overflow-hidden">
         <div className="border-b border-border px-4 py-4 sm:px-5">
           <h2 className="text-[15px] font-semibold text-text-primary">Miembros del equipo</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="w-full min-w-0 overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-text-secondary">
               <tr>
@@ -284,10 +284,10 @@ export function TeamManager({
               {invitations.map((invitation) => (
                 <li
                   key={invitation.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border px-3 py-2.5"
+                  className="flex flex-col gap-3 rounded-[10px] border border-border px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <p className="text-[13px] font-semibold text-text-primary">{invitation.email}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold text-text-primary">{invitation.email}</p>
                     <p className="text-[12px] text-text-secondary">
                       {invitation.role} · Enviada {relativeAge(invitation.created_at)}
                     </p>
@@ -296,7 +296,7 @@ export function TeamManager({
                     <Button
                       size="sm"
                       variant="danger"
-                      className="bg-danger/10 text-danger hover:bg-danger/20"
+                      className="w-full shrink-0 bg-danger/10 text-danger hover:bg-danger/20 sm:w-auto"
                       onClick={() => {
                         if (!confirm(`¿Revocar la invitación a ${invitation.email}?`)) return;
                         void revokeAgencyInvitation(agencySlug, invitation.id);
@@ -312,10 +312,10 @@ export function TeamManager({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardContent className="space-y-4 p-4 sm:p-5">
           <h2 className="text-[15px] font-semibold text-text-primary">Matriz de permisos</h2>
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
               <thead>
                 <tr className="text-[12px] font-semibold text-text-secondary">

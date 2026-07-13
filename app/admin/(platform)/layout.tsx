@@ -9,16 +9,18 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   const profile = await getProfile();
 
   return (
-    <div className="flex min-h-screen bg-surface">
-      <AppSidebar agencySlug="" scope="admin" />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-end border-b border-border bg-surface-elevated px-4 sm:px-6">
-          <UserMenu
-            name={profile?.full_name ?? "Admin"}
-            email={user.email ?? profile?.email ?? undefined}
-          />
-        </header>
-        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+    <div className="min-h-dvh bg-surface">
+      <div className="flex min-h-dvh">
+        <AppSidebar agencySlug="" scope="admin" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end border-b border-border bg-surface-elevated px-4 sm:px-6">
+            <UserMenu
+              name={profile?.full_name ?? "Admin"}
+              email={user.email ?? profile?.email ?? undefined}
+            />
+          </header>
+          <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+        </div>
       </div>
     </div>
   );

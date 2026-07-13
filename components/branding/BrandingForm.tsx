@@ -88,8 +88,8 @@ export function BrandingForm({
         : "max-w-full";
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
-      <div className="space-y-6">
+    <div className="grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+      <div className="min-w-0 space-y-6">
         {error ? (
           <p className="rounded-[10px] border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
             {error}
@@ -151,7 +151,7 @@ export function BrandingForm({
               </summary>
               <div className="mt-3 space-y-3">
                 <FormField label="Logo (URL)" htmlFor="logo" hint="Si ya tienes una URL pública">
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
                       {form.logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -162,6 +162,7 @@ export function BrandingForm({
                     </span>
                     <Input
                       id="logo"
+                      className="min-w-0 flex-1"
                       value={form.logoUrl}
                       placeholder="https://…"
                       onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
@@ -320,10 +321,10 @@ export function BrandingForm({
         ) : null}
       </div>
 
-      <aside className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+      <aside className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start">
         <div className="rounded-[12px] border border-border bg-surface-elevated p-3 shadow-[var(--card-shadow)]">
           <p className="mb-2.5 text-[13px] font-semibold text-text-primary">Vista previa en vivo</p>
-          <div className="flex gap-1.5 rounded-[10px] border border-border bg-muted/30 p-1">
+          <div className="flex min-w-0 gap-1 rounded-[10px] border border-border bg-muted/30 p-1 sm:gap-1.5">
             {(
               [
                 { id: "mobile", label: "Móvil", Icon: Smartphone },
@@ -336,15 +337,15 @@ export function BrandingForm({
                 type="button"
                 onClick={() => setPreviewWidth(id)}
                 className={cn(
-                  "inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[11.5px] font-medium transition-colors",
+                  "inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-md text-[11px] font-medium transition-colors sm:gap-1.5 sm:text-[11.5px]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   previewWidth === id
                     ? "bg-brand-soft text-brand-primary"
                     : "text-text-secondary hover:bg-muted hover:text-text-primary",
                 )}
               >
-                <Icon className="size-3.5" aria-hidden />
-                {label}
+                <Icon className="size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{label}</span>
               </button>
             ))}
           </div>
@@ -352,12 +353,12 @@ export function BrandingForm({
 
         <div
           className={cn(
-            "mx-auto overflow-hidden rounded-[12px] border border-border shadow-[var(--card-shadow)]",
+            "mx-auto w-full max-w-full overflow-hidden rounded-[12px] border border-border shadow-[var(--card-shadow)]",
             previewMax,
           )}
         >
           <div
-            className="relative flex min-h-[420px] flex-col justify-between p-4"
+            className="relative flex min-h-[320px] flex-col justify-between p-4 sm:min-h-[420px]"
             style={{
               background: form.loginBackgroundUrl
                 ? `center/cover url(${form.loginBackgroundUrl})`

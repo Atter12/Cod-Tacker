@@ -97,7 +97,7 @@ export function ApiKeysManager({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <DemoModeBadge />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {plaintext ? (
@@ -114,13 +114,13 @@ export function ApiKeysManager({
         <Card>
           <CardContent className="space-y-4 p-4 sm:p-5">
             <h3 className="text-[16px] font-semibold text-text-primary">Crear clave</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               <FormField label="Nombre" htmlFor="key-name">
                 <Input
                   id="key-name"
                   value={name}
                   placeholder="Ej. Integración CRM"
-                  className="h-11"
+                  className="h-11 w-full min-w-0"
                   onChange={(e) => setName(e.target.value)}
                 />
               </FormField>
@@ -129,7 +129,7 @@ export function ApiKeysManager({
                   id="key-exp"
                   type="datetime-local"
                   value={expiresAt}
-                  className="h-11"
+                  className="h-11 w-full min-w-0"
                   onChange={(e) =>
                     setExpiresAt(e.target.value ? new Date(e.target.value).toISOString().slice(0, 16) : "")
                   }
@@ -140,9 +140,9 @@ export function ApiKeysManager({
               <p className="text-[12.5px] font-medium text-text-secondary">Alcances (scopes)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {API_KEY_SCOPES.map((scope) => (
-                  <label key={scope} className="flex items-center gap-2 text-sm text-text-primary">
+                  <label key={scope} className="flex min-w-0 items-center gap-2 text-sm text-text-primary">
                     <Checkbox checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} />
-                    <span className="font-mono text-[12.5px]">{scope}</span>
+                    <span className="min-w-0 break-all font-mono text-[12.5px]">{scope}</span>
                   </label>
                 ))}
               </div>
@@ -166,11 +166,11 @@ export function ApiKeysManager({
         </Card>
       ) : null}
 
-      <Card className="overflow-hidden">
+      <Card className="min-w-0 overflow-hidden">
         <div className="border-b border-border px-4 py-4 sm:px-5">
           <h3 className="text-[15px] font-semibold text-text-primary">Tus claves API</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="w-full min-w-0 overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-text-secondary">
               <tr>
@@ -256,14 +256,14 @@ export function ApiKeysManager({
       </Card>
 
       <Card>
-        <CardContent className="flex items-center justify-between gap-4 p-4 sm:p-5">
-          <div>
+        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
             <h3 className="text-[14px] font-semibold text-text-primary">Límite de tasa</h3>
-            <p className="mt-1 text-[12.5px] text-text-secondary">
+            <p className="mt-1 break-words text-[12.5px] text-text-secondary">
               60 req/min por clave · validación en lib/api-keys/validate.ts
             </p>
           </div>
-          <span className="grid size-12 place-items-center rounded-full bg-brand-soft text-brand-primary" aria-hidden>
+          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-primary" aria-hidden>
             <Gauge className="size-5" />
           </span>
         </CardContent>
