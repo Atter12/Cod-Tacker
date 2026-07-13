@@ -1,12 +1,38 @@
+import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackToStoreButton } from "@/components/layout/BackToStoreButton";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
 import { requireUser } from "@/lib/auth/require-user";
+import { createClient } from "@/lib/supabase/server";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
+import { getAgencyBrandTheme } from "@/services/branding.service";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ agencySlug: string }>;
+}): Promise<Metadata> {
+  const { agencySlug } = await params;
+  const client = await createClient();
+  const { data: agency } = await client
+    .from("agencies")
+    .select("id")
+    .eq("slug", agencySlug)
+    .maybeSingle();
+  if (!agency) return { title: "Consola de agencia" };
+  const brand = await getAgencyBrandTheme(client, agency.id);
+  return {
+    title: {
+      default: brand.productName,
+      template: `%s · ${brand.productName}`,
+    },
+    icons: brand.faviconUrl ? { icon: brand.faviconUrl } : undefined,
+  };
+}
 
 export default async function AgencyConsoleLayout({
   children,
@@ -16,13 +42,15 @@ export default async function AgencyConsoleLayout({
   params: Promise<{ agencySlug: string }>;
 }) {
   const { agencySlug } = await params;
-  const [user, membership, stores, profile, preferred] = await Promise.all([
+  const [user, membership, stores, profile, preferred, client] = await Promise.all([
     requireUser(),
     requireAgencyAccess(agencySlug),
     getAccessibleStores(),
     getProfile(),
     getActiveTenantPreference(),
+    createClient(),
   ]);
+  const brand = await getAgencyBrandTheme(client, membership.agencyId);
   const agencyStores = stores.filter((store) => store.agencySlug === agencySlug);
   const agencyName = agencyStores[0]?.agencyName ?? agencySlug;
   const tenants = agencyStores.map((store) => ({
@@ -48,6 +76,7 @@ export default async function AgencyConsoleLayout({
       title="Consola de agencia"
       breadcrumbs={[{ label: agencyName, href: routes.agency.stores(agencySlug) }]}
       roles={membership.roles}
+      brand={brand}
       user={{
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,

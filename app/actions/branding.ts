@@ -94,6 +94,8 @@ export async function updateAgencyBranding(
     });
 
     revalidatePath(routes.agency.branding(agencySlug));
+    revalidatePath(routes.agency.stores(agencySlug));
+    revalidatePath(`/a/${agencySlug}`, "layout");
     return actionOk();
   } catch (error) {
     return actionFail(error);
@@ -144,6 +146,8 @@ export async function restoreBrandingDefaults(agencySlug: string): Promise<Brand
     });
 
     revalidatePath(routes.agency.branding(agencySlug));
+    revalidatePath(routes.agency.stores(agencySlug));
+    revalidatePath(`/a/${agencySlug}`, "layout");
     return actionOk();
   } catch (error) {
     return actionFail(error);

@@ -20,12 +20,17 @@ import {
   Target,
   Truck,
   Workflow,
+  Palette,
   type LucideIcon,
 } from "lucide-react";
 import { adminNavigation, agencyNavigation, storeNavigation } from "@/config/navigation";
 import type { Role } from "@/config/permissions";
 import { routes } from "@/config/routes";
 import { filterNavigationByPermission } from "@/lib/permissions/filter-navigation";
+import {
+  brandInitialLetter,
+  type AgencyBrandTheme,
+} from "@/lib/branding/theme";
 import { cn } from "@/lib/utils/cn";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -91,7 +96,7 @@ const storeIcons: Record<string, LucideIcon> = {
 const agencyIcons: Record<string, LucideIcon> = {
   "/stores": Store,
   "/team": Boxes,
-  "/branding": Target,
+  "/branding": Palette,
   "/billing": FileText,
   "/api-keys": Cable,
 };
@@ -127,22 +132,50 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function BrandMark({ collapsed }: { collapsed: boolean }) {
+function BrandMark({
+  collapsed,
+  brand,
+}: {
+  collapsed: boolean;
+  brand?: AgencyBrandTheme | null;
+}) {
+  const productName = brand?.productName?.trim() || "CODTracked";
+  const logoUrl = brand?.logoUrl?.trim() || null;
+  const initial = brandInitialLetter(productName);
+
   if (collapsed) {
     return (
       <div className="flex h-[76px] items-center justify-center border-b border-border px-2">
-        <span className="text-lg font-bold lowercase leading-none text-brand-primary">h</span>
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" className="max-h-8 max-w-8 object-contain" />
+        ) : (
+          <span className="grid size-8 place-items-center rounded-lg bg-brand-soft text-sm font-bold text-brand-primary">
+            {initial}
+          </span>
+        )}
       </div>
     );
   }
+
   return (
-    <div className="flex h-[76px] flex-col justify-center border-b border-border px-5">
-      <p className="text-[18px] font-bold lowercase leading-none tracking-tight text-brand-primary">
-        holistic
-      </p>
-      <p className="mt-1 text-[11px] font-medium lowercase tracking-[0.08em] text-brand-primary/80">
-        marketing
-      </p>
+    <div className="flex h-[76px] items-center gap-2.5 border-b border-border px-4">
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="" className="max-h-9 max-w-[36px] shrink-0 object-contain" />
+      ) : (
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-[13px] font-bold text-brand-primary">
+          {initial}
+        </span>
+      )}
+      <div className="min-w-0">
+        <p className="truncate text-[14px] font-bold leading-tight tracking-tight text-brand-primary">
+          {productName}
+        </p>
+        {!brand?.hideCodtrackedBranding && productName.toLowerCase() !== "codtracked" ? (
+          <p className="mt-0.5 truncate text-[10px] text-text-secondary">by CODTracked</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -155,6 +188,7 @@ export function AppSidebar({
   roles = [],
   returnToStore,
   activeAlertCount = 0,
+  brand,
 }: {
   agencySlug: string;
   storeSlug?: string;
@@ -163,6 +197,7 @@ export function AppSidebar({
   roles?: readonly Role[];
   returnToStore?: { href: string; storeName: string } | null;
   activeAlertCount?: number;
+  brand?: AgencyBrandTheme | null;
 }) {
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebar, getSidebarCollapsed, () => false);
@@ -241,7 +276,7 @@ export function AppSidebar({
         !mobile && (compact ? "w-[68px]" : "w-[180px]"),
       )}
     >
-      <BrandMark collapsed={compact} />
+      <BrandMark collapsed={compact} brand={brand} />
       <nav aria-label="Navegación principal" className="flex-1 space-y-0.5 overflow-y-auto py-3">
         {primaryItems.map(renderItem)}
         {secondaryItems.length > 0 ? (

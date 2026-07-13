@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ImageIcon, Mail, MessageCircle, Monitor, Smartphone, Tablet } from "lucide-react";
 import { restoreBrandingDefaults, updateAgencyBranding } from "@/app/actions/branding";
-import { Button, Checkbox, DemoModeBadge, FormField, Input } from "@/components/ui";
+import { BrandColorPicker } from "@/components/branding/BrandColorPicker";
+import { Button, Checkbox, FormField, Input } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
 
 type BrandingState = {
   productName: string;
@@ -32,11 +35,13 @@ export function BrandingForm({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState(initial);
   const [previewWidth, setPreviewWidth] = useState<"mobile" | "tablet" | "desktop">("desktop");
 
   function save() {
     setError(null);
+    setSuccess(null);
     start(async () => {
       const r = await updateAgencyBranding(agencySlug, {
         productName: form.productName || null,
@@ -50,113 +55,211 @@ export function BrandingForm({
         hideCodtrackedBranding: form.hideCodtrackedBranding,
         isWhiteLabelEnabled: form.isWhiteLabelEnabled,
       });
-      if (r.error) setError(r.error);
-      else router.refresh();
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
+      setSuccess("Marca guardada. Se aplica en la consola y las tiendas de esta agencia.");
+      router.refresh();
     });
   }
 
   function restore() {
     if (!confirm("¿Restaurar valores por defecto de marca?")) return;
     setError(null);
+    setSuccess(null);
     start(async () => {
       const r = await restoreBrandingDefaults(agencySlug);
-      if (r.error) setError(r.error);
-      else router.refresh();
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
+      setSuccess("Se restauró la marca por defecto.");
+      router.refresh();
     });
   }
 
   const previewMax =
-    previewWidth === "mobile" ? "max-w-[320px]" : previewWidth === "tablet" ? "max-w-[640px]" : "max-w-full";
+    previewWidth === "mobile"
+      ? "max-w-[320px]"
+      : previewWidth === "tablet"
+        ? "max-w-[520px]"
+        : "max-w-full";
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
-      <div className="space-y-4">
-        <DemoModeBadge />
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-        <fieldset disabled={!canEdit || pending} className="space-y-3">
-          <FormField label="Nombre del producto" htmlFor="product">
-            <Input
-              id="product"
-              value={form.productName}
-              onChange={(e) => setForm((f) => ({ ...f, productName: e.target.value }))}
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Color primario" htmlFor="primary">
+    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+      <div className="space-y-6">
+        {error ? (
+          <p className="rounded-[10px] border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
+            {error}
+          </p>
+        ) : null}
+        {success ? (
+          <p className="rounded-[10px] border border-success/30 bg-success/10 px-3 py-2 text-[13px] text-success">
+            {success}
+          </p>
+        ) : null}
+
+        <fieldset disabled={!canEdit || pending} className="space-y-6">
+          <section className="space-y-3 rounded-[12px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
+            <div>
+              <h2 className="text-[14px] font-semibold text-text-primary">Identidad</h2>
+              <p className="mt-0.5 text-[12.5px] text-text-secondary">
+                Nombre y logo que verá tu equipo en el menú lateral.
+              </p>
+            </div>
+            <FormField label="Nombre del producto" htmlFor="product">
               <Input
-                id="primary"
-                value={form.primaryColor}
-                onChange={(e) => setForm((f) => ({ ...f, primaryColor: e.target.value }))}
+                id="product"
+                value={form.productName}
+                placeholder="Ej. Flipy Ops"
+                onChange={(e) => setForm((f) => ({ ...f, productName: e.target.value }))}
               />
             </FormField>
-            <FormField label="Color secundario" htmlFor="secondary">
+            <FormField
+              label="Logo (URL)"
+              htmlFor="logo"
+              hint="URL pública (https). Ideal: PNG o SVG transparente."
+            >
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
+                  {form.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={form.logoUrl} alt="" className="max-h-9 max-w-9 object-contain" />
+                  ) : (
+                    <ImageIcon className="size-4 text-text-secondary" aria-hidden />
+                  )}
+                </span>
+                <Input
+                  id="logo"
+                  value={form.logoUrl}
+                  placeholder="https://…"
+                  onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                />
+              </div>
+            </FormField>
+            <FormField label="Favicon (URL)" htmlFor="favicon">
               <Input
-                id="secondary"
-                value={form.secondaryColor}
-                onChange={(e) => setForm((f) => ({ ...f, secondaryColor: e.target.value }))}
+                id="favicon"
+                value={form.faviconUrl}
+                placeholder="https://…"
+                onChange={(e) => setForm((f) => ({ ...f, faviconUrl: e.target.value }))}
               />
             </FormField>
-          </div>
-          <FormField label="Logo (URL)" htmlFor="logo" hint="URL pública o de Supabase Storage">
-            <Input
-              id="logo"
-              value={form.logoUrl}
-              onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+          </section>
+
+          <section className="space-y-3 rounded-[12px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
+            <BrandColorPicker
+              primaryColor={form.primaryColor}
+              secondaryColor={form.secondaryColor}
+              disabled={!canEdit || pending}
+              onChange={({ primaryColor, secondaryColor }) =>
+                setForm((f) => ({ ...f, primaryColor, secondaryColor }))
+              }
             />
-          </FormField>
-          <FormField label="Favicon (URL)" htmlFor="favicon">
-            <Input
-              id="favicon"
-              value={form.faviconUrl}
-              onChange={(e) => setForm((f) => ({ ...f, faviconUrl: e.target.value }))}
-            />
-          </FormField>
-          <FormField label="Fondo de login (URL)" htmlFor="login-bg">
-            <Input
-              id="login-bg"
-              value={form.loginBackgroundUrl}
-              onChange={(e) => setForm((f) => ({ ...f, loginBackgroundUrl: e.target.value }))}
-            />
-          </FormField>
-          <FormField label="Email de soporte" htmlFor="support-email">
-            <Input
-              id="support-email"
-              type="email"
-              value={form.supportEmail}
-              onChange={(e) => setForm((f) => ({ ...f, supportEmail: e.target.value }))}
-            />
-          </FormField>
-          <FormField label="WhatsApp de soporte" htmlFor="support-wa">
-            <Input
-              id="support-wa"
-              value={form.supportWhatsapp}
-              onChange={(e) => setForm((f) => ({ ...f, supportWhatsapp: e.target.value }))}
-            />
-          </FormField>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={form.isWhiteLabelEnabled}
-              disabled={!whiteLabelAllowed}
-              onChange={(e) => setForm((f) => ({ ...f, isWhiteLabelEnabled: e.target.checked }))}
-            />
-            Activar white-label
-            {!whiteLabelAllowed ? (
-              <span className="text-xs text-text-secondary">(requiere plan Growth+)</span>
-            ) : null}
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={form.hideCodtrackedBranding}
-              disabled={!whiteLabelAllowed}
-              onChange={(e) => setForm((f) => ({ ...f, hideCodtrackedBranding: e.target.checked }))}
-            />
-            Ocultar branding CODTracked
-          </label>
+          </section>
+
+          <section className="space-y-3 rounded-[12px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
+            <div>
+              <h2 className="text-[14px] font-semibold text-text-primary">Acceso y soporte</h2>
+              <p className="mt-0.5 text-[12.5px] text-text-secondary">
+                Opcional. Fondo de login y canales de ayuda para tu marca.
+              </p>
+            </div>
+            <FormField label="Fondo de login (URL)" htmlFor="login-bg">
+              <Input
+                id="login-bg"
+                value={form.loginBackgroundUrl}
+                placeholder="https://…"
+                onChange={(e) => setForm((f) => ({ ...f, loginBackgroundUrl: e.target.value }))}
+              />
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Email de soporte" htmlFor="support-email">
+                <div className="relative">
+                  <Mail
+                    className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-text-secondary"
+                    aria-hidden
+                  />
+                  <Input
+                    id="support-email"
+                    type="email"
+                    className="pl-9"
+                    value={form.supportEmail}
+                    onChange={(e) => setForm((f) => ({ ...f, supportEmail: e.target.value }))}
+                  />
+                </div>
+              </FormField>
+              <FormField label="WhatsApp de soporte" htmlFor="support-wa">
+                <div className="relative">
+                  <MessageCircle
+                    className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-text-secondary"
+                    aria-hidden
+                  />
+                  <Input
+                    id="support-wa"
+                    className="pl-9"
+                    value={form.supportWhatsapp}
+                    placeholder="+51…"
+                    onChange={(e) => setForm((f) => ({ ...f, supportWhatsapp: e.target.value }))}
+                  />
+                </div>
+              </FormField>
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-[12px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
+            <div>
+              <h2 className="text-[14px] font-semibold text-text-primary">White-label</h2>
+              <p className="mt-0.5 text-[12.5px] text-text-secondary">
+                Ocultar la marca CODTracked requiere plan Growth o Scale.
+              </p>
+            </div>
+            <label className="flex items-start gap-2.5 text-[13px] text-text-primary">
+              <Checkbox
+                className="mt-0.5"
+                checked={form.isWhiteLabelEnabled}
+                disabled={!whiteLabelAllowed}
+                onChange={(e) => setForm((f) => ({ ...f, isWhiteLabelEnabled: e.target.checked }))}
+              />
+              <span>
+                Activar white-label
+                {!whiteLabelAllowed ? (
+                  <span className="mt-0.5 block text-[12px] text-text-secondary">
+                    Disponible desde Growth+
+                  </span>
+                ) : (
+                  <span className="mt-0.5 block text-[12px] text-text-secondary">
+                    Presenta la plataforma con tu marca de producto.
+                  </span>
+                )}
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 text-[13px] text-text-primary">
+              <Checkbox
+                className="mt-0.5"
+                checked={form.hideCodtrackedBranding}
+                disabled={!whiteLabelAllowed}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, hideCodtrackedBranding: e.target.checked }))
+                }
+              />
+              <span>
+                Ocultar “Powered by CODTracked”
+                {!whiteLabelAllowed ? (
+                  <span className="mt-0.5 block text-[12px] text-text-secondary">
+                    Requiere plan con white-label
+                  </span>
+                ) : null}
+              </span>
+            </label>
+          </section>
         </fieldset>
+
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
             <Button disabled={pending} onClick={save}>
-              Guardar marca
+              {pending ? "Guardando…" : "Guardar marca"}
             </Button>
             <Button variant="outline" disabled={pending} onClick={restore}>
               Restaurar defaults
@@ -165,51 +268,89 @@ export function BrandingForm({
         ) : null}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          {(["mobile", "tablet", "desktop"] as const).map((w) => (
-            <Button
-              key={w}
-              size="sm"
-              variant={previewWidth === w ? "primary" : "outline"}
-              onClick={() => setPreviewWidth(w)}
+      <aside className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+        <div className="flex gap-1.5 rounded-[10px] border border-border bg-surface-elevated p-1">
+          {(
+            [
+              { id: "mobile", label: "Móvil", Icon: Smartphone },
+              { id: "tablet", label: "Tablet", Icon: Tablet },
+              { id: "desktop", label: "Escritorio", Icon: Monitor },
+            ] as const
+          ).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPreviewWidth(id)}
+              className={cn(
+                "inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[11.5px] font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                previewWidth === id
+                  ? "bg-brand-soft text-brand-primary"
+                  : "text-text-secondary hover:bg-muted hover:text-text-primary",
+              )}
             >
-              {w === "mobile" ? "Móvil" : w === "tablet" ? "Tablet" : "Escritorio"}
-            </Button>
+              <Icon className="size-3.5" aria-hidden />
+              {label}
+            </button>
           ))}
         </div>
+
         <div
-          className={`mx-auto overflow-hidden rounded-lg border border-border ${previewMax}`}
+          className={cn(
+            "mx-auto overflow-hidden rounded-[12px] border border-border shadow-[var(--card-shadow)]",
+            previewMax,
+          )}
           style={{
             background: form.loginBackgroundUrl
               ? `center/cover url(${form.loginBackgroundUrl})`
-              : `linear-gradient(135deg, ${form.primaryColor || "#0F766E"}, ${form.secondaryColor || "#134E4A"})`,
+              : `linear-gradient(145deg, ${form.primaryColor || "#F47A32"}, ${form.secondaryColor || "#F5661F"})`,
           }}
         >
-          <div className="m-6 rounded-md bg-white/95 p-6 shadow-sm">
-            {form.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.logoUrl} alt="Logo" className="mb-3 h-8 object-contain" />
-            ) : null}
-            <p className="text-lg font-semibold" style={{ color: form.primaryColor || undefined }}>
-              {form.productName || "CODTracked"}
-            </p>
-            <p className="mt-1 text-sm text-text-secondary">Vista previa de acceso</p>
+          <div className="m-5 rounded-[10px] bg-surface-elevated/95 p-5 shadow-sm backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              {form.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.logoUrl} alt="" className="h-9 max-w-[120px] object-contain" />
+              ) : (
+                <span
+                  className="grid size-9 place-items-center rounded-lg text-[14px] font-bold text-white"
+                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                  aria-hidden
+                >
+                  {(form.productName || "C").charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0">
+                <p
+                  className="truncate text-[15px] font-semibold"
+                  style={{ color: form.primaryColor || undefined }}
+                >
+                  {form.productName || "CODTracked"}
+                </p>
+                <p className="text-[12px] text-text-secondary">Vista previa de marca</p>
+              </div>
+            </div>
             <div
-              className="mt-4 h-9 rounded-md"
-              style={{ backgroundColor: form.primaryColor || "#0F766E" }}
+              className="mt-5 h-10 rounded-lg"
+              style={{ backgroundColor: form.primaryColor || "#F47A32" }}
             />
+            <div className="mt-2 h-8 rounded-lg bg-muted" />
             {!form.hideCodtrackedBranding ? (
-              <p className="mt-4 text-xs text-text-secondary">Powered by CODTracked</p>
+              <p className="mt-4 text-[11px] text-text-secondary">Powered by CODTracked</p>
             ) : null}
             {(form.supportEmail || form.supportWhatsapp) && (
-              <p className="mt-2 text-xs text-text-secondary">
-                Soporte: {form.supportEmail || "—"} · WA {form.supportWhatsapp || "—"}
+              <p className="mt-2 text-[11px] text-text-secondary">
+                Soporte: {form.supportEmail || "—"}
+                {form.supportWhatsapp ? ` · WA ${form.supportWhatsapp}` : null}
               </p>
             )}
           </div>
         </div>
-      </div>
+        <p className="text-[11.5px] leading-relaxed text-text-secondary">
+          Al guardar, colores y logo se aplican de inmediato en la consola de agencia y en todas
+          las tiendas de esta cuenta.
+        </p>
+      </aside>
     </div>
   );
 }

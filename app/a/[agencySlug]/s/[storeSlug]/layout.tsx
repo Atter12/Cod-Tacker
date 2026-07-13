@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { AgencyConsoleMenu } from "@/components/layout/AgencyConsoleMenu";
 import { AppShell } from "@/components/layout/AppShell";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -7,7 +8,31 @@ import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { getAgencyBrandTheme } from "@/services/branding.service";
 import { getStoreActiveAlertCount } from "@/services/dashboard.service";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ agencySlug: string; storeSlug: string }>;
+}): Promise<Metadata> {
+  const { agencySlug } = await params;
+  const client = await createClient();
+  const { data: agency } = await client
+    .from("agencies")
+    .select("id")
+    .eq("slug", agencySlug)
+    .maybeSingle();
+  if (!agency) return { title: "CODTracked" };
+  const brand = await getAgencyBrandTheme(client, agency.id);
+  return {
+    title: {
+      default: brand.productName,
+      template: `%s · ${brand.productName}`,
+    },
+    icons: brand.faviconUrl ? { icon: brand.faviconUrl } : undefined,
+  };
+}
 
 export default async function StoreLayout({
   children,
@@ -17,12 +42,14 @@ export default async function StoreLayout({
   params: Promise<{ agencySlug: string; storeSlug: string }>;
 }) {
   const { agencySlug, storeSlug } = await params;
-  const [user, membership, stores, profile] = await Promise.all([
+  const [user, membership, stores, profile, client] = await Promise.all([
     requireUser(),
     requireStoreAccess(agencySlug, storeSlug),
     getAccessibleStores(),
     getProfile(),
+    createClient(),
   ]);
+  const brand = await getAgencyBrandTheme(client, membership.agencyId);
   const currentStore = stores.find((store) => store.storeId === membership.storeId);
   const agencyName = currentStore?.agencyName ?? agencySlug;
   const storeName = currentStore?.storeName ?? storeSlug;
@@ -35,7 +62,7 @@ export default async function StoreLayout({
   }));
 
   const activeAlertCount = await getStoreActiveAlertCount(
-    await createClient(),
+    client,
     membership.agencyId,
     membership.storeId!,
   );
@@ -44,7 +71,8 @@ export default async function StoreLayout({
     <AppShell
       agencySlug={agencySlug}
       storeSlug={storeSlug}
-      title="CODTracked"
+      title={brand.productName}
+      brand={brand}
       breadcrumbs={[
         { label: agencyName, href: routes.agency.stores(agencySlug) },
         { label: storeName },

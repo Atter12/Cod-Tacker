@@ -1,3 +1,7 @@
+import {
+  resolveAgencyBrandTheme,
+  type AgencyBrandTheme,
+} from "@/lib/branding/theme";
 import { throwQueryError, type DatabaseClient } from "./_shared";
 import type { WhiteLabelSettingsRow } from "@/types/database";
 
@@ -25,4 +29,16 @@ export async function getAgencyBrandingFlags(
     .maybeSingle();
   throwQueryError(error);
   return data;
+}
+
+/** Resolved theme for authenticated agency/store shells. */
+export async function getAgencyBrandTheme(
+  client: DatabaseClient,
+  agencyId: string,
+): Promise<AgencyBrandTheme> {
+  const [settings, flags] = await Promise.all([
+    getWhiteLabelSettings(client, agencyId),
+    getAgencyBrandingFlags(client, agencyId),
+  ]);
+  return resolveAgencyBrandTheme(settings, flags);
 }

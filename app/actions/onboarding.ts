@@ -166,8 +166,8 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       await admin.from("white_label_settings").upsert({
         agency_id: agency.id,
         product_name: "CODTracked",
-        primary_color: "#0F766E",
-        secondary_color: "#134E4A",
+        primary_color: "#F47A32",
+        secondary_color: "#F5661F",
         hide_codtracked_branding: false,
         metadata: { schema_version: 1 },
       });

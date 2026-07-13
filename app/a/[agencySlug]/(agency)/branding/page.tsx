@@ -25,13 +25,13 @@ export default async function AgencyBrandingPage({
   const whiteLabelAllowed = planAllowsWhiteLabel(limits);
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <SectionHeader
         title="Marca y white label"
-        description="Personalización visual. Ocultar branding CODTracked según plan."
+        description="Personaliza cómo se ve la plataforma para tu agencia. Los cambios se aplican en la consola y en todas tus tiendas."
       />
       <Card>
-        <CardContent>
+        <CardContent className="p-4 sm:p-5">
           <BrandingForm
             agencySlug={p.agencySlug}
             canEdit={canEdit}
