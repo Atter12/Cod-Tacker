@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   agencyBrandCssVars,
+  brandFaviconMetadata,
   findMatchingPalette,
   resolveAgencyBrandTheme,
   softTintFromPrimary,
@@ -36,6 +37,13 @@ describe("agency brand theme", () => {
     assert.equal(theme.logoUrl, "https://cdn.example/logo.png");
     assert.equal(theme.hideCodtrackedBranding, true);
     assert.equal(theme.isWhiteLabelEnabled, true);
+  });
+
+  it("builds favicon metadata with mime type", () => {
+    const icons = brandFaviconMetadata("https://cdn.example/mark.png?t=1");
+    assert.equal(icons?.icon[0]?.url, "https://cdn.example/mark.png?t=1");
+    assert.equal(icons?.icon[0]?.type, "image/png");
+    assert.equal(brandFaviconMetadata(null), undefined);
   });
 
   it("builds CSS vars from primary", () => {

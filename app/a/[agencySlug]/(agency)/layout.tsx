@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
+import { brandFaviconMetadata } from "@/lib/branding/theme";
 import { getAgencyBrandTheme } from "@/services/branding.service";
 
 export async function generateMetadata({
@@ -30,7 +31,7 @@ export async function generateMetadata({
       default: brand.productName,
       template: `%s · ${brand.productName}`,
     },
-    icons: brand.faviconUrl ? { icon: brand.faviconUrl } : undefined,
+    icons: brandFaviconMetadata(brand.faviconUrl),
   };
 }
 

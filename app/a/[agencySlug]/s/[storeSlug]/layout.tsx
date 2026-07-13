@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { brandFaviconMetadata } from "@/lib/branding/theme";
 import { getAgencyBrandTheme } from "@/services/branding.service";
 import { getStoreActiveAlertCount } from "@/services/dashboard.service";
 
@@ -30,7 +31,7 @@ export async function generateMetadata({
       default: brand.productName,
       template: `%s · ${brand.productName}`,
     },
-    icons: brand.faviconUrl ? { icon: brand.faviconUrl } : undefined,
+    icons: brandFaviconMetadata(brand.faviconUrl),
   };
 }
 

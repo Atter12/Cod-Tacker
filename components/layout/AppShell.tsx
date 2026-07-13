@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode } from "react";
 import type { Role } from "@/config/permissions";
+import { BrandFavicon } from "@/components/branding/BrandFavicon";
 import {
   agencyBrandCssVars,
   type AgencyBrandTheme,
@@ -44,6 +45,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-surface" style={brandStyle}>
+      <BrandFavicon href={brand?.faviconUrl} />
       <AppSidebar
         agencySlug={agencySlug}
         storeSlug={storeSlug}

@@ -121,3 +121,28 @@ export function brandInitialLetter(productName: string): string {
   if (!trimmed) return "C";
   return trimmed.charAt(0).toUpperCase();
 }
+
+/** Next.js Metadata `icons` for an agency favicon URL (Storage or absolute). */
+export function brandFaviconMetadata(faviconUrl: string | null | undefined): {
+  icon: { url: string; type?: string }[];
+  shortcut: string;
+  apple: string;
+} | undefined {
+  const url = faviconUrl?.trim();
+  if (!url) return undefined;
+  const lower = url.toLowerCase();
+  const type = lower.includes(".svg")
+    ? "image/svg+xml"
+    : lower.includes(".png")
+      ? "image/png"
+      : lower.includes(".webp")
+        ? "image/webp"
+        : lower.includes(".ico")
+          ? "image/x-icon"
+          : undefined;
+  return {
+    icon: [{ url, ...(type ? { type } : {}) }],
+    shortcut: url,
+    apple: url,
+  };
+}

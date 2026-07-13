@@ -358,6 +358,30 @@ export function BrandingForm({
               : `linear-gradient(145deg, ${form.primaryColor || "#F47A32"}, ${form.secondaryColor || "#F5661F"})`,
           }}
         >
+          <div className="flex items-center gap-2 border-b border-black/10 bg-surface-elevated/90 px-3 py-2 backdrop-blur-sm">
+            <div className="flex gap-1" aria-hidden>
+              <span className="size-2 rounded-full bg-black/15" />
+              <span className="size-2 rounded-full bg-black/15" />
+              <span className="size-2 rounded-full bg-black/15" />
+            </div>
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-muted/80 px-2 py-1">
+              {form.faviconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.faviconUrl} alt="" className="size-3.5 shrink-0 object-contain" />
+              ) : (
+                <span
+                  className="grid size-3.5 shrink-0 place-items-center rounded-[3px] text-[8px] font-bold text-white"
+                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                  aria-hidden
+                >
+                  {(form.productName || "C").charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="truncate text-[11px] text-text-secondary">
+                {form.productName || "CODTracked"}
+              </span>
+            </div>
+          </div>
           <div className="m-5 rounded-[10px] bg-surface-elevated/95 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-3">
               {form.logoUrl ? (
@@ -399,8 +423,8 @@ export function BrandingForm({
           </div>
         </div>
         <p className="text-[11.5px] leading-relaxed text-text-secondary">
-          Al guardar, colores y logo se aplican de inmediato en la consola de agencia y en todas
-          las tiendas de esta cuenta.
+          Al guardar, colores y logo se aplican de inmediato en la consola. El favicon aparece en la
+          pestaña del navegador (puede hacer falta un refresco duro si el navegador lo cachea).
         </p>
       </aside>
     </div>
