@@ -424,7 +424,10 @@ export function BrandingForm({
         </div>
         <p className="text-[11.5px] leading-relaxed text-text-secondary">
           Al guardar, colores y logo se aplican de inmediato en la consola. El favicon aparece en la
-          pestaña del navegador (puede hacer falta un refresco duro si el navegador lo cachea).
+          pestaña del navegador (puede hacer falta un refresco duro si el navegador lo cachea). El
+          fondo de login se ve en{" "}
+          <code className="text-[11px]">/login?agency=tu-slug</code> o al volver a entrar con{" "}
+          <code className="text-[11px]">?next=/a/tu-slug/…</code>.
         </p>
       </aside>
     </div>

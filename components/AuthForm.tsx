@@ -39,12 +39,15 @@ export function AuthForm({
   email: initialEmail = "",
   next,
   appearance = "default",
+  productName,
 }: {
   kind: Kind;
   email?: string;
   purpose?: OtpPurpose;
   next?: string;
   appearance?: Appearance;
+  /** White-label product name for login copy. */
+  productName?: string | null;
 }) {
   const [error, setError] = useState<string>();
   const [success, setSuccess] = useState<string>();
@@ -54,6 +57,7 @@ export function AuthForm({
   const [showPassword, setShowPassword] = useState(false);
   const title = copy[kind];
   const isLoginExperience = appearance === "login" && kind === "login";
+  const brandName = productName?.trim() || "CODTracked";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,7 +132,7 @@ export function AuthForm({
         </h1>
         {isLoginExperience ? (
           <p className="pt-1 text-[13.5px] leading-relaxed text-[#94A3B8]">
-            Accede a CODTracked y selecciona la tienda que vas a gestionar.
+            Accede a {brandName} y selecciona la tienda que vas a gestionar.
           </p>
         ) : title.description ? (
           <p className="text-sm text-text-secondary">{title.description}</p>
@@ -226,7 +230,7 @@ export function AuthForm({
           "Procesando…"
         ) : isLoginExperience ? (
           <>
-            Entrar a CODTracked
+            Entrar a {brandName}
             <ArrowRight className="size-4" aria-hidden />
           </>
         ) : (
