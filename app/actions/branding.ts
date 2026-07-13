@@ -21,6 +21,7 @@ import {
   type BrandAssetKind,
 } from "@/lib/branding/storage";
 import { getAgencyPlanLimits, planAllowsWhiteLabel } from "@/lib/billing/limits";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicEnv } from "@/config/env";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
@@ -32,6 +33,17 @@ export type BrandAssetUploadResult = ActionResult<{ url: string; kind: BrandAsse
 function assertBrandingManage(roles: readonly Role[]) {
   if (!can(roles, "branding.manage")) {
     throw new ValidationError("No tienes permiso para gestionar la marca.");
+  }
+}
+
+/** Service-role client after app-level authz (white_label_settings often lacks write RLS). */
+function brandingWriteClient() {
+  try {
+    return createAdminClient();
+  } catch {
+    throw new ValidationError(
+      "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor. Configúrala para guardar assets de marca.",
+    );
   }
 }
 
@@ -99,6 +111,7 @@ export async function updateAgencyBranding(
     assertBrandingManage(membership.roles);
 
     const client = await createClient();
+    const admin = brandingWriteClient();
     const limits = await getAgencyPlanLimits(client, membership.agencyId);
 
     if (input.hideCodtrackedBranding && !planAllowsWhiteLabel(limits)) {
@@ -125,11 +138,14 @@ export async function updateAgencyBranding(
       metadata: { schema_version: 1 } as Json,
     };
 
-    const { error } = await client.from("white_label_settings").upsert(row, { onConflict: "agency_id" });
-    if (error) throw error;
+    // Service role after app-level authz — table often lacks user write RLS in deployed DBs.
+    const { error } = await admin.from("white_label_settings").upsert(row, { onConflict: "agency_id" });
+    if (error) {
+      throw new ValidationError("No se pudo guardar la configuración de marca.");
+    }
 
     if (typeof input.isWhiteLabelEnabled === "boolean" || input.logoUrl !== undefined) {
-      await client
+      const { error: agencyError } = await admin
         .from("agencies")
         .update({
           ...(typeof input.isWhiteLabelEnabled === "boolean"
@@ -139,6 +155,9 @@ export async function updateAgencyBranding(
           updated_at: new Date().toISOString(),
         })
         .eq("id", membership.agencyId);
+      if (agencyError) {
+        throw new ValidationError("No se pudo actualizar el logo de la agencia.");
+      }
     }
 
     await writeAuditLog({
@@ -167,8 +186,8 @@ export async function restoreBrandingDefaults(agencySlug: string): Promise<Brand
     const membership = await requireAgencyAccess(agencySlug);
     assertBrandingManage(membership.roles);
 
-    const client = await createClient();
-    const { error } = await client.from("white_label_settings").upsert(
+    const admin = brandingWriteClient();
+    const { error } = await admin.from("white_label_settings").upsert(
       {
         agency_id: membership.agencyId,
         product_name: BRANDING_DEFAULTS.productName,
@@ -185,9 +204,11 @@ export async function restoreBrandingDefaults(agencySlug: string): Promise<Brand
       },
       { onConflict: "agency_id" },
     );
-    if (error) throw error;
+    if (error) {
+      throw new ValidationError("No se pudo restaurar la marca por defecto.");
+    }
 
-    await client
+    const { error: agencyError } = await admin
       .from("agencies")
       .update({
         is_white_label_enabled: false,
@@ -195,6 +216,9 @@ export async function restoreBrandingDefaults(agencySlug: string): Promise<Brand
         updated_at: new Date().toISOString(),
       })
       .eq("id", membership.agencyId);
+    if (agencyError) {
+      throw new ValidationError("No se pudo actualizar la agencia al restaurar marca.");
+    }
 
     await writeAuditLog({
       action: "branding_defaults_restored",
@@ -232,9 +256,10 @@ export async function uploadAgencyBrandAsset(
 
     const { bytes, contentType, ext } = await readUploadBytes(formData);
     const objectPath = brandAssetObjectPath(membership.agencyId, kind, ext);
-    const client = await createClient();
+    // Authz already enforced above; service role avoids missing Storage/table RLS gaps.
+    const admin = brandingWriteClient();
 
-    const upload = await client.storage.from(AGENCY_BRANDING_BUCKET).upload(objectPath, bytes, {
+    const upload = await admin.storage.from(AGENCY_BRANDING_BUCKET).upload(objectPath, bytes, {
       contentType,
       upsert: true,
       cacheControl: "3600",
@@ -252,7 +277,7 @@ export async function uploadAgencyBrandAsset(
     const column = brandAssetColumn(kind);
     const now = new Date().toISOString();
 
-    const { data: existing } = await client
+    const { data: existing } = await admin
       .from("white_label_settings")
       .select("agency_id")
       .eq("agency_id", membership.agencyId)
@@ -265,13 +290,15 @@ export async function uploadAgencyBrandAsset(
           : column === "favicon_url"
             ? { favicon_url: url, updated_at: now }
             : { login_background_url: url, updated_at: now };
-      const { error } = await client
+      const { error } = await admin
         .from("white_label_settings")
         .update(patch)
         .eq("agency_id", membership.agencyId);
-      if (error) throw error;
+      if (error) {
+        throw new ValidationError("La imagen se subió, pero no se pudo guardar la URL de marca.");
+      }
     } else {
-      const { error } = await client.from("white_label_settings").insert({
+      const { error } = await admin.from("white_label_settings").insert({
         agency_id: membership.agencyId,
         product_name: BRANDING_DEFAULTS.productName,
         primary_color: BRANDING_DEFAULTS.primaryColor,
@@ -281,14 +308,19 @@ export async function uploadAgencyBrandAsset(
         login_background_url: column === "login_background_url" ? url : null,
         metadata: { schema_version: 1 } as Json,
       });
-      if (error) throw error;
+      if (error) {
+        throw new ValidationError("La imagen se subió, pero no se pudo crear la configuración de marca.");
+      }
     }
 
     if (kind === "logo") {
-      await client
+      const { error: agencyError } = await admin
         .from("agencies")
         .update({ logo_url: url, updated_at: new Date().toISOString() })
         .eq("id", membership.agencyId);
+      if (agencyError) {
+        throw new ValidationError("La imagen se subió, pero no se pudo actualizar el logo de la agencia.");
+      }
     }
 
     await writeAuditLog({

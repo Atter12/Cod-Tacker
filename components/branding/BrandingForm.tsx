@@ -122,7 +122,7 @@ export function BrandingForm({
                 agencySlug={agencySlug}
                 kind="logo"
                 label="Logo"
-                hint="PNG o SVG transparente · se sube a Storage"
+                hint="PNG, JPEG, WebP o SVG · se sube a Storage"
                 value={form.logoUrl}
                 disabled={!canEdit || pending}
                 onUploaded={(url) => {
