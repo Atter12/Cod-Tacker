@@ -1,0 +1,169 @@
+import "server-only";
+
+import { encryptSecret, decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
+import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
+import { exchangeShopifyAccessToken } from "@/lib/integrations/shopify/oauth";
+import type { ShopifyOAuthStatePayload } from "@/lib/integrations/shopify/oauth-state";
+import { throwQueryError, type DatabaseClient } from "@/services/_shared";
+import type { Enums, Json } from "@/types/database.generated";
+import type { IntegrationRow } from "@/types/database";
+
+export async function completeShopifyOAuth(
+  client: DatabaseClient,
+  input: {
+    state: ShopifyOAuthStatePayload;
+    shop: string;
+    code: string;
+  },
+): Promise<IntegrationRow> {
+  const shop = assertShopifyShopDomain(input.shop);
+  if (shop !== input.state.shop) {
+    throw new Error("El dominio de la tienda no coincide con el inicio OAuth.");
+  }
+
+  const token = await exchangeShopifyAccessToken(shop, input.code);
+  const shopInfo = await fetchShopifyShopInfo(shop, token.access_token);
+  const secretRef = encryptSecret(token.access_token);
+  const scopes = token.scope
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const now = new Date().toISOString();
+
+  const existing = await client
+    .from("integrations")
+    .select("*")
+    .eq("agency_id", input.state.agencyId)
+    .eq("store_id", input.state.storeId)
+    .eq("provider", "shopify")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  throwQueryError(existing.error);
+
+  const payload = {
+    agency_id: input.state.agencyId,
+    store_id: input.state.storeId,
+    provider: "shopify" as Enums<"integration_provider">,
+    status: "connected" as const,
+    display_name: shopInfo.name || "Shopify",
+    external_account_id: shopInfo.id,
+    external_account_name: shopInfo.myshopifyDomain || shop,
+    secret_reference: secretRef,
+    scopes,
+    metadata: {
+      mode: "live",
+      shop_domain: shop,
+      currency_code: shopInfo.currencyCode,
+      shop_email: shopInfo.email,
+    } as Json,
+    settings: { shop_domain: shop } as Json,
+    connected_at: now,
+    connected_by: input.state.userId,
+    last_success_at: now,
+    last_error_at: null,
+    last_error_message: null,
+  };
+
+  let row: IntegrationRow;
+  if (existing.data) {
+    const updated = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.data.id)
+      .eq("agency_id", input.state.agencyId)
+      .eq("store_id", input.state.storeId)
+      .select()
+      .single();
+    throwQueryError(updated.error);
+    if (!updated.data) throw new Error("No se pudo actualizar la integración Shopify.");
+    row = updated.data;
+  } else {
+    const inserted = await client.from("integrations").insert(payload).select().single();
+    throwQueryError(inserted.error);
+    if (!inserted.data) throw new Error("No se pudo crear la integración Shopify.");
+    row = inserted.data;
+  }
+
+  await client
+    .from("stores")
+    .update({ shopify_shop_domain: shop, updated_at: now })
+    .eq("id", input.state.storeId)
+    .eq("agency_id", input.state.agencyId);
+
+  return row;
+}
+
+export async function testShopifyLiveConnection(
+  client: DatabaseClient,
+  agencyId: string,
+  storeId: string,
+): Promise<{ ok: boolean; shopName?: string; detail: string }> {
+  const { data, error } = await client
+    .from("integrations")
+    .select("*")
+    .eq("agency_id", agencyId)
+    .eq("store_id", storeId)
+    .eq("provider", "shopify")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  throwQueryError(error);
+
+  if (!data?.secret_reference || !isEncryptedSecretRef(data.secret_reference)) {
+    return { ok: false, detail: "No hay credencial Shopify cifrada. Conecta la tienda con OAuth." };
+  }
+
+  const settings = data.settings as { shop_domain?: string } | null;
+  const meta = data.metadata as { shop_domain?: string } | null;
+  const shop =
+    settings?.shop_domain ||
+    meta?.shop_domain ||
+    data.external_account_name ||
+    null;
+  if (!shop) {
+    return { ok: false, detail: "Falta el dominio de la tienda Shopify." };
+  }
+
+  try {
+    const token = decryptSecret(data.secret_reference);
+    const info = await fetchShopifyShopInfo(shop, token);
+    const now = new Date().toISOString();
+    await client
+      .from("integrations")
+      .update({
+        status: "connected",
+        last_success_at: now,
+        last_error_at: null,
+        last_error_message: null,
+        external_account_name: info.myshopifyDomain,
+        display_name: info.name,
+      })
+      .eq("id", data.id);
+
+    await client.from("integration_health_checks").insert({
+      agency_id: agencyId,
+      store_id: storeId,
+      integration_id: data.id,
+      status: "healthy",
+      latency_ms: null,
+      safe_message: `Conectado a ${info.name}`,
+      details: { shop: info.myshopifyDomain, name: info.name } as Json,
+    });
+
+    return { ok: true, shopName: info.name, detail: `Conectado a ${info.name}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error al consultar Shopify";
+    const now = new Date().toISOString();
+    await client
+      .from("integrations")
+      .update({
+        status: "error",
+        last_error_at: now,
+        last_error_message: message.slice(0, 500),
+      })
+      .eq("id", data.id);
+    return { ok: false, detail: message };
+  }
+}

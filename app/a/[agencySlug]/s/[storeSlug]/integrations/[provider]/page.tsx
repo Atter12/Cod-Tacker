@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
+import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import {
   Alert,
   DataTable,
@@ -16,6 +17,7 @@ import {
   labelSyncStatus,
   labelSyncType,
 } from "@/lib/integrations/catalog";
+import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { isDemoIntegrationMode } from "@/lib/integrations/registry";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -28,10 +30,13 @@ import {
 
 export default async function IntegrationDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ agencySlug: string; storeSlug: string; provider: string }>;
+  searchParams: Promise<{ shopify?: string; shopify_error?: string }>;
 }) {
   const p = await params;
+  const q = await searchParams;
   const member = await requireStoreAccess(p.agencySlug, p.storeSlug);
   if (!can(member.roles, "integrations.view")) {
     return <ErrorState title="Sin permiso" description="No puedes ver esta integración." />;
@@ -57,6 +62,11 @@ export default async function IntegrationDetailPage({
     : [];
   const demo = isDemoIntegrationMode() || Boolean((integration?.metadata as { demo?: boolean } | null)?.demo);
   const canManage = can(member.roles, "integrations.manage");
+  const shopifyLive = p.provider === "shopify" && isShopifyConfigured();
+  const shopDomain =
+    (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
+    (integration?.metadata as { shop_domain?: string } | null)?.shop_domain ||
+    "";
 
   return (
     <section className="space-y-5">
@@ -70,13 +80,30 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive ? <DemoModeBadge /> : null}
         />
       </div>
 
-      {demo ? (
+      {q.shopify === "connected" ? (
+        <Alert variant="success" title="Shopify conectado">
+          Autorización completa. El access token quedó cifrado para esta tienda.
+        </Alert>
+      ) : null}
+      {q.shopify_error ? (
+        <Alert variant="danger" title="Error de OAuth Shopify">
+          {q.shopify_error}
+        </Alert>
+      ) : null}
+
+      {demo && !shopifyLive ? (
         <Alert variant="info" title="Modo demostración">
           Esta conexión usa adaptadores mock. No se realizan llamadas a APIs externas.
+        </Alert>
+      ) : null}
+
+      {shopifyLive ? (
+        <Alert variant="info" title="Shopify live">
+          Credenciales de app configuradas. Puedes autorizar una tienda real vía OAuth.
         </Alert>
       ) : null}
 
@@ -117,12 +144,21 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
+      {shopifyLive && canManage ? (
+        <ShopifyConnectForm
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          defaultShop={shopDomain}
+        />
+      ) : null}
+
       <IntegrationActions
         agencySlug={p.agencySlug}
         storeSlug={p.storeSlug}
         provider={p.provider}
         canManage={canManage}
         connected={connected}
+        hideMockConnect={shopifyLive}
       />
 
       <div className="space-y-3">

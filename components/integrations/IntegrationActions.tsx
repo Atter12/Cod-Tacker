@@ -19,9 +19,25 @@ type Props = {
   provider: string;
   canManage: boolean;
   connected: boolean;
+  /** When true, hide mock-only connect (live Shopify OAuth UI is separate). */
+  hideMockConnect?: boolean;
 };
 
-export function IntegrationActions({ agencySlug, storeSlug, provider, canManage, connected }: Props) {
+export function IntegrationActions({
+  agencySlug,
+  storeSlug,
+  provider,
+  canManage,
+  connected,
+  hideMockConnect = false,
+}: {
+  agencySlug: string;
+  storeSlug: string;
+  provider: string;
+  canManage: boolean;
+  connected: boolean;
+  hideMockConnect?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +82,7 @@ export function IntegrationActions({ agencySlug, storeSlug, provider, canManage,
       ) : null}
       <div className="flex flex-wrap gap-2">
         {!connected ? (
+          hideMockConnect ? null : (
           <Button
             size="sm"
             disabled={pending}
@@ -75,6 +92,7 @@ export function IntegrationActions({ agencySlug, storeSlug, provider, canManage,
           >
             Conectar mock
           </Button>
+          )
         ) : (
           <>
             <Button

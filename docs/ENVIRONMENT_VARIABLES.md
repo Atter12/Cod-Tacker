@@ -17,6 +17,12 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `WEBHOOK_GLOBAL_SECRET` | Server only | Validates webhook sources. |
 | `INTEGRATION_MODE` | Server only | `mock` or `live`. Defaults to `mock` outside production; **required** when resolving providers in production. |
 | `MOCK_INTEGRATIONS_ENABLED` | Server only | `true`/`false`. When unset, follows `INTEGRATION_MODE===mock`. |
+| `SHOPIFY_CLIENT_ID` | Server only | Shopify app Client ID (global). |
+| `SHOPIFY_CLIENT_SECRET` | Server only | Shopify app Client Secret (global). Never `NEXT_PUBLIC_*`. |
+| `SHOPIFY_APP_URL` | Server only | Public app base URL (defaults to `NEXT_PUBLIC_APP_URL`). |
+| `SHOPIFY_REDIRECT_URI` | Server only | OAuth callback URL (defaults to `{APP_URL}/api/integrations/shopify/callback`). |
+| `SHOPIFY_API_VERSION` | Server only | Admin API version, e.g. `2026-07`. |
+| `SHOPIFY_SCOPES` | Server only | Comma-separated OAuth scopes. |
 | `ALLOW_JOB_WORKER` | Server / CLI only | Must be `true` to run `scripts/process-jobs.ts`. Cron endpoint uses secrets below instead. |
 | `SETTLEMENT_CSV_BUCKET` | Server only | Optional Supabase Storage bucket for CSV path metadata. If unset, Sprint 5 import processes rows server-side without storing the file body. |
 | `ALLOW_DEMO_SEED` | Seed CLI only | Must be `true` to run `npm run seed:demo`. |
