@@ -55,17 +55,31 @@ function parseHex(hex: string): { r: number; g: number; b: number } | null {
   };
 }
 
+function rgbToHex(rgb: { r: number; g: number; b: number }): string {
+  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
+  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`.toUpperCase();
+}
+
 /** Mix primary toward white for soft surfaces (light UI). */
 export function softTintFromPrimary(primary: string, amount = 0.88): string {
   const rgb = parseHex(primary);
   if (!rgb) return "#FFF2EA";
   const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
-  const toHex = (n: number) => n.toString(16).padStart(2, "0");
-  return `#${toHex(mix(rgb.r))}${toHex(mix(rgb.g))}${toHex(mix(rgb.b))}`.toUpperCase();
+  return rgbToHex({ r: mix(rgb.r), g: mix(rgb.g), b: mix(rgb.b) });
 }
 
 export function softerTintFromPrimary(primary: string): string {
   return softTintFromPrimary(primary, 0.94);
+}
+
+/** Four-step ramp for funnels / multi-series charts from the brand primary. */
+export function brandChartRamp(primary: string): [string, string, string, string] {
+  return [
+    softTintFromPrimary(primary, 0),
+    softTintFromPrimary(primary, 0.22),
+    softTintFromPrimary(primary, 0.42),
+    softTintFromPrimary(primary, 0.72),
+  ];
 }
 
 export function findMatchingPalette(
@@ -106,6 +120,7 @@ export function resolveAgencyBrandTheme(
 
 /** Inline CSS variables for AppShell — overrides theme tokens in scope. */
 export function agencyBrandCssVars(theme: AgencyBrandTheme): Record<string, string> {
+  const [c1, c2, c3, c4] = brandChartRamp(theme.primaryColor);
   return {
     "--brand-primary": theme.primaryColor,
     "--brand-secondary": theme.secondaryColor,
@@ -113,6 +128,13 @@ export function agencyBrandCssVars(theme: AgencyBrandTheme): Record<string, stri
     "--brand-soft": softTintFromPrimary(theme.primaryColor),
     "--brand-softer": softerTintFromPrimary(theme.primaryColor),
     "--ring": theme.primaryColor,
+    // Recharts + funnel colors inherit via CSS vars
+    "--chart-1": c1,
+    "--chart-2": theme.secondaryColor,
+    "--chart-3": c3,
+    "--chart-4": c4,
+    // Keep a mid primary tint available for ramps that need 4 steps of one hue
+    "--chart-ramp-2": c2,
   };
 }
 

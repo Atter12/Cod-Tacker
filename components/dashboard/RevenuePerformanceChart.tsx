@@ -15,6 +15,11 @@ import {
 } from "recharts";
 import { Tooltip as UiTooltip } from "@/components/ui/Tooltip";
 import { formatCurrency } from "@/lib/formatting/currency";
+import {
+  chartLineCursor,
+  chartTooltipContentStyle,
+  chartTooltipLabelStyle,
+} from "@/lib/charts/recharts-tooltip";
 import { cn } from "@/lib/utils/cn";
 import type { DashboardTimeSeriesPoint } from "@/types/dashboard";
 
@@ -192,13 +197,9 @@ export function RevenuePerformanceChart({
               width={36}
             />
             <Tooltip
-              contentStyle={{
-                background: "var(--surface-elevated)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                boxShadow: "var(--card-shadow)",
-                fontSize: 12,
-              }}
+              cursor={chartLineCursor}
+              contentStyle={chartTooltipContentStyle}
+              labelStyle={chartTooltipLabelStyle}
               formatter={(value, name) => {
                 const numeric = typeof value === "number" ? value : Number(value ?? 0);
                 if (name === "cashCollected") {
@@ -238,7 +239,7 @@ export function RevenuePerformanceChart({
               yAxisId="orders"
               type="monotone"
               dataKey="ordersGenerated"
-              stroke="var(--chart-2)"
+              stroke="var(--brand-secondary)"
               strokeWidth={1.8}
               strokeDasharray="5 4"
               dot={false}

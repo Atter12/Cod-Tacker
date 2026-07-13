@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   agencyBrandCssVars,
+  brandChartRamp,
   brandFaviconMetadata,
   findMatchingPalette,
   resolveAgencyBrandTheme,
@@ -46,10 +47,19 @@ describe("agency brand theme", () => {
     assert.equal(brandFaviconMetadata(null), undefined);
   });
 
-  it("builds CSS vars from primary", () => {
-    const theme = resolveAgencyBrandTheme(null, null);
+  it("builds CSS vars including chart ramp from primary", () => {
+    const theme = resolveAgencyBrandTheme(
+      {
+        primary_color: "#7C3AED",
+        secondary_color: "#5B21B6",
+      } as WhiteLabelSettingsRow,
+      null,
+    );
     const vars = agencyBrandCssVars(theme);
-    assert.equal(vars["--brand-primary"], theme.primaryColor);
+    assert.equal(vars["--brand-primary"], "#7C3AED");
+    assert.equal(vars["--chart-1"], "#7C3AED");
+    assert.equal(vars["--chart-2"], "#5B21B6");
+    assert.equal(vars["--chart-3"], brandChartRamp("#7C3AED")[2]);
     assert.match(softTintFromPrimary("#F47A32"), /^#[0-9A-F]{6}$/);
   });
 

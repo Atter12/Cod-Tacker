@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils/cn";
 import type { DashboardFunnel, MetricComparison } from "@/types/dashboard";
 
 const STEPS = [
-  { key: "generated" as const, label: "Pedidos generados", color: "#FF671D", width: "100%" },
-  { key: "confirmed" as const, label: "Confirmados", color: "#FF8645", width: "88%" },
-  { key: "delivered" as const, label: "Entregados", color: "#FFA66F", width: "74%" },
-  { key: "returned" as const, label: "Devueltos", color: "#F8D6C6", width: "58%" },
+  { key: "generated" as const, label: "Pedidos generados", color: "var(--chart-1)", width: "100%" },
+  { key: "confirmed" as const, label: "Confirmados", color: "var(--chart-ramp-2)", width: "88%" },
+  { key: "delivered" as const, label: "Entregados", color: "var(--chart-3)", width: "74%" },
+  { key: "returned" as const, label: "Devueltos", color: "var(--chart-4)", width: "58%" },
 ];
 
 function percentOf(value: number, base: number): string {
