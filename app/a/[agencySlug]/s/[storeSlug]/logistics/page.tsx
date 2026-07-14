@@ -87,6 +87,8 @@ export default async function LogisticsPage({
   }
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
+  const filtersActive = Boolean(status || q || rto != null || terminal != null || from || to);
+  const integrationsHref = routes.store.integrations(p.agencySlug, p.storeSlug);
   const buildPageHref = (page: number) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(sp)) {
@@ -99,7 +101,16 @@ export default async function LogisticsPage({
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
+      <div className="flex flex-wrap items-center gap-2">
+        <DemoModeBadge />
+        <p className="text-[12.5px] text-text-secondary">
+          Los carriers live aún no están activos; conecta Enviame u otro proveedor en{" "}
+          <Link href={integrationsHref} className="font-medium text-brand-primary hover:underline">
+            Integraciones
+          </Link>
+          .
+        </p>
+      </div>
       <SectionHeader title="Logística" description={`${result.total} envío(s) en la tienda.`} />
       <Suspense fallback={<Skeleton className="h-32 w-full" />}>
         <LogisticsFiltersForm
@@ -114,7 +125,18 @@ export default async function LogisticsPage({
         />
       </Suspense>
       {result.data.length === 0 ? (
-        <EmptyState title="Sin envíos" description="No hay envíos con los filtros actuales." />
+        filtersActive ? (
+          <EmptyState
+            title="Sin envíos"
+            description="No hay envíos con los filtros actuales. Prueba limpiar o ampliar el rango."
+          />
+        ) : (
+          <EmptyState
+            title="Aún no hay envíos"
+            description="Conecta un proveedor logístico para sincronizar guías, o genera envíos mock desde Integraciones (Enviame / custom carrier) para probar el embudo de entrega y devolución."
+            action={{ label: "Ir a Integraciones", href: integrationsHref }}
+          />
+        )
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
           <DataTable
