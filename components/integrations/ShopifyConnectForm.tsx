@@ -20,10 +20,12 @@ export function ShopifyConnectForm({
   const router = useRouter();
   const [shop, setShop] = useState(defaultShop);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   function connect() {
     setError(null);
+    setSuccess(null);
     const trimmed = shop.trim();
     if (!trimmed) {
       setError("Ingresa el dominio de tu tienda Shopify.");
@@ -40,17 +42,24 @@ export function ShopifyConnectForm({
 
   function testLive() {
     setError(null);
+    setSuccess(null);
     start(async () => {
       const res = await fetch("/api/integrations/shopify/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agencySlug, storeSlug }),
       });
-      const data = (await res.json()) as { ok?: boolean; detail?: string; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        detail?: string;
+        error?: string;
+        shopName?: string;
+      };
       if (!res.ok || !data.ok) {
         setError(data.detail || data.error || "La prueba GraphQL falló.");
         return;
       }
+      setSuccess(data.detail || `Conectado a ${data.shopName ?? "Shopify"}.`);
       router.refresh();
     });
   }
@@ -64,6 +73,11 @@ export function ShopifyConnectForm({
       {error ? (
         <Alert variant="danger" title="Shopify">
           {error}
+        </Alert>
+      ) : null}
+      {success ? (
+        <Alert variant="success" title="GraphQL OK">
+          {success}
         </Alert>
       ) : null}
       <FormField label="Dominio de la tienda" htmlFor="shopify-shop">
@@ -80,7 +94,7 @@ export function ShopifyConnectForm({
           {pending ? "Redirigiendo…" : "Conectar Shopify"}
         </Button>
         <Button size="sm" variant="outline" disabled={disabled || pending} onClick={testLive}>
-          Probar GraphQL
+          {pending ? "Probando…" : "Probar GraphQL"}
         </Button>
       </div>
     </div>

@@ -48,17 +48,34 @@ export async function startShopifyOAuth(input: {
     );
   }
 
-  const state = createShopifyOAuthState({
-    agencyId: match.agencyId,
-    storeId: match.storeId,
-    userId: user.id,
-    shop,
-    agencySlug: input.agencySlug,
-    storeSlug: input.storeSlug,
-  });
-
-  const authorizeUrl = buildShopifyAuthorizeUrl(shop, state);
-  return Response.redirect(authorizeUrl, 302);
+  try {
+    const state = createShopifyOAuthState({
+      agencyId: match.agencyId,
+      storeId: match.storeId,
+      userId: user.id,
+      shop,
+      agencySlug: input.agencySlug,
+      storeSlug: input.storeSlug,
+    });
+    const authorizeUrl = buildShopifyAuthorizeUrl(shop, state);
+    return Response.redirect(authorizeUrl, 302);
+  } catch (err) {
+    const message =
+      err instanceof Error && /ENCRYPTION_KEY/i.test(err.message)
+        ? "Falta ENCRYPTION_KEY en el entorno del servidor. Agrégala en Vercel y redeploy."
+        : err instanceof Error
+          ? err.message
+          : "No se pudo iniciar OAuth de Shopify.";
+    return Response.redirect(
+      new URL(
+        shopifyIntegrationsReturnUrl(input.agencySlug, input.storeSlug, {
+          shopify_error: message,
+        }),
+        input.requestUrl,
+      ),
+      302,
+    );
+  }
 }
 
 export function shopifyIntegrationsReturnUrl(
