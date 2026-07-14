@@ -26,6 +26,7 @@ export const shopifyOrderUpdatedPayloadSchema = z.object({
   order_status: z.enum(ORDER_STATUSES).optional(),
   total_amount: z.number().nonnegative().optional(),
   demo_seed: z.string().min(1).max(200).optional(),
+  mode: z.enum(["mock", "live"]).optional(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {
@@ -83,6 +84,7 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
     };
   }
 
+  const live = data.mode === "live" || job.job_type === "shopify.order.updated";
   const patch: {
     order_status?: (typeof ORDER_STATUSES)[number];
     total_amount?: number;
@@ -93,7 +95,8 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       ...meta,
       last_update_seed: data.demo_seed ?? null,
       last_job_id: job.id,
-      event: "shopify.order.updated.mock",
+      event: live ? "shopify.order.updated" : "shopify.order.updated.mock",
+      mode: live ? "live" : "mock",
     } as Json,
   };
   if (data.order_status) patch.order_status = data.order_status;
@@ -110,7 +113,7 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
     .select("id")
     .single();
   if (update.error || !update.data) {
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el pedido mock.");
+    throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el pedido Shopify.");
   }
 
   if (data.order_status && data.order_status !== existing.data.order_status) {
@@ -120,9 +123,11 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       previous_status: existing.data.order_status,
       new_status: data.order_status,
       occurred_at: new Date().toISOString(),
-      reason_code: "jobs_mock_update",
-      reason_detail: "Actualización mock desde jobs processor",
-      metadata: { job_id: job.id, demo: true } as Json,
+      reason_code: live ? "jobs_shopify_update" : "jobs_mock_update",
+      reason_detail: live
+        ? "Actualización Shopify desde jobs processor"
+        : "Actualización mock desde jobs processor",
+      metadata: { job_id: job.id, demo: !live, mode: live ? "live" : "mock" } as Json,
     });
   }
 

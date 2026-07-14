@@ -31,13 +31,45 @@ function authorize(request: Request): boolean {
  *
  * Uses the Supabase service role to claim and process jobs.
  * Rate-limited in-memory: 30 requests / minute per secret fingerprint.
+ * Vercel Cron invokes GET; manual ops can POST with a JSON body.
  */
+export async function GET(request: Request) {
+  return processJobsRequest(request, { recover: true });
+}
+
 export async function POST(request: Request) {
+  let limit = 10;
+  let queue = "default";
+  let recover = false;
+  try {
+    const body = (await request.json().catch(() => null)) as {
+      limit?: number;
+      queue?: string;
+      recover?: boolean;
+    } | null;
+    if (body?.limit && Number.isFinite(body.limit)) {
+      limit = Math.min(Math.max(Math.floor(body.limit), 1), 50);
+    }
+    if (typeof body?.queue === "string" && body.queue.trim()) {
+      queue = body.queue.trim();
+    }
+    recover = Boolean(body?.recover);
+  } catch {
+    // empty body is fine
+  }
+  return processJobsRequest(request, { limit, queue, recover });
+}
+
+async function processJobsRequest(
+  request: Request,
+  options: { limit?: number; queue?: string; recover?: boolean },
+) {
   const ctx = createRequestContext({
     request_id: request.headers.get("x-request-id") ?? undefined,
   });
 
   if (!authorize(request)) {
+    // Vercel Cron sends Authorization: Bearer <CRON_SECRET> automatically when CRON_SECRET is set.
     logger.warn("jobs.process.unauthorized", { ...ctx });
     return Response.json({ error: "Unauthorized", request_id: ctx.request_id }, { status: 401 });
   }
@@ -59,25 +91,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let limit = 10;
-  let queue = "default";
-  let recover = false;
-  try {
-    const body = (await request.json().catch(() => null)) as {
-      limit?: number;
-      queue?: string;
-      recover?: boolean;
-    } | null;
-    if (body?.limit && Number.isFinite(body.limit)) {
-      limit = Math.min(Math.max(Math.floor(body.limit), 1), 50);
-    }
-    if (typeof body?.queue === "string" && body.queue.trim()) {
-      queue = body.queue.trim();
-    }
-    recover = Boolean(body?.recover);
-  } catch {
-    // empty body is fine
-  }
+  const limit = options.limit ?? 10;
+  const queue = options.queue ?? "default";
+  const recover = Boolean(options.recover);
 
   const admin = createAdminClient();
   const workerId = `http:${Date.now()}`;

@@ -27,11 +27,13 @@ import {
   getCommerceProvider,
   getMessagingProvider,
   getSettlementProvider,
+  getIntegrationRuntimeMode,
   isDemoIntegrationMode,
 } from "@/lib/integrations/registry";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
+import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   IntegrationHealthCheckRow,
@@ -54,6 +56,17 @@ function assertStoreScope(agencyId: string, storeId: string) {
     agencyId: requireValue(agencyId, "Agencia inválida."),
     storeId: requireValue(storeId, "Tienda inválida."),
   };
+}
+
+function shopDomainFromIntegration(integration: IntegrationRow): string | null {
+  const settings = integration.settings as { shop_domain?: string } | null;
+  const meta = integration.metadata as { shop_domain?: string } | null;
+  return (
+    settings?.shop_domain ||
+    meta?.shop_domain ||
+    integration.external_account_name ||
+    null
+  );
 }
 
 export function resolveStoreProvider(provider: string): SyncAdapter {
@@ -125,6 +138,31 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
     default:
       throw new ValidationError("Proveedor de integración no soportado.");
   }
+}
+
+/** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify). */
+export function resolveStoreProviderForIntegration(
+  provider: string,
+  integration: IntegrationRow,
+): SyncAdapter {
+  if (provider === "shopify" && getIntegrationRuntimeMode() === "live") {
+    const shop = shopDomainFromIntegration(integration);
+    if (!shop || !isEncryptedSecretRef(integration.secret_reference)) {
+      throw new IntegrationError(
+        "Shopify live requiere OAuth con token cifrado. Usa Conectar Shopify.",
+      );
+    }
+    const accessToken = decryptSecret(integration.secret_reference!);
+    const adapter = getCommerceProvider("shopify", { shopDomain: shop, accessToken });
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  return resolveStoreProvider(provider);
 }
 
 function mapHealthStatus(status: ProviderHealthResult["status"]): HealthCheckStatus {
@@ -402,7 +440,7 @@ export async function testConnection(
     throw new ValidationError("La integración está desconectada.");
   }
 
-  const adapter = resolveStoreProvider(provider);
+  const adapter = resolveStoreProviderForIntegration(provider, integration);
   const health = await adapter.health();
   const status = mapHealthStatus(health.status);
   const result = await client
@@ -463,6 +501,7 @@ async function runSync(
   }
 
   const startedAt = new Date().toISOString();
+  const runtimeMode = getIntegrationRuntimeMode();
   const insertRun = await client
     .from("sync_runs")
     .insert({
@@ -475,7 +514,10 @@ async function runSync(
       status: "running",
       started_at: startedAt,
       created_by: input.userId,
-      metadata: { demo: true, mode: "mock" } as Json,
+      metadata: {
+        demo: runtimeMode === "mock",
+        mode: runtimeMode,
+      } as Json,
     })
     .select()
     .single();
@@ -483,10 +525,10 @@ async function runSync(
   if (!insertRun.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo iniciar la sincronización.");
 
   const run = insertRun.data;
-  const adapter = resolveStoreProvider(input.provider);
   const syncKind = input.syncType === "backfill" ? "historical" : "incremental";
 
   try {
+    const adapter = resolveStoreProviderForIntegration(input.provider, integration);
     const syncResult = await adapter.sync({ kind: syncKind });
     const finishedAt = new Date().toISOString();
 
@@ -520,6 +562,7 @@ async function runSync(
       return failed.data;
     }
 
+    const liveEnqueues = syncResult.enqueues ?? [];
     const items: Array<{
       sync_run_id: string;
       entity_type: string;
@@ -529,48 +572,68 @@ async function runSync(
       metadata: Json;
     }> = [];
     const entityType = getCatalogEntry(input.provider)?.kind ?? "integration";
-    for (let i = 0; i < Math.min(syncResult.inserted, 5); i += 1) {
-      items.push({
-        sync_run_id: run.id,
-        entity_type: entityType,
-        external_id: `mock-${input.provider}-${i + 1}`,
-        status: "ok",
-        action: "created",
-        metadata: { demo: true } as Json,
-      });
-    }
-    for (let i = 0; i < Math.min(syncResult.updated, 3); i += 1) {
-      items.push({
-        sync_run_id: run.id,
-        entity_type: entityType,
-        external_id: `mock-${input.provider}-upd-${i + 1}`,
-        status: "ok",
-        action: "updated",
-        metadata: { demo: true } as Json,
-      });
-    }
-    for (let i = 0; i < Math.min(syncResult.duplicates, 2); i += 1) {
-      items.push({
-        sync_run_id: run.id,
-        entity_type: entityType,
-        external_id: `mock-${input.provider}-dup-${i + 1}`,
-        status: "skipped",
-        action: "skipped",
-        metadata: { demo: true, reason: "duplicate" } as Json,
-      });
+    if (liveEnqueues.length) {
+      for (const item of liveEnqueues.slice(0, 40)) {
+        items.push({
+          sync_run_id: run.id,
+          entity_type: entityType,
+          external_id: item.externalId,
+          status: "ok",
+          action: item.action,
+          metadata: { demo: false, mode: "live" } as Json,
+        });
+      }
+    } else {
+      for (let i = 0; i < Math.min(syncResult.inserted, 5); i += 1) {
+        items.push({
+          sync_run_id: run.id,
+          entity_type: entityType,
+          external_id: `mock-${input.provider}-${i + 1}`,
+          status: "ok",
+          action: "created",
+          metadata: { demo: true } as Json,
+        });
+      }
+      for (let i = 0; i < Math.min(syncResult.updated, 3); i += 1) {
+        items.push({
+          sync_run_id: run.id,
+          entity_type: entityType,
+          external_id: `mock-${input.provider}-upd-${i + 1}`,
+          status: "ok",
+          action: "updated",
+          metadata: { demo: true } as Json,
+        });
+      }
+      for (let i = 0; i < Math.min(syncResult.duplicates, 2); i += 1) {
+        items.push({
+          sync_run_id: run.id,
+          entity_type: entityType,
+          external_id: `mock-${input.provider}-dup-${i + 1}`,
+          status: "skipped",
+          action: "skipped",
+          metadata: { demo: true, reason: "duplicate" } as Json,
+        });
+      }
     }
     if (items.length) {
       const itemsResult = await client.from("sync_run_items").insert(items);
       throwQueryError(itemsResult.error);
     }
 
-    // Enqueue domain jobs via service role (processor claim/write path). Keep sync_run_items as telemetry.
-    const enqueueSpecs = buildSyncEnqueueSpecs({
-      provider: input.provider,
-      syncRunId: run.id,
-      inserted: syncResult.inserted,
-      updated: syncResult.updated,
-    });
+    // Enqueue domain jobs via service role (processor claim/write path).
+    const enqueueSpecs = liveEnqueues.length
+      ? liveEnqueues.map((e) => ({
+          eventType: e.eventType,
+          jobType: e.jobType,
+          action: e.action,
+          payload: e.payload as Json,
+        }))
+      : buildSyncEnqueueSpecs({
+          provider: input.provider,
+          syncRunId: run.id,
+          inserted: syncResult.inserted,
+          updated: syncResult.updated,
+        });
     if (enqueueSpecs.length) {
       const admin = createAdminClient();
       for (let i = 0; i < enqueueSpecs.length; i += 1) {
@@ -635,7 +698,8 @@ async function runSync(
   } catch (error) {
     if (error instanceof AppError) throw error;
     const finishedAt = new Date().toISOString();
-    const safeMessage = "No se pudo completar la sincronización.";
+    const safeMessage =
+      error instanceof Error ? error.message.slice(0, 300) : "No se pudo completar la sincronización.";
     await client
       .from("sync_runs")
       .update({

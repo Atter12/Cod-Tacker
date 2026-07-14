@@ -17,6 +17,10 @@ import {
   createMockMessagingProvider,
   createMockSettlementProvider,
 } from "@/lib/integrations/mock";
+import {
+  createLiveCommerceProvider,
+  type LiveShopifyCredentials,
+} from "@/lib/integrations/shopify/live-commerce";
 
 export type ProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -24,14 +28,15 @@ function assertMockAllowed(mode: IntegrationMode): void {
   if (mode === "mock" && !areMockIntegrationsEnabled()) {
     throw new Error("Mock integrations are disabled (MOCK_INTEGRATIONS_ENABLED=false).");
   }
-  if (mode === "live") {
-    throw new Error(
-      "Live provider adapters are not configured in this environment. Set INTEGRATION_MODE=mock for demonstration.",
-    );
-  }
 }
 
-/** Factory/registry: selects mock adapters via server-only configuration. No fake live adapters. */
+function assertLiveProviderConfigured(kind: ProviderKind): never {
+  throw new Error(
+    `Live ${kind} adapter is not configured. Shopify live is supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+  );
+}
+
+/** Factory/registry: mock by default; Shopify commerce supports live credentials. */
 export function getIntegrationRuntimeMode(): IntegrationMode {
   return resolveIntegrationMode();
 }
@@ -42,14 +47,27 @@ export function isDemoIntegrationMode(): boolean {
 
 export function getCommerceProvider(
   providerId: CommerceProvider["providerId"] = "shopify",
+  liveCreds?: LiveShopifyCredentials,
 ): CommerceProvider {
   const mode = resolveIntegrationMode();
+  if (mode === "live") {
+    if (providerId !== "shopify") {
+      assertLiveProviderConfigured("commerce");
+    }
+    if (!liveCreds?.shopDomain || !liveCreds?.accessToken) {
+      throw new Error(
+        "Shopify live requiere dominio y access token cifrado. Reconecta la tienda vía OAuth.",
+      );
+    }
+    return createLiveCommerceProvider(providerId, liveCreds);
+  }
   assertMockAllowed(mode);
   return createMockCommerceProvider(providerId);
 }
 
 export function getAdsProvider(providerId: AdsProvider["providerId"] = "meta"): AdsProvider {
   const mode = resolveIntegrationMode();
+  if (mode === "live") assertLiveProviderConfigured("ads");
   assertMockAllowed(mode);
   return createMockAdsProvider(providerId);
 }
@@ -58,6 +76,7 @@ export function getCarrierProvider(
   providerId: CarrierProvider["providerId"] = "enviame",
 ): CarrierProvider {
   const mode = resolveIntegrationMode();
+  if (mode === "live") assertLiveProviderConfigured("carrier");
   assertMockAllowed(mode);
   return createMockCarrierProvider(providerId);
 }
@@ -66,6 +85,7 @@ export function getMessagingProvider(
   providerId: MessagingProvider["providerId"] = "whatsapp",
 ): MessagingProvider {
   const mode = resolveIntegrationMode();
+  if (mode === "live") assertLiveProviderConfigured("messaging");
   assertMockAllowed(mode);
   return createMockMessagingProvider(providerId);
 }
@@ -74,6 +94,7 @@ export function getSettlementProvider(
   providerId: SettlementProvider["providerId"] = "custom_payment",
 ): SettlementProvider {
   const mode = resolveIntegrationMode();
+  if (mode === "live") assertLiveProviderConfigured("settlement");
   assertMockAllowed(mode);
   return createMockSettlementProvider(providerId);
 }

@@ -11,6 +11,8 @@ import { handlePrivacyDataExport } from "@/lib/jobs/handlers/privacy-data-export
 import type { JobHandler } from "@/lib/jobs/types";
 
 export const JOB_TYPES = [
+  "shopify.order.created",
+  "shopify.order.updated",
   "shopify.order.created.mock",
   "shopify.order.updated.mock",
   "ads.spend.synced.mock",
@@ -26,6 +28,8 @@ export const JOB_TYPES = [
 export type KnownJobType = (typeof JOB_TYPES)[number];
 
 const registry: Record<KnownJobType, JobHandler> = {
+  "shopify.order.created": handleShopifyOrderCreated,
+  "shopify.order.updated": handleShopifyOrderUpdated,
   "shopify.order.created.mock": handleShopifyOrderCreated,
   "shopify.order.updated.mock": handleShopifyOrderUpdated,
   "ads.spend.synced.mock": handleAdsSpendSynced,

@@ -68,6 +68,15 @@ export type ProviderSyncInput = {
   scenario?: MockScenario;
 };
 
+/** Optional domain events produced by a live sync for enqueue into jobs. */
+export type ProviderSyncEnqueueItem = {
+  externalId: string;
+  action: "created" | "updated";
+  eventType: string;
+  jobType: string;
+  payload: Record<string, unknown>;
+};
+
 export type ProviderSyncResult =
   | {
       ok: true;
@@ -79,6 +88,8 @@ export type ProviderSyncResult =
       nextCursor: string | null;
       durationMs: number;
       demo: boolean;
+      /** When set, runSync enqueues these instead of mock `buildSyncEnqueueSpecs`. */
+      enqueues?: ProviderSyncEnqueueItem[];
     }
   | {
       ok: false;

@@ -23,6 +23,7 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `SHOPIFY_REDIRECT_URI` | Server only | OAuth callback URL (defaults to `{APP_URL}/api/integrations/shopify/callback`). |
 | `SHOPIFY_API_VERSION` | Server only | Admin API version, e.g. `2026-07`. |
 | `SHOPIFY_SCOPES` | Server only | Comma-separated OAuth scopes. |
+| `SHOPIFY_APP_URL` webhook path | — | Live order webhooks POST to `{SHOPIFY_APP_URL}/api/integrations/shopify/webhooks`. |
 | `ALLOW_JOB_WORKER` | Server / CLI only | Must be `true` to run `scripts/process-jobs.ts`. Cron endpoint uses secrets below instead. |
 | `SETTLEMENT_CSV_BUCKET` | Server only | Optional Supabase Storage bucket for CSV path metadata. If unset, Sprint 5 import processes rows server-side without storing the file body. |
 | `ALLOW_DEMO_SEED` | Seed CLI only | Must be `true` to run `npm run seed:demo`. |

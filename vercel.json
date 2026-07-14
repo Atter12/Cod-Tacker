@@ -1,1 +1,9 @@
-{"framework":"nextjs"}
+{
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/internal/jobs/process",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

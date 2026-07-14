@@ -5,6 +5,7 @@ import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { exchangeShopifyAccessToken } from "@/lib/integrations/shopify/oauth";
 import type { ShopifyOAuthStatePayload } from "@/lib/integrations/shopify/oauth-state";
+import { registerShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
 import { throwQueryError, type DatabaseClient } from "@/services/_shared";
 import type { Enums, Json } from "@/types/database.generated";
 import type { IntegrationRow } from "@/types/database";
@@ -91,6 +92,52 @@ export async function completeShopifyOAuth(
     .update({ shopify_shop_domain: shop, updated_at: now })
     .eq("id", input.state.storeId)
     .eq("agency_id", input.state.agencyId);
+
+  // Register HTTPS order webhooks (soft-fail: OAuth remains valid if Shopify rejects topics).
+  try {
+    const registration = await registerShopifyOrderWebhooks(shop, token.access_token);
+    const webhookMeta = {
+      ...(typeof row.metadata === "object" && row.metadata && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {}),
+      mode: "live",
+      shop_domain: shop,
+      webhooks: {
+        callback_uri: registration.callbackUri,
+        registered_at: new Date().toISOString(),
+        results: registration.results,
+      },
+    } as Json;
+    const patched = await client
+      .from("integrations")
+      .update({ metadata: webhookMeta })
+      .eq("id", row.id)
+      .eq("store_id", input.state.storeId)
+      .select()
+      .single();
+    throwQueryError(patched.error);
+    if (patched.data) row = patched.data;
+  } catch (err) {
+    const webhookMeta = {
+      ...(typeof row.metadata === "object" && row.metadata && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {}),
+      mode: "live",
+      shop_domain: shop,
+      webhooks: {
+        registered_at: new Date().toISOString(),
+        error: err instanceof Error ? err.message.slice(0, 300) : "webhook_register_failed",
+      },
+    } as Json;
+    const patched = await client
+      .from("integrations")
+      .update({ metadata: webhookMeta })
+      .eq("id", row.id)
+      .eq("store_id", input.state.storeId)
+      .select()
+      .single();
+    if (!patched.error && patched.data) row = patched.data;
+  }
 
   return row;
 }
