@@ -443,7 +443,9 @@ export async function testConnection(
   const adapter = resolveStoreProviderForIntegration(provider, integration);
   const health = await adapter.health();
   const status = mapHealthStatus(health.status);
-  const result = await client
+  // Writes via service role after caller already authorized integrations.manage.
+  const admin = createAdminClient();
+  const result = await admin
     .from("integration_health_checks")
     .insert({
       agency_id: scope.agencyId,
@@ -474,7 +476,7 @@ export async function testConnection(
           last_error_message: health.message,
         };
 
-  await client
+  await admin
     .from("integrations")
     .update(integrationPatch)
     .eq("id", integration.id)
@@ -500,9 +502,11 @@ async function runSync(
     throw new ValidationError("La integración está desconectada.");
   }
 
+  // Sync row/item writes use service role after the caller authorized integrations.manage.
+  const db = createAdminClient();
   const startedAt = new Date().toISOString();
   const runtimeMode = getIntegrationRuntimeMode();
-  const insertRun = await client
+  const insertRun = await db
     .from("sync_runs")
     .insert({
       agency_id: scope.agencyId,
@@ -533,7 +537,7 @@ async function runSync(
     const finishedAt = new Date().toISOString();
 
     if (!syncResult.ok) {
-      const failed = await client
+      const failed = await db
         .from("sync_runs")
         .update({
           status: "failed",
@@ -548,7 +552,7 @@ async function runSync(
         .single();
       throwQueryError(failed.error);
 
-      await client
+      await db
         .from("integrations")
         .update({
           status: "error",
@@ -616,7 +620,7 @@ async function runSync(
       }
     }
     if (items.length) {
-      const itemsResult = await client.from("sync_run_items").insert(items);
+      const itemsResult = await db.from("sync_run_items").insert(items);
       throwQueryError(itemsResult.error);
     }
 
@@ -635,10 +639,9 @@ async function runSync(
           updated: syncResult.updated,
         });
     if (enqueueSpecs.length) {
-      const admin = createAdminClient();
       for (let i = 0; i < enqueueSpecs.length; i += 1) {
         const spec = enqueueSpecs[i]!;
-        await enqueueRawEventAndJob(admin, {
+        await enqueueRawEventAndJob(db, {
           agencyId: scope.agencyId,
           storeId: scope.storeId,
           provider: input.provider as Enums<"integration_provider">,
@@ -658,7 +661,7 @@ async function runSync(
       }
     }
 
-    const completed = await client
+    const completed = await db
       .from("sync_runs")
       .update({
         status: "completed",
@@ -682,7 +685,7 @@ async function runSync(
       .single();
     throwQueryError(completed.error);
 
-    await client
+    await db
       .from("integrations")
       .update({
         status: "connected",
@@ -703,7 +706,7 @@ async function runSync(
         : error instanceof Error
           ? error.message.slice(0, 300)
           : "No se pudo completar la sincronización.";
-    await client
+    await db
       .from("sync_runs")
       .update({
         status: "failed",
@@ -714,7 +717,7 @@ async function runSync(
       })
       .eq("id", run.id)
       .eq("store_id", scope.storeId);
-    await client
+    await db
       .from("integrations")
       .update({
         status: "error",

@@ -6,7 +6,7 @@ import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-re
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
 import { isStoreIntegrationProvider } from "@/lib/integrations/catalog";
-import { PermissionError, ValidationError } from "@/lib/errors";
+import { PermissionError, ValidationError, IntegrationError } from "@/lib/errors";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -170,6 +170,11 @@ export async function syncIntegrationAction(
       provider: safeProvider,
       userId: user.id,
     });
+    if (run.status === "failed") {
+      return actionFail(
+        new IntegrationError(run.error_message || "La sincronización falló."),
+      );
+    }
     await writeAuditLog({
       action: "integration_synced",
       entityType: "sync_run",
@@ -201,6 +206,11 @@ export async function backfillIntegrationAction(
       provider: safeProvider,
       userId: user.id,
     });
+    if (run.status === "failed") {
+      return actionFail(
+        new IntegrationError(run.error_message || "El backfill falló."),
+      );
+    }
     await writeAuditLog({
       action: "integration_backfill",
       entityType: "sync_run",

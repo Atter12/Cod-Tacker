@@ -100,7 +100,8 @@ type WriteAuditInput = {
 };
 
 export async function writeAuditLog(input: WriteAuditInput): Promise<void> {
-  const client = input.useAdmin ? createAdminClient() : await createClient();
+  // Prefer service role: audit_logs typically has no authenticated INSERT policy.
+  const client = input.useAdmin === false ? await createClient() : createAdminClient();
   const { error } = await client.from("audit_logs").insert({
     action: input.action,
     entity_type: input.entityType,
