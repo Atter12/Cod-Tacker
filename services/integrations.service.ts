@@ -576,13 +576,18 @@ async function runSync(
       metadata: Json;
     }> = [];
     const entityType = getCatalogEntry(input.provider)?.kind ?? "integration";
+    // sync_run_items.status CHECK: created | updated | skipped | failed | processed
     if (liveEnqueues.length) {
       for (const item of liveEnqueues.slice(0, 40)) {
+        const itemStatus =
+          item.action === "created" || item.action === "updated" || item.action === "skipped"
+            ? item.action
+            : "processed";
         items.push({
           sync_run_id: run.id,
           entity_type: entityType,
           external_id: item.externalId,
-          status: "ok",
+          status: itemStatus,
           action: item.action,
           metadata: { demo: false, mode: "live" } as Json,
         });
@@ -593,7 +598,7 @@ async function runSync(
           sync_run_id: run.id,
           entity_type: entityType,
           external_id: `mock-${input.provider}-${i + 1}`,
-          status: "ok",
+          status: "created",
           action: "created",
           metadata: { demo: true } as Json,
         });
@@ -603,7 +608,7 @@ async function runSync(
           sync_run_id: run.id,
           entity_type: entityType,
           external_id: `mock-${input.provider}-upd-${i + 1}`,
-          status: "ok",
+          status: "updated",
           action: "updated",
           metadata: { demo: true } as Json,
         });
