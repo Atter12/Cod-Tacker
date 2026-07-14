@@ -81,6 +81,11 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
   const orderNumber =
     (typeof order.name === "string" && order.name.replace(/^#/, "").trim()) ||
     (order.order_number != null ? String(order.order_number) : undefined);
+  const order_status = mapFulfillmentToStatus({
+    cancelledAt: order.cancelled_at,
+    financialStatus: order.financial_status,
+    fulfillmentStatus: order.fulfillment_status,
+  });
   return {
     external_order_id: externalId,
     order_number: orderNumber,
@@ -88,17 +93,12 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
     total_amount: parseMoney(order.total_price),
     subtotal_amount: order.subtotal_price != null ? parseMoney(order.subtotal_price) : undefined,
     mode: "live",
+    ...(order_status ? { order_status } : {}),
   };
 }
 
 export function mapRestOrderToUpdatedPayload(order: ShopifyRestOrder): ShopifyOrderJobPayload {
-  const base = mapRestOrderToCreatedPayload(order);
-  const order_status = mapFulfillmentToStatus({
-    cancelledAt: order.cancelled_at,
-    financialStatus: order.financial_status,
-    fulfillmentStatus: order.fulfillment_status,
-  });
-  return { ...base, order_status };
+  return mapRestOrderToCreatedPayload(order);
 }
 
 export function mapGraphqlOrderToEnqueue(
@@ -108,6 +108,11 @@ export function mapGraphqlOrderToEnqueue(
   const externalId = shopifyGidToExternalId(node.id);
   const money = node.totalPriceSet?.shopMoney;
   const sub = node.subtotalPriceSet?.shopMoney;
+  const order_status = mapFulfillmentToStatus({
+    cancelledAt: node.cancelledAt,
+    financialStatus: node.displayFinancialStatus,
+    fulfillmentStatus: node.displayFulfillmentStatus,
+  });
   const payload: ShopifyOrderJobPayload = {
     external_order_id: externalId,
     order_number: node.name.replace(/^#/, "").trim() || externalId,
@@ -115,14 +120,8 @@ export function mapGraphqlOrderToEnqueue(
     total_amount: parseMoney(money?.amount),
     subtotal_amount: sub?.amount != null ? parseMoney(sub.amount) : undefined,
     mode: "live",
+    ...(order_status ? { order_status } : {}),
   };
-  if (action === "updated") {
-    payload.order_status = mapFulfillmentToStatus({
-      cancelledAt: node.cancelledAt,
-      financialStatus: node.displayFinancialStatus,
-      fulfillmentStatus: node.displayFulfillmentStatus,
-    });
-  }
   const jobType = action === "created" ? "shopify.order.created" : "shopify.order.updated";
   return {
     externalId,

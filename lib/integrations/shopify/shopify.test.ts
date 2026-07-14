@@ -63,6 +63,19 @@ describe("shopify order mapping", () => {
     assert.equal(payload.currency_code, "PEN");
     assert.equal(payload.total_amount, 149.9);
     assert.equal(payload.mode, "live");
+    assert.equal(payload.order_status, undefined);
+  });
+
+  it("maps paid create payloads to confirmed", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 2,
+      name: "#1004",
+      currency: "USD",
+      total_price: "52.00",
+      financial_status: "paid",
+      fulfillment_status: null,
+    });
+    assert.equal(payload.order_status, "confirmed");
   });
 
   it("maps cancelled updated payloads", () => {
