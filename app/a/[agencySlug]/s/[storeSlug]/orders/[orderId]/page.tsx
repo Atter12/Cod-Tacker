@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
+import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
 import {
   ConfirmationStatusBadge,
   DataTable,
@@ -60,10 +61,11 @@ export default async function OrderDetailPage({
             title={order.order_number ?? order.external_order_id}
             description={`Externo: ${order.external_order_id} · ${formatCurrency(Number(order.total_amount), order.currency_code)}`}
           />
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <OrderStatusBadge status={order.order_status} />
             <PaymentStatusBadge status={order.payment_status} />
             <ConfirmationStatusBadge status={order.confirmation_status} />
+            <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
           </div>
         </div>
         <div className="w-full max-w-md">

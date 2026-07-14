@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
 import { OrdersStatusTabs } from "@/components/orders/OrdersStatusTabs";
 import { OrdersTable } from "@/components/orders/OrdersTable";
 import { OrdersToolbar } from "@/components/orders/OrdersToolbar";
@@ -131,11 +132,14 @@ export default async function OrdersPage({
 
   return (
     <section className="space-y-4">
-      <header>
-        <h1 className="text-[24px] font-bold leading-[30px] tracking-tight text-text-primary">Pedidos</h1>
-        <p className="mt-0.5 text-[13px] text-text-secondary">
-          Gestión de pedidos, estados y entregas recientes.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[24px] font-bold leading-[30px] tracking-tight text-text-primary">Pedidos</h1>
+          <p className="mt-0.5 text-[13px] text-text-secondary">
+            Gestión de pedidos, estados y entregas recientes.
+          </p>
+        </div>
+        <OrdersRealtimeBridge storeId={member.storeId} />
       </header>
 
       <Suspense fallback={<Skeleton className="h-9 w-full max-w-xl" />}>
