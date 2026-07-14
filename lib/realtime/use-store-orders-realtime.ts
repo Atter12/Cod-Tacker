@@ -31,6 +31,7 @@ export function useStoreOrdersRealtime(
 
     const supabase = createClient();
     let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const scheduleRefresh = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -42,27 +43,41 @@ export function useStoreOrdersRealtime(
     const filter = orderId ? `id=eq.${orderId}` : `store_id=eq.${storeId}`;
     const channelName = orderId ? `orders:${storeId}:${orderId}` : `orders:${storeId}`;
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-          filter,
-        },
-        () => {
-          scheduleRefresh();
-        },
-      )
-      .subscribe((next) => {
-        if (cancelled) return;
-        if (next === "SUBSCRIBED") setStatus("live");
-        else if (next === "CHANNEL_ERROR" || next === "TIMED_OUT") setStatus("error");
-        else if (next === "CLOSED") setStatus("idle");
-        else setStatus("connecting");
-      });
+    void (async () => {
+      // Postgres Changes needs the user JWT on the realtime socket (RLS).
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        if (!cancelled) setStatus("error");
+        return;
+      }
+      await supabase.realtime.setAuth(token);
+      if (cancelled) return;
+
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "orders",
+            filter,
+          },
+          () => {
+            scheduleRefresh();
+          },
+        )
+        .subscribe((next, err) => {
+          if (cancelled) return;
+          if (next === "SUBSCRIBED") setStatus("live");
+          else if (next === "CHANNEL_ERROR" || next === "TIMED_OUT") {
+            console.error("orders.realtime.subscribe_failed", { next, err: err?.message ?? err });
+            setStatus("error");
+          } else if (next === "CLOSED") setStatus("idle");
+          else setStatus("connecting");
+        });
+    })();
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") scheduleRefresh();
@@ -73,7 +88,7 @@ export function useStoreOrdersRealtime(
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
       document.removeEventListener("visibilitychange", onVisibility);
-      void supabase.removeChannel(channel);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [storeId, orderId, debounceMs]);
 
