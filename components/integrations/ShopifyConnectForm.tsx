@@ -11,11 +11,13 @@ export function ShopifyConnectForm({
   storeSlug,
   disabled = false,
   defaultShop = "",
+  connected = false,
 }: {
   agencySlug: string;
   storeSlug: string;
   disabled?: boolean;
   defaultShop?: string;
+  connected?: boolean;
 }) {
   const router = useRouter();
   const [shop, setShop] = useState(defaultShop);
@@ -66,9 +68,13 @@ export function ShopifyConnectForm({
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
-      <h2 className="text-sm font-semibold">Conectar Shopify (OAuth)</h2>
+      <h2 className="text-sm font-semibold">
+        {connected ? "Reautorizar Shopify (OAuth)" : "Conectar Shopify (OAuth)"}
+      </h2>
       <p className="text-[12.5px] text-text-secondary">
-        Autoriza CODTracked en tu tienda. Se guardará un access token cifrado por esta tienda.
+        {connected
+          ? "Vuelve a autorizar la tienda para renovar el token y re-registrar webhooks en live."
+          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado por esta tienda."}
       </p>
       {error ? (
         <Alert variant="danger" title="Shopify">
@@ -91,7 +97,7 @@ export function ShopifyConnectForm({
       </FormField>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={disabled || pending} onClick={connect}>
-          {pending ? "Redirigiendo…" : "Conectar Shopify"}
+          {pending ? "Redirigiendo…" : connected ? "Reautorizar Shopify" : "Conectar Shopify"}
         </Button>
         <Button size="sm" variant="outline" disabled={disabled || pending} onClick={testLive}>
           {pending ? "Probando…" : "Probar GraphQL"}

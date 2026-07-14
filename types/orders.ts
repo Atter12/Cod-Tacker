@@ -15,6 +15,7 @@ export type OrderListView = "all" | "pending" | "confirmed" | "delivered" | "ret
 export type OrderListRow = Order & {
   customerName: string | null;
   customerEmail: string | null;
+  customerPhone: string | null;
 };
 
 export type OrderFilters = {

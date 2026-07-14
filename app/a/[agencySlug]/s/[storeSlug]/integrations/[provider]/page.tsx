@@ -19,6 +19,10 @@ import {
 } from "@/lib/integrations/catalog";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { isDemoIntegrationMode } from "@/lib/integrations/registry";
+import {
+  parseShopifyWebhooksMetadata,
+  summarizeShopifyWebhooks,
+} from "@/lib/integrations/shopify/webhooks-meta";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -67,6 +71,8 @@ export default async function IntegrationDetailPage({
     (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
     (integration?.metadata as { shop_domain?: string } | null)?.shop_domain ||
     "";
+  const webhooksMeta = shopifyLive ? parseShopifyWebhooksMetadata(integration?.metadata) : null;
+  const webhooksSummary = summarizeShopifyWebhooks(webhooksMeta);
 
   return (
     <section className="space-y-5">
@@ -149,7 +155,47 @@ export default async function IntegrationDetailPage({
           agencySlug={p.agencySlug}
           storeSlug={p.storeSlug}
           defaultShop={shopDomain}
+          connected={connected}
         />
+      ) : null}
+
+      {shopifyLive ? (
+        <div className="rounded-lg border border-border bg-surface-elevated p-4">
+          <h2 className="text-sm font-semibold">Webhooks Shopify</h2>
+          <p className="mt-1 text-[12.5px] text-text-secondary">
+            Suscripciones ORDERS_CREATE / ORDERS_UPDATED hacia CODTracked.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusBadge
+              status={
+                webhooksSummary.status === "ok"
+                  ? "connected"
+                  : webhooksSummary.status === "error"
+                    ? "error"
+                    : webhooksSummary.status === "partial"
+                      ? "degraded"
+                      : "disconnected"
+              }
+              label={webhooksSummary.label}
+            />
+            {webhooksSummary.detail ? (
+              <span className="text-[12px] text-text-secondary">{webhooksSummary.detail}</span>
+            ) : null}
+          </div>
+          {webhooksMeta?.callback_uri ? (
+            <p className="mt-2 break-all text-[11px] text-text-secondary">{webhooksMeta.callback_uri}</p>
+          ) : null}
+          {webhooksMeta?.results?.length ? (
+            <ul className="mt-2 space-y-1 text-[12px] text-text-secondary">
+              {webhooksMeta.results.map((row) => (
+                <li key={`${row.topic ?? "topic"}-${row.id ?? row.error ?? "x"}`}>
+                  {(row.topic ?? "topic").replaceAll("_", " ")}:{" "}
+                  {row.ok ? "OK" : row.error || "falló"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
 
       <IntegrationActions
@@ -160,6 +206,7 @@ export default async function IntegrationDetailPage({
         connected={connected}
         hideMockConnect={shopifyLive}
         liveProvider={shopifyLive && !isDemoIntegrationMode()}
+        liveReconnectShop={shopDomain}
       />
 
       <div className="space-y-3">

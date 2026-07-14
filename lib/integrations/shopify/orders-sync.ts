@@ -60,6 +60,10 @@ export async function fetchShopifyOrdersForSync(input: {
                 cancelledAt
                 displayFinancialStatus
                 displayFulfillmentStatus
+                email
+                phone
+                tags
+                paymentGatewayNames
                 totalPriceSet {
                   shopMoney {
                     amount
@@ -70,6 +74,62 @@ export async function fetchShopifyOrdersForSync(input: {
                   shopMoney {
                     amount
                     currencyCode
+                  }
+                }
+                customer {
+                  id
+                  email
+                  phone
+                  firstName
+                  lastName
+                }
+                shippingAddress {
+                  firstName
+                  lastName
+                  phone
+                  city
+                  province
+                  zip
+                  countryCodeV2
+                }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      quantity
+                      sku
+                      variantTitle
+                      originalUnitPriceSet {
+                        shopMoney {
+                          amount
+                        }
+                      }
+                      discountedTotalSet {
+                        shopMoney {
+                          amount
+                        }
+                      }
+                      totalDiscountSet {
+                        shopMoney {
+                          amount
+                        }
+                      }
+                      variant {
+                        id
+                        title
+                        sku
+                        price
+                        product {
+                          id
+                          title
+                          vendor
+                          featuredImage {
+                            url
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }

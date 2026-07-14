@@ -35,6 +35,7 @@ import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
 import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unregisterShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
 import type {
   IntegrationHealthCheckRow,
   IntegrationRow,
@@ -397,6 +398,59 @@ export async function disconnect(
 ): Promise<IntegrationRow> {
   const existing = await getByProvider(client, agencyId, storeId, provider);
   if (!existing) throw new ValidationError("Integración no encontrada.");
+
+  const now = new Date().toISOString();
+  let metadata = (
+    existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? { ...(existing.metadata as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+  let settings = (
+    existing.settings && typeof existing.settings === "object" && !Array.isArray(existing.settings)
+      ? { ...(existing.settings as Record<string, unknown>) }
+      : {}
+  ) as Record<string, unknown>;
+
+  if (provider === "shopify") {
+    const shop = shopDomainFromIntegration(existing);
+    if (shop && isEncryptedSecretRef(existing.secret_reference)) {
+      try {
+        const accessToken = decryptSecret(existing.secret_reference);
+        const unregistration = await unregisterShopifyOrderWebhooks(shop, accessToken);
+        metadata = {
+          ...metadata,
+          webhooks: {
+            unregistered_at: now,
+            callback_uri: unregistration.callbackUri,
+            unregister_results: unregistration.results,
+          },
+        };
+      } catch (err) {
+        metadata = {
+          ...metadata,
+          webhooks: {
+            ...(typeof metadata.webhooks === "object" && metadata.webhooks && !Array.isArray(metadata.webhooks)
+              ? (metadata.webhooks as Record<string, unknown>)
+              : {}),
+            unregistered_at: now,
+            error:
+              err instanceof Error
+                ? err.message.slice(0, 300)
+                : "No se pudieron desregistrar webhooks en Shopify.",
+          },
+        };
+      }
+    }
+
+    delete settings.shop_domain;
+    // Keep shop_domain in metadata for UX default on reconnect, but clear live store link.
+    await client
+      .from("stores")
+      .update({ shopify_shop_domain: null, updated_at: now })
+      .eq("id", storeId)
+      .eq("agency_id", agencyId);
+  }
+
   const result = await client
     .from("integrations")
     .update({
@@ -404,6 +458,9 @@ export async function disconnect(
       secret_reference: null,
       last_error_at: null,
       last_error_message: null,
+      metadata: metadata as Json,
+      settings: settings as Json,
+      updated_at: now,
     })
     .eq("id", existing.id)
     .eq("store_id", storeId)
@@ -424,6 +481,11 @@ export async function reconnect(
     userId: string;
   },
 ): Promise<IntegrationRow> {
+  if (input.provider === "shopify" && getIntegrationRuntimeMode() === "live") {
+    throw new IntegrationError(
+      "En modo live, reconecta Shopify con OAuth (Conectar / Reautorizar Shopify), no con reconnect mock.",
+    );
+  }
   return connectMock(client, input);
 }
 

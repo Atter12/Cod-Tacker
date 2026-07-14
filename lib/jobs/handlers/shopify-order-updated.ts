@@ -1,33 +1,15 @@
-import { z } from "zod";
 import { PermanentJobError, RetryableJobError } from "@/lib/jobs/errors";
 import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
+import {
+  ORDER_STATUSES,
+  shopifyOrderUpdatedPayloadSchema,
+} from "@/lib/jobs/handlers/shopify-order-payload";
+import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
+import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
+import { shouldApplyShopifyPaymentSync } from "@/lib/integrations/shopify/map-payment";
 import type { Json } from "@/types/database.generated";
 
-const ORDER_STATUSES = [
-  "created",
-  "pending_confirmation",
-  "confirmed",
-  "cancelled",
-  "ready_to_ship",
-  "shipped",
-  "in_transit",
-  "out_for_delivery",
-  "delivered",
-  "delivery_failed",
-  "rejected",
-  "return_in_transit",
-  "returned",
-  "lost",
-  "closed",
-] as const;
-
-export const shopifyOrderUpdatedPayloadSchema = z.object({
-  external_order_id: z.string().min(1).max(200),
-  order_status: z.enum(ORDER_STATUSES).optional(),
-  total_amount: z.number().nonnegative().optional(),
-  demo_seed: z.string().min(1).max(200).optional(),
-  mode: z.enum(["mock", "live"]).optional(),
-});
+export { shopifyOrderUpdatedPayloadSchema };
 
 function asObject(payload: Json): Record<string, unknown> {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -52,7 +34,7 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
   const data = parsed.data;
   const existing = await admin
     .from("orders")
-    .select("id, order_status, metadata")
+    .select("id, order_status, customer_id, payment_status, expected_cod_amount, metadata")
     .eq("store_id", job.store_id)
     .eq("external_order_id", data.external_order_id)
     .maybeSingle();
@@ -84,11 +66,28 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
     };
   }
 
+  const customerId = data.customer
+    ? await upsertShopifyCustomer({
+        admin,
+        storeId: job.store_id,
+        customer: data.customer,
+      })
+    : null;
+
   const live = data.mode === "live" || job.job_type === "shopify.order.updated";
+  const shipping = data.shipping;
+  const canSyncPayment = shouldApplyShopifyPaymentSync(existing.data.payment_status);
   const patch: {
     order_status?: (typeof ORDER_STATUSES)[number];
     total_amount?: number;
-    expected_cod_amount?: number;
+    expected_cod_amount?: number | null;
+    payment_status?: "cash_expected" | "unpaid" | "refunded";
+    customer_id?: string;
+    shipping_country_code?: string;
+    shipping_region?: string;
+    shipping_city?: string;
+    shipping_district?: string;
+    shipping_postal_code?: string;
     metadata: Json;
   } = {
     metadata: {
@@ -97,13 +96,43 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       last_job_id: job.id,
       event: live ? "shopify.order.updated" : "shopify.order.updated.mock",
       mode: live ? "live" : "mock",
+      ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
     } as Json,
   };
   if (data.order_status) patch.order_status = data.order_status;
   if (typeof data.total_amount === "number") {
     patch.total_amount = data.total_amount;
-    patch.expected_cod_amount = data.total_amount;
   }
+
+  if (canSyncPayment) {
+    if (data.payment_status) {
+      patch.payment_status = data.payment_status;
+    }
+    if (data.expected_cod_amount !== undefined) {
+      patch.expected_cod_amount = data.expected_cod_amount;
+    } else if (typeof data.total_amount === "number") {
+      // Only refresh COD expected when still in a Shopify-owned payment state and kind is COD.
+      const kind =
+        data.payment_kind ??
+        (typeof meta.shopify_payment_kind === "string" ? meta.shopify_payment_kind : null);
+      const treatsAsCod =
+        kind === "cod" ||
+        (!kind &&
+          (existing.data.payment_status === "cash_expected" ||
+            (existing.data.expected_cod_amount != null &&
+              Number(existing.data.expected_cod_amount) > 0)));
+      patch.expected_cod_amount = treatsAsCod ? data.total_amount : null;
+    }
+  }
+
+  if (customerId && (!existing.data.customer_id || existing.data.customer_id !== customerId)) {
+    patch.customer_id = customerId;
+  }
+  if (shipping?.country_code) patch.shipping_country_code = shipping.country_code;
+  if (shipping?.region) patch.shipping_region = shipping.region;
+  if (shipping?.city) patch.shipping_city = shipping.city;
+  if (shipping?.district) patch.shipping_district = shipping.district;
+  if (shipping?.postal_code) patch.shipping_postal_code = shipping.postal_code;
 
   const update = await admin
     .from("orders")
@@ -114,6 +143,15 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
     .single();
   if (update.error || !update.data) {
     throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el pedido Shopify.");
+  }
+
+  if (data.line_items) {
+    await syncShopifyOrderItems({
+      admin,
+      storeId: job.store_id,
+      orderId: existing.data.id,
+      lineItems: data.line_items,
+    });
   }
 
   if (data.order_status && data.order_status !== existing.data.order_status) {

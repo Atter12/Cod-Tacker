@@ -87,12 +87,17 @@ export async function enrichOrdersWithCustomers(
     ...new Set(orders.map((order) => order.customer_id).filter((id): id is string => Boolean(id))),
   ];
   if (!customerIds.length) {
-    return orders.map((order) => ({ ...order, customerName: null, customerEmail: null }));
+    return orders.map((order) => ({
+      ...order,
+      customerName: null,
+      customerEmail: null,
+      customerPhone: null,
+    }));
   }
 
   const customersResult = await client
     .from("customers")
-    .select("id, first_name, last_name, email")
+    .select("id, first_name, last_name, email, phone")
     .eq("store_id", requireValue(storeId, "Tienda inválida."))
     .in("id", customerIds);
   throwQueryError(customersResult.error);
@@ -103,6 +108,7 @@ export async function enrichOrdersWithCustomers(
       {
         name: [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() || null,
         email: customer.email,
+        phone: customer.phone,
       },
     ]),
   );
@@ -113,6 +119,7 @@ export async function enrichOrdersWithCustomers(
       ...order,
       customerName: customer?.name ?? null,
       customerEmail: customer?.email ?? null,
+      customerPhone: customer?.phone ?? null,
     };
   });
 }

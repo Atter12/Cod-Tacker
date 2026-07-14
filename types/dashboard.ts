@@ -46,6 +46,7 @@ export type DashboardRecentOrder = {
   createdAt: string;
   customerName: string | null;
   customerEmail: string | null;
+  customerPhone: string | null;
   status: string;
   deliveryStatus: string | null;
   deliveredAt: string | null;

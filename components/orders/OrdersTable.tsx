@@ -37,7 +37,7 @@ function formatDeliveryLabel(order: OrderListRow): string {
 }
 
 function customerLabel(order: OrderListRow): string {
-  return order.customerName || order.customerEmail || "—";
+  return order.customerName || order.customerPhone || order.customerEmail || "—";
 }
 
 function compactStatusLabel(status: string): string {

@@ -20,7 +20,13 @@ import { requireValue, throwQueryError, type DatabaseClient } from "./_shared";
 
 type AttributionLite = { attributed_value: number; calculated_at: string };
 type SpendLite = { spend: number; metric_date: string };
-type CustomerLite = { id: string; first_name: string | null; last_name: string | null; email: string | null };
+type CustomerLite = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+};
 
 type PeriodTotals = {
   generated: number;
@@ -201,6 +207,7 @@ function mapRecentOrders(
       createdAt: order.created_at_source,
       customerName: name,
       customerEmail: customer?.email ?? null,
+      customerPhone: customer?.phone ?? null,
       status: order.order_status,
       deliveryStatus: shipment?.status ?? null,
       deliveredAt: order.delivered_at ?? shipment?.delivered_at ?? null,
@@ -346,7 +353,7 @@ export async function getDashboardSummary(
   if (customerIds.length) {
     const customersResult = await client
       .from("customers")
-      .select("id, first_name, last_name, email")
+      .select("id, first_name, last_name, email, phone")
       .eq("store_id", id)
       .in("id", customerIds);
     throwQueryError(customersResult.error);

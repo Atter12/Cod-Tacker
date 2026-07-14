@@ -20,7 +20,7 @@ function deliveryCell(order: DashboardRecentOrder): string {
 }
 
 function customerCell(order: DashboardRecentOrder): string {
-  return order.customerName || order.customerEmail || "—";
+  return order.customerName || order.customerPhone || order.customerEmail || "—";
 }
 
 export function RecentOrdersCard({

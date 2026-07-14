@@ -1,36 +1,11 @@
-import { z } from "zod";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
+import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-order-payload";
+import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
+import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import type { Json } from "@/types/database.generated";
 
-export const shopifyOrderCreatedPayloadSchema = z.object({
-  external_order_id: z.string().min(1).max(200),
-  order_number: z.string().min(1).max(100).optional(),
-  currency_code: z.string().length(3).default("PEN"),
-  total_amount: z.number().nonnegative().default(0),
-  subtotal_amount: z.number().nonnegative().optional(),
-  order_status: z
-    .enum([
-      "created",
-      "pending_confirmation",
-      "confirmed",
-      "cancelled",
-      "ready_to_ship",
-      "shipped",
-      "in_transit",
-      "out_for_delivery",
-      "delivered",
-      "delivery_failed",
-      "rejected",
-      "return_in_transit",
-      "returned",
-      "lost",
-      "closed",
-    ])
-    .optional(),
-  demo_seed: z.string().min(1).max(200).optional(),
-  mode: z.enum(["mock", "live"]).optional(),
-});
+export { shopifyOrderCreatedPayloadSchema };
 
 function asObject(payload: Json): Record<string, unknown> {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -90,14 +65,31 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     }
   }
 
+  const customerId = data.customer
+    ? await upsertShopifyCustomer({
+        admin,
+        storeId: job.store_id,
+        customer: data.customer,
+      })
+    : null;
+
   const now = new Date().toISOString();
   const total = data.total_amount;
   const live = data.mode === "live" || job.job_type === "shopify.order.created";
+  const shipping = data.shipping;
+  const paymentStatus = data.payment_status ?? "cash_expected";
+  const expectedCodAmount =
+    data.expected_cod_amount !== undefined
+      ? data.expected_cod_amount
+      : paymentStatus === "cash_expected"
+        ? total
+        : null;
   const insert = await admin
     .from("orders")
     .insert({
       agency_id: job.agency_id,
       store_id: job.store_id,
+      customer_id: customerId,
       external_order_id: data.external_order_id,
       order_number: data.order_number ?? data.external_order_id,
       created_at_source: now,
@@ -109,15 +101,21 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       discount_amount: 0,
       order_status: data.order_status ?? "created",
       confirmation_status: "not_requested",
-      payment_status: "cash_expected",
-      expected_cod_amount: total,
+      payment_status: paymentStatus,
+      expected_cod_amount: expectedCodAmount,
       source_name: live ? "shopify" : "shopify.mock",
+      ...(shipping?.country_code ? { shipping_country_code: shipping.country_code } : {}),
+      ...(shipping?.region ? { shipping_region: shipping.region } : {}),
+      ...(shipping?.city ? { shipping_city: shipping.city } : {}),
+      ...(shipping?.district ? { shipping_district: shipping.district } : {}),
+      ...(shipping?.postal_code ? { shipping_postal_code: shipping.postal_code } : {}),
       metadata: {
         demo: !live,
         demo_seed: data.demo_seed ?? null,
         job_id: job.id,
         event: live ? "shopify.order.created" : "shopify.order.created.mock",
         mode: live ? "live" : "mock",
+        ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
       } as Json,
       tags: live ? ["jobs", "shopify", "live"] : ["jobs", "shopify", "mock"],
     })
@@ -143,6 +141,15 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       }
     }
     throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el pedido Shopify.");
+  }
+
+  if (data.line_items) {
+    await syncShopifyOrderItems({
+      admin,
+      storeId: job.store_id,
+      orderId: insert.data.id,
+      lineItems: data.line_items,
+    });
   }
 
   return {

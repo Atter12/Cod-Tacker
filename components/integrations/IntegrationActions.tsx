@@ -23,6 +23,8 @@ type Props = {
   hideMockConnect?: boolean;
   /** When true, sync/backfill hit live Shopify (not mock fixtures). */
   liveProvider?: boolean;
+  /** Shop domain for live OAuth reconnect redirect. */
+  liveReconnectShop?: string;
 };
 
 export function IntegrationActions({
@@ -33,6 +35,7 @@ export function IntegrationActions({
   connected,
   hideMockConnect = false,
   liveProvider = false,
+  liveReconnectShop = "",
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -63,6 +66,23 @@ export function IntegrationActions({
     });
   }
 
+  function startLiveOauthReconnect() {
+    setError(null);
+    setMessage(null);
+    const shop = liveReconnectShop.trim();
+    if (!shop) {
+      setError("Falta el dominio de la tienda. Usa el formulario OAuth para reconectar.");
+      return;
+    }
+    const url = new URL("/api/integrations/shopify/connect", window.location.origin);
+    url.searchParams.set("agencySlug", agencySlug);
+    url.searchParams.set("storeSlug", storeSlug);
+    url.searchParams.set("shop", shop);
+    startTransition(() => {
+      window.location.href = url.toString();
+    });
+  }
+
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
       <h2 className="text-sm font-semibold">Acciones</h2>
@@ -79,15 +99,18 @@ export function IntegrationActions({
       <div className="flex flex-wrap gap-2">
         {!connected ? (
           hideMockConnect ? null : (
-          <Button
-            size="sm"
-            disabled={pending}
-            onClick={() =>
-              run(() => connectIntegrationAction(agencySlug, storeSlug, provider), "Integración conectada (mock).")
-            }
-          >
-            Conectar mock
-          </Button>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                run(
+                  () => connectIntegrationAction(agencySlug, storeSlug, provider),
+                  "Integración conectada (mock).",
+                )
+              }
+            >
+              Conectar mock
+            </Button>
           )
         ) : (
           <>
@@ -95,7 +118,10 @@ export function IntegrationActions({
               size="sm"
               disabled={pending}
               onClick={() =>
-                run(() => testIntegrationAction(agencySlug, storeSlug, provider), "Prueba de conexión registrada.")
+                run(
+                  () => testIntegrationAction(agencySlug, storeSlug, provider),
+                  "Prueba de conexión registrada.",
+                )
               }
             >
               Probar conexión
@@ -105,7 +131,10 @@ export function IntegrationActions({
               variant="outline"
               disabled={pending}
               onClick={() =>
-                run(() => syncIntegrationAction(agencySlug, storeSlug, provider), "Sincronización incremental iniciada.")
+                run(
+                  () => syncIntegrationAction(agencySlug, storeSlug, provider),
+                  "Sincronización incremental iniciada.",
+                )
               }
             >
               Sincronizar ahora
@@ -129,19 +158,25 @@ export function IntegrationActions({
             >
               Backfill
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pending}
-              onClick={() =>
-                run(
-                  () => reconnectIntegrationAction(agencySlug, storeSlug, provider),
-                  "Integración reconectada (mock).",
-                )
-              }
-            >
-              Reconectar
-            </Button>
+            {liveProvider && provider === "shopify" ? (
+              <Button size="sm" variant="outline" disabled={pending} onClick={startLiveOauthReconnect}>
+                {pending ? "Redirigiendo…" : "Reconectar (OAuth)"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() =>
+                  run(
+                    () => reconnectIntegrationAction(agencySlug, storeSlug, provider),
+                    "Integración reconectada (mock).",
+                  )
+                }
+              >
+                Reconectar
+              </Button>
+            )}
             <Button
               size="sm"
               variant="danger"
