@@ -696,16 +696,19 @@ async function runSync(
     if (!completed.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo completar la sincronización.");
     return completed.data;
   } catch (error) {
-    if (error instanceof AppError) throw error;
     const finishedAt = new Date().toISOString();
     const safeMessage =
-      error instanceof Error ? error.message.slice(0, 300) : "No se pudo completar la sincronización.";
+      error instanceof AppError
+        ? error.safeMessage
+        : error instanceof Error
+          ? error.message.slice(0, 300)
+          : "No se pudo completar la sincronización.";
     await client
       .from("sync_runs")
       .update({
         status: "failed",
         finished_at: finishedAt,
-        error_code: "SYNC_FAILED",
+        error_code: error instanceof AppError ? error.code : "SYNC_FAILED",
         error_message: safeMessage,
         failed_total: 1,
       })
@@ -720,6 +723,7 @@ async function runSync(
       })
       .eq("id", integration.id)
       .eq("store_id", scope.storeId);
+    if (error instanceof AppError) throw error;
     throw new IntegrationError(safeMessage);
   }
 }

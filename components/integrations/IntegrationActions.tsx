@@ -21,6 +21,8 @@ type Props = {
   connected: boolean;
   /** When true, hide mock-only connect (live Shopify OAuth UI is separate). */
   hideMockConnect?: boolean;
+  /** When true, sync/backfill hit live Shopify (not mock fixtures). */
+  liveProvider?: boolean;
 };
 
 export function IntegrationActions({
@@ -30,14 +32,8 @@ export function IntegrationActions({
   canManage,
   connected,
   hideMockConnect = false,
-}: {
-  agencySlug: string;
-  storeSlug: string;
-  provider: string;
-  canManage: boolean;
-  connected: boolean;
-  hideMockConnect?: boolean;
-}) {
+  liveProvider = false,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +115,10 @@ export function IntegrationActions({
               variant="outline"
               disabled={pending}
               onClick={() => {
-                if (!window.confirm("¿Ejecutar backfill histórico mock? Puede generar más registros de demostración.")) {
+                const confirmMsg = liveProvider
+                  ? "¿Ejecutar backfill histórico desde Shopify? Se importarán pedidos reales (últimos ~90 días)."
+                  : "¿Ejecutar backfill histórico mock? Puede generar más registros de demostración.";
+                if (!window.confirm(confirmMsg)) {
                   return;
                 }
                 run(

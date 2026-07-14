@@ -159,6 +159,7 @@ export default async function IntegrationDetailPage({
         canManage={canManage}
         connected={connected}
         hideMockConnect={shopifyLive}
+        liveProvider={shopifyLive && !isDemoIntegrationMode()}
       />
 
       <div className="space-y-3">
