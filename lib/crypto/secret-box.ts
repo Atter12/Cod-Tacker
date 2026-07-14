@@ -51,6 +51,6 @@ export function decryptSecret(payload: string): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-export function isEncryptedSecretRef(value: string | null | undefined): boolean {
+export function isEncryptedSecretRef(value: string | null | undefined): value is string {
   return typeof value === "string" && value.startsWith(PREFIX);
 }
