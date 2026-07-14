@@ -18,6 +18,8 @@ import {
   syncNow,
   testConnection,
 } from "@/services/integrations.service";
+import { kickJobProcessing } from "@/lib/jobs/kick";
+import { after } from "next/server";
 
 export type IntegrationActionResult = ActionResult<{ id?: string; runId?: string }>;
 
@@ -186,6 +188,7 @@ export async function syncIntegrationAction(
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);
     revalidatePath(routes.store.syncRunDetail(agencySlug, storeSlug, run.id));
+    after(() => kickJobProcessing({ limit: 20, reason: "integration-sync" }));
     return actionOk({ id: run.integration_id, runId: run.id });
   } catch (error) {
     return actionFail(error);
@@ -222,6 +225,7 @@ export async function backfillIntegrationAction(
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);
     revalidatePath(routes.store.syncRunDetail(agencySlug, storeSlug, run.id));
+    after(() => kickJobProcessing({ limit: 20, reason: "integration-backfill" }));
     return actionOk({ id: run.integration_id, runId: run.id });
   } catch (error) {
     return actionFail(error);
