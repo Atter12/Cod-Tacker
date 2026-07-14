@@ -2,8 +2,9 @@ import type { NextConfig } from "next";
 
 const production = process.env.NODE_ENV === "production";
 
-// Supabase project endpoints use https://*.supabase.co. Add other external domains explicitly.
-const contentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; font-src 'self' data:;";
+// Supabase REST is https://*.supabase.co; Realtime websocket needs wss://*.supabase.co.
+const contentSecurityPolicy =
+  "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:;";
 
 export const securityHeaders: NonNullable<NextConfig["headers"]> = async () => [{
   source: "/(.*)",
