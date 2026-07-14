@@ -30,6 +30,31 @@ function maskContact(value: string | null | undefined, reveal: boolean): string 
   return `***${digits.slice(-4)}`;
 }
 
+function displayOrDash(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "—";
+}
+
+type ShopifyAttributionMeta = {
+  has_attribution?: boolean;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_term?: string | null;
+  utm_content?: string | null;
+  fbclid?: string | null;
+  ttclid?: string | null;
+  gclid?: string | null;
+  platform?: string | null;
+};
+
+function readShopifyAttributionMeta(metadata: unknown): ShopifyAttributionMeta | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const raw = (metadata as Record<string, unknown>).shopify_attribution;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return raw as ShopifyAttributionMeta;
+}
+
 export default async function OrderDetailPage({
   params,
 }: {
@@ -46,6 +71,10 @@ export default async function OrderDetailPage({
   const revealPii = can(member.roles, "orders.manage") || can(member.roles, "agency.manage");
   const canManage = can(member.roles, "orders.manage");
   const primaryAttribution = detail.attributions.find((row) => row.is_primary) ?? detail.attributions[0];
+  const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
+  const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
+  const hasLanding = Boolean(order.landing_site?.trim() || order.referring_site?.trim());
+  const showAttributionDetails = Boolean(primaryAttribution || hasShopifySignals || hasLanding);
 
   return (
     <section className="space-y-5">
@@ -165,27 +194,75 @@ export default async function OrderDetailPage({
           {
             value: "atribucion",
             label: "Atribución",
-            content: primaryAttribution ? (
+            content: showAttributionDetails ? (
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="text-text-secondary">Plataforma</dt>
-                  <dd>{primaryAttribution.platform}</dd>
+                <div className="sm:col-span-2">
+                  <dt className="text-text-secondary">Landing site</dt>
+                  <dd className="break-all">{displayOrDash(order.landing_site)}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-text-secondary">Referring site</dt>
+                  <dd className="break-all">{displayOrDash(order.referring_site)}</dd>
                 </div>
                 <div>
-                  <dt className="text-text-secondary">Modelo</dt>
-                  <dd>{primaryAttribution.model}</dd>
+                  <dt className="text-text-secondary">utm_source</dt>
+                  <dd>{displayOrDash(shopifyAttribution?.utm_source)}</dd>
                 </div>
                 <div>
-                  <dt className="text-text-secondary">Valor atribuido</dt>
-                  <dd>{primaryAttribution.attributed_value ?? "—"}</dd>
+                  <dt className="text-text-secondary">utm_medium</dt>
+                  <dd>{displayOrDash(shopifyAttribution?.utm_medium)}</dd>
                 </div>
                 <div>
-                  <dt className="text-text-secondary">Motivo</dt>
-                  <dd>{primaryAttribution.attribution_reason ?? "—"}</dd>
+                  <dt className="text-text-secondary">utm_campaign</dt>
+                  <dd>{displayOrDash(shopifyAttribution?.utm_campaign)}</dd>
                 </div>
+                <div>
+                  <dt className="text-text-secondary">utm_content</dt>
+                  <dd>{displayOrDash(shopifyAttribution?.utm_content)}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">utm_term</dt>
+                  <dd>{displayOrDash(shopifyAttribution?.utm_term)}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">fbclid</dt>
+                  <dd className="break-all">{displayOrDash(shopifyAttribution?.fbclid)}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">ttclid</dt>
+                  <dd className="break-all">{displayOrDash(shopifyAttribution?.ttclid)}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">gclid</dt>
+                  <dd className="break-all">{displayOrDash(shopifyAttribution?.gclid)}</dd>
+                </div>
+                {primaryAttribution ? (
+                  <>
+                    <div>
+                      <dt className="text-text-secondary">Plataforma</dt>
+                      <dd>{primaryAttribution.platform}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-secondary">Modelo</dt>
+                      <dd>{primaryAttribution.model}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-secondary">Motivo</dt>
+                      <dd>{primaryAttribution.attribution_reason ?? "—"}</dd>
+                    </div>
+                  </>
+                ) : null}
+                {!hasShopifySignals ? (
+                  <div className="sm:col-span-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-text-secondary">
+                    Sin atribución (sin UTM ni click IDs en el pedido Shopify).
+                  </div>
+                ) : null}
               </dl>
             ) : (
-              <EmptyState title="Sin atribución" description="No hay touchpoints asociados." />
+              <EmptyState
+                title="Sin atribución"
+                description="No hay landing/UTM/fbclid asociados a este pedido."
+              />
             ),
           },
           {

@@ -306,4 +306,54 @@ describe("shopify order mapping", () => {
     assert.equal(shopifyGidToExternalId("gid://shopify/Order/12345"), "12345");
     assert.equal(shopifyGidToExternalId("99"), "99");
   });
+
+  it("maps UTMs and fbclid from landing_site query", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 90,
+      name: "#1090",
+      currency: "PEN",
+      total_price: "40",
+      landing_site:
+        "/products/demo?utm_source=facebook&utm_medium=cpc&utm_campaign=julio&fbclid=FbClick123",
+      referring_site: "https://l.facebook.com/",
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "facebook");
+    assert.equal(payload.attribution?.utm_medium, "cpc");
+    assert.equal(payload.attribution?.utm_campaign, "julio");
+    assert.equal(payload.attribution?.fbclid, "FbClick123");
+    assert.equal(payload.attribution?.platform, "meta");
+    assert.equal(payload.attribution?.landing_site?.includes("utm_source=facebook"), true);
+  });
+
+  it("marks sin atribución when landing has no UTM or click ids", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 91,
+      name: "#1091",
+      currency: "PEN",
+      total_price: "40",
+      landing_site: "/products/demo",
+      referring_site: "https://google.com/",
+    });
+    assert.equal(payload.attribution?.has_attribution, false);
+    assert.equal(payload.attribution?.landing_site, "/products/demo");
+    assert.equal(payload.attribution?.fbclid, null);
+  });
+
+  it("reads attribution from note_attributes", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 92,
+      name: "#1092",
+      currency: "PEN",
+      total_price: "40",
+      note_attributes: [
+        { name: "utm_source", value: "tiktok" },
+        { name: "ttclid", value: "TtClick9" },
+      ],
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "tiktok");
+    assert.equal(payload.attribution?.ttclid, "TtClick9");
+    assert.equal(payload.attribution?.platform, "tiktok");
+  });
 });

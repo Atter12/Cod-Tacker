@@ -17,6 +17,12 @@ import {
   type ShopifyRestLineItem,
 } from "@/lib/integrations/shopify/map-line-items";
 import {
+  mapGraphqlOrderAttribution,
+  mapRestOrderAttribution,
+  type ShopifyGraphqlCustomerVisit,
+  type ShopifyMappedAttribution,
+} from "@/lib/integrations/shopify/map-attribution";
+import {
   mapShopifyPayment,
   type ShopifyMappedPayment,
 } from "@/lib/integrations/shopify/map-payment";
@@ -44,6 +50,7 @@ export type ShopifyOrderJobPayload = {
   payment_kind?: ShopifyMappedPayment["payment_kind"];
   payment_status?: ShopifyMappedPayment["payment_status"];
   expected_cod_amount?: number | null;
+  attribution?: ShopifyMappedAttribution;
 };
 
 /** REST webhook Order resource (orders/create | orders/updated). */
@@ -68,6 +75,10 @@ export type ShopifyRestOrder = {
   customer?: ShopifyRestCustomer | null;
   shipping_address?: ShopifyRestShippingAddress | null;
   line_items?: ShopifyRestLineItem[] | null;
+  landing_site?: string | null;
+  referring_site?: string | null;
+  note?: string | null;
+  note_attributes?: Array<{ name?: string | null; value?: string | null }> | null;
 };
 
 export type ShopifyGraphqlOrderNode = {
@@ -87,6 +98,10 @@ export type ShopifyGraphqlOrderNode = {
   customer?: ShopifyGraphqlCustomer | null;
   shippingAddress?: ShopifyGraphqlMailingAddress | null;
   lineItems?: { edges: Array<{ node: ShopifyGraphqlLineItemNode }> } | null;
+  customerJourneySummary?: {
+    lastVisit?: ShopifyGraphqlCustomerVisit | null;
+    firstVisit?: ShopifyGraphqlCustomerVisit | null;
+  } | null;
 };
 
 function parseMoney(value: string | number | null | undefined): number {
@@ -120,6 +135,7 @@ function attachMappedParts(
     shipping?: ShopifyMappedShipping;
     line_items: ShopifyMappedLineItem[];
     payment: ShopifyMappedPayment;
+    attribution?: ShopifyMappedAttribution;
   },
 ): ShopifyOrderJobPayload {
   return {
@@ -130,6 +146,7 @@ function attachMappedParts(
     payment_kind: mapped.payment.payment_kind,
     payment_status: mapped.payment.payment_status,
     expected_cod_amount: mapped.payment.expected_cod_amount,
+    ...(mapped.attribution ? { attribution: mapped.attribution } : {}),
   };
 }
 
@@ -175,6 +192,12 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
     ...customerShipping,
     line_items: mapRestLineItems(order.line_items),
     payment,
+    attribution: mapRestOrderAttribution({
+      landing_site: order.landing_site,
+      referring_site: order.referring_site,
+      note: order.note,
+      note_attributes: order.note_attributes,
+    }),
   });
 }
 
@@ -216,10 +239,15 @@ export function mapGraphqlOrderToEnqueue(
     email: node.email,
     phone: node.phone,
   });
+  const journey = node.customerJourneySummary;
   const payload = attachMappedParts(base, {
     ...customerShipping,
     line_items: mapGraphqlLineItems(node.lineItems?.edges),
     payment,
+    attribution: mapGraphqlOrderAttribution({
+      lastVisit: journey?.lastVisit,
+      firstVisit: journey?.firstVisit,
+    }),
   });
   const jobType = action === "created" ? "shopify.order.created" : "shopify.order.updated";
   return {

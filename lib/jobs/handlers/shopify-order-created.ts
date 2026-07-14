@@ -3,6 +3,7 @@ import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
 import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-order-payload";
 import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
+import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderCreatedPayloadSchema };
@@ -149,6 +150,18 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       storeId: job.store_id,
       orderId: insert.data.id,
       lineItems: data.line_items,
+    });
+  }
+
+  if (data.attribution) {
+    await upsertShopifyOrderAttribution({
+      admin,
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      orderId: insert.data.id,
+      customerId,
+      attributedValue: total,
+      attribution: data.attribution,
     });
   }
 
