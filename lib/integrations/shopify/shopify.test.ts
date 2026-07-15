@@ -357,6 +357,23 @@ describe("shopify order mapping", () => {
     assert.equal(payload.attribution?.platform, "tiktok");
   });
 
+  it("maps GraphQL-style customAttributes + utm params like realtime enrich", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 95,
+      name: "#1095",
+      currency: "USD",
+      total_price: "10",
+      note_attributes: [
+        { name: "utm_source", value: "meta" },
+        { name: "utm_medium", value: "paid" },
+        { name: "utm_campaign", value: "realtime" },
+      ],
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "meta");
+    assert.equal(payload.attribution?.utm_campaign, "realtime");
+  });
+
   it("reads UTMs from codtracked_landing cart attribute when landing_site is empty", () => {
     const payload = mapRestOrderToCreatedPayload({
       id: 94,

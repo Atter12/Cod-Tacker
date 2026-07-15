@@ -1,7 +1,8 @@
 import "server-only";
 
-import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
+import { enrichShopifyOrderAttribution } from "@/lib/integrations/shopify/enrich-order-attribution";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
 import { verifyShopifyWebhookHmac } from "@/lib/integrations/shopify/hmac";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
@@ -94,9 +95,38 @@ export async function handleShopifyWebhookIngress(input: {
   }
 
   const isCreate = topic === "orders/create";
-  const payload = isCreate ? mapRestOrderToCreatedPayload(order) : mapRestOrderToUpdatedPayload(order);
+  let payload = isCreate ? mapRestOrderToCreatedPayload(order) : mapRestOrderToUpdatedPayload(order);
   if (!payload.external_order_id) {
     return { status: 400, body: { error: "Pedido sin id" } };
+  }
+
+  let attributionEnriched = false;
+  let journeyReady: boolean | null = null;
+  // Near-realtime: if REST webhook lacks UTMs, pull GraphQL journey/attrs before enqueue.
+  if (!payload.attribution?.has_attribution && isEncryptedSecretRef(integrationLookup.data.secret_reference)) {
+    try {
+      const accessToken = decryptSecret(integrationLookup.data.secret_reference);
+      const enrich = await enrichShopifyOrderAttribution({
+        shop,
+        accessToken,
+        externalOrderId: payload.external_order_id,
+        current: payload.attribution,
+        // Keep webhook under Shopify's ACK window; short single retry only.
+        retryDelayMs: isCreate ? 1200 : 0,
+      });
+      attributionEnriched = enrich.enriched;
+      journeyReady = enrich.journeyReady;
+      if (enrich.enriched || enrich.attribution.landing_site || enrich.attribution.referring_site) {
+        payload = { ...payload, attribution: enrich.attribution };
+      }
+    } catch (err) {
+      logger.warn("shopify.webhook.attribution_enrich_failed", {
+        shop,
+        topic,
+        external_order_id: payload.external_order_id,
+        error: err instanceof Error ? err.message.slice(0, 300) : "enrich_failed",
+      });
+    }
   }
 
   const attributionDebug = {
@@ -108,6 +138,8 @@ export async function handleShopifyWebhookIngress(input: {
     mapped_landing_site: payload.attribution?.landing_site ?? null,
     mapped_utm_source: payload.attribution?.utm_source ?? null,
     mapped_fbclid: payload.attribution?.fbclid ?? null,
+    attribution_enriched: attributionEnriched,
+    journey_ready: journeyReady,
   };
   logger.info("shopify.webhook.attribution_debug", {
     shop,
