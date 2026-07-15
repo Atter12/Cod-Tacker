@@ -33,9 +33,14 @@ import {
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
-import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import {
+  ensureShopifyAccessToken,
+  unpackShopifyCredentials,
+} from "@/lib/integrations/shopify/credentials";
+import { unregisterShopifyAttributionScriptTag } from "@/lib/integrations/shopify/script-tags";
 import { unregisterShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   IntegrationHealthCheckRow,
   IntegrationRow,
@@ -142,10 +147,10 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
 }
 
 /** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify). */
-export function resolveStoreProviderForIntegration(
+export async function resolveStoreProviderForIntegration(
   provider: string,
   integration: IntegrationRow,
-): SyncAdapter {
+): Promise<SyncAdapter> {
   if (provider === "shopify" && getIntegrationRuntimeMode() === "live") {
     const shop = shopDomainFromIntegration(integration);
     if (!shop || !isEncryptedSecretRef(integration.secret_reference)) {
@@ -153,7 +158,8 @@ export function resolveStoreProviderForIntegration(
         "Shopify live requiere OAuth con token cifrado. Usa Conectar Shopify.",
       );
     }
-    const accessToken = decryptSecret(integration.secret_reference!);
+    const admin = createAdminClient();
+    const accessToken = await ensureShopifyAccessToken(admin, integration, shop);
     const adapter = getCommerceProvider("shopify", { shopDomain: shop, accessToken });
     return {
       sync: (input) => adapter.sync(input),
@@ -415,7 +421,9 @@ export async function disconnect(
     const shop = shopDomainFromIntegration(existing);
     if (shop && isEncryptedSecretRef(existing.secret_reference)) {
       try {
-        const accessToken = decryptSecret(existing.secret_reference);
+        const accessToken = await ensureShopifyAccessToken(client, existing, shop).catch(() =>
+          unpackShopifyCredentials(existing.secret_reference!).access_token,
+        );
         const unregistration = await unregisterShopifyOrderWebhooks(shop, accessToken);
         metadata = {
           ...metadata,
@@ -425,6 +433,33 @@ export async function disconnect(
             unregister_results: unregistration.results,
           },
         };
+        try {
+          const scriptUnreg = await unregisterShopifyAttributionScriptTag(shop, accessToken);
+          metadata = {
+            ...metadata,
+            attribution_script_tag: {
+              unregistered_at: now,
+              src: scriptUnreg.src,
+              unregister_results: scriptUnreg.results,
+            },
+          };
+        } catch (scriptErr) {
+          metadata = {
+            ...metadata,
+            attribution_script_tag: {
+              ...(typeof metadata.attribution_script_tag === "object" &&
+              metadata.attribution_script_tag &&
+              !Array.isArray(metadata.attribution_script_tag)
+                ? (metadata.attribution_script_tag as Record<string, unknown>)
+                : {}),
+              unregistered_at: now,
+              error:
+                scriptErr instanceof Error
+                  ? scriptErr.message.slice(0, 300)
+                  : "No se pudo desregistrar ScriptTag de atribución.",
+            },
+          };
+        }
       } catch (err) {
         metadata = {
           ...metadata,
@@ -502,7 +537,7 @@ export async function testConnection(
     throw new ValidationError("La integración está desconectada.");
   }
 
-  const adapter = resolveStoreProviderForIntegration(provider, integration);
+  const adapter = await resolveStoreProviderForIntegration(provider, integration);
   const health = await adapter.health();
   const status = mapHealthStatus(health.status);
   // Writes via service role after caller already authorized integrations.manage.
@@ -594,7 +629,7 @@ async function runSync(
   const syncKind = input.syncType === "backfill" ? "historical" : "incremental";
 
   try {
-    const adapter = resolveStoreProviderForIntegration(input.provider, integration);
+    const adapter = await resolveStoreProviderForIntegration(input.provider, integration);
     const syncResult = await adapter.sync({ kind: syncKind });
     const finishedAt = new Date().toISOString();
 

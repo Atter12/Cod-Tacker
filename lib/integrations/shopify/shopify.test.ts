@@ -9,6 +9,15 @@ import {
   mapRestOrderToUpdatedPayload,
 } from "@/lib/integrations/shopify/map-order";
 import { shopifyWebhookCallbackUri, summarizeShopifyWebhooks } from "@/lib/integrations/shopify/webhooks-meta";
+import {
+  acknowledgeShopifyPrivacyWebhook,
+  isShopifyPrivacyTopic,
+  summarizeShopifyPrivacyPayload,
+} from "@/lib/integrations/shopify/privacy-webhooks";
+import {
+  extractRequestOrigin,
+  resolveAllowedShopifyOAuthReturnOrigin,
+} from "@/lib/integrations/shopify/oauth-return-origin";
 
 describe("shopify domain", () => {
   it("normalizes myshopify domains", () => {
@@ -18,6 +27,51 @@ describe("shopify domain", () => {
       "demo.myshopify.com",
     );
     assert.equal(normalizeShopifyShopDomain("not a shop"), null);
+  });
+});
+
+describe("shopify oauth return origin", () => {
+  it("extracts origin from request url", () => {
+    assert.equal(
+      extractRequestOrigin(
+        "https://cod-tracker-git-feat.vercel.app/api/integrations/shopify/connect?shop=x",
+      ),
+      "https://cod-tracker-git-feat.vercel.app",
+    );
+  });
+
+  it("allows configured app urls and vercel previews", () => {
+    const prod = "https://app.codtracked.com";
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin(prod, [prod]),
+      "https://app.codtracked.com",
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin(
+        "https://cod-tracker-git-feat-sandro.vercel.app",
+        [prod],
+      ),
+      "https://cod-tracker-git-feat-sandro.vercel.app",
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("http://localhost:3000", [prod]),
+      "http://localhost:3000",
+    );
+  });
+
+  it("rejects unrelated hosts", () => {
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("https://evil.example.com", [
+        "https://app.codtracked.com",
+      ]),
+      null,
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("https://evil.vercel.app.attacker.com", [
+        "https://app.codtracked.com",
+      ]),
+      null,
+    );
   });
 });
 
@@ -47,6 +101,51 @@ describe("shopify webhook hmac", () => {
     const hmac = createHmac("sha256", secret).update(body).digest("base64");
     assert.equal(verifyShopifyWebhookHmac(body, hmac, secret), true);
     assert.equal(verifyShopifyWebhookHmac(body, "bad", secret), false);
+  });
+});
+
+describe("shopify privacy GDPR webhooks", () => {
+  it("recognizes compliance topics", () => {
+    assert.equal(isShopifyPrivacyTopic("customers/data_request"), true);
+    assert.equal(isShopifyPrivacyTopic("customers/redact"), true);
+    assert.equal(isShopifyPrivacyTopic("shop/redact"), true);
+    assert.equal(isShopifyPrivacyTopic("orders/create"), false);
+  });
+
+  it("summarizes payload without requiring PII fields in summary", () => {
+    const summary = summarizeShopifyPrivacyPayload(
+      JSON.stringify({
+        shop_id: 42,
+        customer: { id: 99, email: "secret@example.com" },
+        orders_to_redact: [1, 2, 3],
+        data_request: { id: 7 },
+      }),
+    );
+    assert.equal(summary.shop_id, "42");
+    assert.equal(summary.customer_id, "99");
+    assert.equal(summary.orders_to_redact, 3);
+    assert.equal(summary.data_request_id, "7");
+  });
+
+  it("acknowledges privacy webhook with 200", () => {
+    const result = acknowledgeShopifyPrivacyWebhook({
+      topic: "customers/redact",
+      shop: "demo.myshopify.com",
+      webhookId: "wh_test_1",
+      rawBody: JSON.stringify({ shop_id: 1, customer: { id: 2 }, orders_to_redact: [9] }),
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.privacy, true);
+    assert.equal(result.body.topic, "customers/redact");
+  });
+
+  it("rejects bad hmac the same way as order webhooks", () => {
+    const secret = "shpss_test_secret";
+    const body = '{"shop_id":1}';
+    assert.equal(verifyShopifyWebhookHmac(body, "invalid", secret), false);
+    const good = createHmac("sha256", secret).update(body).digest("base64");
+    assert.equal(verifyShopifyWebhookHmac(body, good, secret), true);
   });
 });
 
@@ -355,6 +454,49 @@ describe("shopify order mapping", () => {
     assert.equal(payload.attribution?.utm_source, "tiktok");
     assert.equal(payload.attribution?.ttclid, "TtClick9");
     assert.equal(payload.attribution?.platform, "tiktok");
+  });
+
+  it("maps GraphQL-style customAttributes + utm params like realtime enrich", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 95,
+      name: "#1095",
+      currency: "USD",
+      total_price: "10",
+      note_attributes: [
+        { name: "utm_source", value: "meta" },
+        { name: "utm_medium", value: "paid" },
+        { name: "utm_campaign", value: "realtime" },
+      ],
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "meta");
+    assert.equal(payload.attribution?.utm_campaign, "realtime");
+  });
+
+  it("reads UTMs from codtracked_landing cart attribute when landing_site is empty", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 94,
+      name: "#1094",
+      currency: "USD",
+      total_price: "32.95",
+      note_attributes: [
+        {
+          name: "codtracked_landing",
+          value: "/products/selling-plans-ski-wax?utm_source=test&utm_medium=cpc&utm_campaign=demo",
+        },
+        { name: "utm_source", value: "test" },
+        { name: "utm_medium", value: "cpc" },
+        { name: "utm_campaign", value: "demo" },
+      ],
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "test");
+    assert.equal(payload.attribution?.utm_medium, "cpc");
+    assert.equal(payload.attribution?.utm_campaign, "demo");
+    assert.equal(
+      payload.attribution?.landing_site,
+      "/products/selling-plans-ski-wax?utm_source=test&utm_medium=cpc&utm_campaign=demo",
+    );
   });
 
   it("reads attribution from free-text order note", () => {

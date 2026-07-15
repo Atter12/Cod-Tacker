@@ -7,6 +7,7 @@ import { getUser } from "@/lib/auth/get-session";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
 import { buildShopifyAuthorizeUrl } from "@/lib/integrations/shopify/oauth";
+import { extractRequestOrigin } from "@/lib/integrations/shopify/oauth-return-origin";
 import { createShopifyOAuthState } from "@/lib/integrations/shopify/oauth-state";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 
@@ -56,6 +57,7 @@ export async function startShopifyOAuth(input: {
       shop,
       agencySlug: input.agencySlug,
       storeSlug: input.storeSlug,
+      returnOrigin: extractRequestOrigin(input.requestUrl),
     });
     const authorizeUrl = buildShopifyAuthorizeUrl(shop, state);
     return Response.redirect(authorizeUrl, 302);

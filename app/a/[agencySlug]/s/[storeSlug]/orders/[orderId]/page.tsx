@@ -15,19 +15,25 @@ import {
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getOrderDetail } from "@/services/orders.service";
 
-function maskContact(value: string | null | undefined, reveal: boolean): string {
-  if (!value) return "—";
-  if (reveal) return value;
-  if (value.includes("@")) {
-    const [user, domain] = value.split("@");
+function maskContact(
+  value: string | null | undefined,
+  reveal: boolean,
+  emptyLabel: string,
+): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return emptyLabel;
+  if (reveal) return trimmed;
+  if (trimmed.includes("@")) {
+    const [user, domain] = trimmed.split("@");
     return `${(user ?? "").slice(0, 2)}***@${domain ?? "***"}`;
   }
-  const digits = value.replace(/\D/g, "");
+  const digits = trimmed.replace(/\D/g, "");
   if (digits.length < 4) return "***";
   return `***${digits.slice(-4)}`;
 }
@@ -186,14 +192,28 @@ export default async function OrderDetailPage({
                   {customer ? (
                     <>
                       <p>
-                        {`${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() ? (
-                          `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
-                        ) : (
-                          <span className="italic text-text-secondary">Sin nombre</span>
+                        {displayShopifyContact(
+                          `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim(),
+                          "name",
+                          order.source_name,
                         )}
                       </p>
-                      <p>Email: {maskContact(customer.email, revealPii)}</p>
-                      <p>Teléfono: {maskContact(customer.phone, revealPii)}</p>
+                      <p>
+                        Email:{" "}
+                        {maskContact(
+                          customer.email,
+                          revealPii,
+                          missingShopifyContactLabel("email", order.source_name),
+                        )}
+                      </p>
+                      <p>
+                        Teléfono:{" "}
+                        {maskContact(
+                          customer.phone,
+                          revealPii,
+                          missingShopifyContactLabel("phone", order.source_name),
+                        )}
+                      </p>
                       <p className="text-text-secondary">
                         Historial: {customer.total_orders ?? 0} pedidos ·{" "}
                         {customer.delivered_orders ?? 0} entregados · {customer.returned_orders ?? 0}{" "}

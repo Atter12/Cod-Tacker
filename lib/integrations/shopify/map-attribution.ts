@@ -80,6 +80,13 @@ export function parseAttributionFromUrl(raw: string | null | undefined): Partial
   return out;
 }
 
+const LANDING_ATTR_NAMES = new Set([
+  "codtracked_landing",
+  "landing_page",
+  "_landing_page",
+  "landing_site",
+]);
+
 function parseNoteAttributes(
   attrs: ShopifyRestNoteAttribute[] | null | undefined,
 ): Partial<Record<AttributionKey, string>> {
@@ -93,6 +100,20 @@ function parseNoteAttributes(
     setIfEmpty(out, key, row.value);
   }
   return out;
+}
+
+/** Landing URL stored by storefront script (cart attribute → note_attribute). */
+function parseLandingFromNoteAttributes(
+  attrs: ShopifyRestNoteAttribute[] | null | undefined,
+): string | null {
+  if (!Array.isArray(attrs)) return null;
+  for (const row of attrs) {
+    const name = trimOrNull(row.name)?.toLowerCase();
+    if (!name || !LANDING_ATTR_NAMES.has(name)) continue;
+    const value = trimOrNull(row.value);
+    if (value) return value;
+  }
+  return null;
 }
 
 /** Pull a URL-looking fragment from free-text order note. */
@@ -135,13 +156,15 @@ export function mapRestOrderAttribution(input: {
   note?: string | null;
   note_attributes?: ShopifyRestNoteAttribute[] | null;
 }): ShopifyMappedAttribution {
-  const landing_site = trimOrNull(input.landing_site);
+  const landingFromAttrs = parseLandingFromNoteAttributes(input.note_attributes);
+  const landing_site = trimOrNull(input.landing_site) ?? landingFromAttrs;
   const referring_site = trimOrNull(input.referring_site);
 
   const merged: Partial<Record<AttributionKey, string>> = {};
   for (const part of [
     parseAttributionFromUrl(landing_site),
     parseAttributionFromUrl(referring_site),
+    parseAttributionFromUrl(landingFromAttrs),
     parseNoteAttributes(input.note_attributes),
     parseNoteText(input.note),
   ]) {

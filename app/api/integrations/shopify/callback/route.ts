@@ -3,6 +3,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
 import { verifyShopifyOAuthHmac } from "@/lib/integrations/shopify/hmac";
+import { resolveAllowedShopifyOAuthReturnOrigin } from "@/lib/integrations/shopify/oauth-return-origin";
 import { parseShopifyOAuthState } from "@/lib/integrations/shopify/oauth-state";
 import { shopifyIntegrationsReturnUrl } from "@/lib/integrations/shopify/start-oauth";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const { appUrl } = getShopifyEnv();
   const publicApp = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  const defaultReturnBase = (appUrl || publicApp).replace(/\/$/, "");
 
   const query: Record<string, string | undefined> = {};
   url.searchParams.forEach((value, key) => {
@@ -25,21 +27,32 @@ export async function GET(request: Request) {
   const shopRaw = query.shop;
   const stateRaw = query.state;
 
-  const fail = (agencySlug: string | null, storeSlug: string | null, message: string) => {
+  const resolveReturnBase = (returnOrigin: string | undefined) =>
+    resolveAllowedShopifyOAuthReturnOrigin(returnOrigin, [publicApp, appUrl]) ??
+    defaultReturnBase;
+
+  const fail = (
+    agencySlug: string | null,
+    storeSlug: string | null,
+    message: string,
+    returnOrigin?: string,
+  ) => {
+    const base = resolveReturnBase(returnOrigin);
     if (agencySlug && storeSlug) {
       return Response.redirect(
         new URL(
           shopifyIntegrationsReturnUrl(agencySlug, storeSlug, { shopify_error: message }),
-          publicApp,
+          base,
         ),
         302,
       );
     }
-    return Response.redirect(new URL(`/?shopify_error=${encodeURIComponent(message)}`, publicApp), 302);
+    return Response.redirect(new URL(`/?shopify_error=${encodeURIComponent(message)}`, base), 302);
   };
 
   let stateAgency: string | null = null;
   let stateStore: string | null = null;
+  let stateReturnOrigin: string | undefined;
 
   try {
     const env = getShopifyEnv();
@@ -53,6 +66,7 @@ export async function GET(request: Request) {
     const state = parseShopifyOAuthState(stateRaw);
     stateAgency = state.agencySlug;
     stateStore = state.storeSlug;
+    stateReturnOrigin = state.returnOrigin;
     const shop = assertShopifyShopDomain(shopRaw);
 
     const client = await createClient();
@@ -73,12 +87,12 @@ export async function GET(request: Request) {
         shopifyIntegrationsReturnUrl(state.agencySlug, state.storeSlug, {
           shopify: "connected",
         }),
-        appUrl || publicApp,
+        resolveReturnBase(state.returnOrigin),
       ),
       302,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error OAuth Shopify";
-    return fail(stateAgency, stateStore, message.slice(0, 180));
+    return fail(stateAgency, stateStore, message.slice(0, 180), stateReturnOrigin);
   }
 }

@@ -69,6 +69,30 @@ export async function fetchShopifyOrdersForSync(input: {
                   key
                   value
                 }
+                customerJourneySummary {
+                  firstVisit {
+                    landingPage
+                    referrerUrl
+                    utmParameters {
+                      source
+                      medium
+                      campaign
+                      content
+                      term
+                    }
+                  }
+                  lastVisit {
+                    landingPage
+                    referrerUrl
+                    utmParameters {
+                      source
+                      medium
+                      campaign
+                      content
+                      term
+                    }
+                  }
+                }
                 totalPriceSet {
                   shopMoney {
                     amount

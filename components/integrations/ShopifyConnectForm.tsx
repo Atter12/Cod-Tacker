@@ -73,8 +73,8 @@ export function ShopifyConnectForm({
       </h2>
       <p className="text-[12.5px] text-text-secondary">
         {connected
-          ? "Vuelve a autorizar la tienda para renovar el token y re-registrar webhooks en live."
-          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado por esta tienda."}
+          ? "Vuelve a autorizar para renovar el token, webhooks y el ScriptTag de atribución UTM (automático)."
+          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado y se instalará la captura de UTMs en la tienda online."}
       </p>
       {error ? (
         <Alert variant="danger" title="Shopify">
@@ -103,6 +103,42 @@ export function ShopifyConnectForm({
           {pending ? "Probando…" : "Probar GraphQL"}
         </Button>
       </div>
+
+      {connected ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <h3 className="text-sm font-semibold">Atribución UTM automática</h3>
+          <p className="text-[12.5px] text-text-secondary">
+            Al conectar/reautorizar, CODTracked registra un ScriptTag en Shopify que carga{" "}
+            <code className="text-text-primary">/shopify/codtracked-attribution.js</code> en la tienda
+            (vía <code className="text-text-primary">content_for_header</code>). No hace falta editar el
+            tema a mano.
+          </p>
+          <ol className="list-decimal space-y-1 pl-4 text-[12.5px] text-text-secondary">
+            <li>
+              En Vercel, asegúrate de que <code className="text-text-primary">SHOPIFY_SCOPES</code>{" "}
+              incluya <code className="text-text-primary">write_script_tags</code>
+            </li>
+            <li>
+              En Partner Dashboard de Shopify, agrega el mismo scope a la app
+            </li>
+            <li>
+              Pulsa <strong>Reautorizar Shopify</strong> (acepta el nuevo permiso)
+            </li>
+            <li>
+              El JS de atribución debe ser público (sin login de Vercel) en{" "}
+              <code className="text-text-primary">SHOPIFY_APP_URL</code>
+            </li>
+            <li>
+              Prueba: producto con UTMs → <code className="text-text-primary">/cart.js</code> debe
+              mostrar attributes → compra
+            </li>
+          </ol>
+          <p className="text-[11px] text-text-secondary">
+            Nota: puedes quitar el snippet manual de <code className="text-text-primary">theme.liquid</code>{" "}
+            si lo habías pegado; con ScriptTag basta.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

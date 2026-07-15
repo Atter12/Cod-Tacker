@@ -1,0 +1,9 @@
+{% comment %}
+  CODTracked UTM capture for online store (works on Bogus/test checkouts).
+  Include once in layout/theme.liquid inside <head>:
+    {% render 'codtracked-attribution' %}
+
+  Prefer theme asset (CDN of the shop) — do NOT load from a Vercel preview URL
+  (Deployment Protection / CSP often blocks it and orders stay "Sin atribución").
+{% endcomment %}
+<script src="{{ 'codtracked-attribution.js' | asset_url }}" defer></script>

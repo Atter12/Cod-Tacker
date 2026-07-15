@@ -13,7 +13,9 @@ const shopifyEnvSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .default("read_orders,read_customers,read_products,read_fulfillments,read_locations"),
+    .default(
+      "read_orders,read_customers,read_products,read_fulfillments,read_locations,write_script_tags",
+    ),
 });
 
 export type ShopifyEnv = {
