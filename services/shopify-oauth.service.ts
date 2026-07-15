@@ -5,10 +5,18 @@ import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { exchangeShopifyAccessToken } from "@/lib/integrations/shopify/oauth";
 import type { ShopifyOAuthStatePayload } from "@/lib/integrations/shopify/oauth-state";
+import { registerShopifyAttributionScriptTag } from "@/lib/integrations/shopify/script-tags";
 import { registerShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
 import { throwQueryError, type DatabaseClient } from "@/services/_shared";
 import type { Enums, Json } from "@/types/database.generated";
 import type { IntegrationRow } from "@/types/database";
+
+function asMetaRecord(metadata: IntegrationRow["metadata"]): Record<string, unknown> {
+  if (typeof metadata === "object" && metadata && !Array.isArray(metadata)) {
+    return { ...(metadata as Record<string, unknown>) };
+  }
+  return {};
+}
 
 export async function completeShopifyOAuth(
   client: DatabaseClient,
@@ -97,9 +105,7 @@ export async function completeShopifyOAuth(
   try {
     const registration = await registerShopifyOrderWebhooks(shop, token.access_token);
     const webhookMeta = {
-      ...(typeof row.metadata === "object" && row.metadata && !Array.isArray(row.metadata)
-        ? (row.metadata as Record<string, unknown>)
-        : {}),
+      ...asMetaRecord(row.metadata),
       mode: "live",
       shop_domain: shop,
       webhooks: {
@@ -119,9 +125,7 @@ export async function completeShopifyOAuth(
     if (patched.data) row = patched.data;
   } catch (err) {
     const webhookMeta = {
-      ...(typeof row.metadata === "object" && row.metadata && !Array.isArray(row.metadata)
-        ? (row.metadata as Record<string, unknown>)
-        : {}),
+      ...asMetaRecord(row.metadata),
       mode: "live",
       shop_domain: shop,
       webhooks: {
@@ -132,6 +136,48 @@ export async function completeShopifyOAuth(
     const patched = await client
       .from("integrations")
       .update({ metadata: webhookMeta })
+      .eq("id", row.id)
+      .eq("store_id", input.state.storeId)
+      .select()
+      .single();
+    if (!patched.error && patched.data) row = patched.data;
+  }
+
+  // Auto-install storefront UTM capture (ScriptTag → content_for_header). Soft-fail.
+  try {
+    const scriptTag = await registerShopifyAttributionScriptTag(shop, token.access_token);
+    const scriptMeta = {
+      ...asMetaRecord(row.metadata),
+      mode: "live",
+      shop_domain: shop,
+      attribution_script_tag: {
+        registered_at: new Date().toISOString(),
+        ...scriptTag,
+      },
+    } as Json;
+    const patched = await client
+      .from("integrations")
+      .update({ metadata: scriptMeta })
+      .eq("id", row.id)
+      .eq("store_id", input.state.storeId)
+      .select()
+      .single();
+    throwQueryError(patched.error);
+    if (patched.data) row = patched.data;
+  } catch (err) {
+    const scriptMeta = {
+      ...asMetaRecord(row.metadata),
+      mode: "live",
+      shop_domain: shop,
+      attribution_script_tag: {
+        registered_at: new Date().toISOString(),
+        ok: false,
+        error: err instanceof Error ? err.message.slice(0, 300) : "script_tag_register_failed",
+      },
+    } as Json;
+    const patched = await client
+      .from("integrations")
+      .update({ metadata: scriptMeta })
       .eq("id", row.id)
       .eq("store_id", input.state.storeId)
       .select()

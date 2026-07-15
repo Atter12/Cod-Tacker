@@ -35,6 +35,7 @@ import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
 import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unregisterShopifyAttributionScriptTag } from "@/lib/integrations/shopify/script-tags";
 import { unregisterShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
 import type {
   IntegrationHealthCheckRow,
@@ -425,6 +426,33 @@ export async function disconnect(
             unregister_results: unregistration.results,
           },
         };
+        try {
+          const scriptUnreg = await unregisterShopifyAttributionScriptTag(shop, accessToken);
+          metadata = {
+            ...metadata,
+            attribution_script_tag: {
+              unregistered_at: now,
+              src: scriptUnreg.src,
+              unregister_results: scriptUnreg.results,
+            },
+          };
+        } catch (scriptErr) {
+          metadata = {
+            ...metadata,
+            attribution_script_tag: {
+              ...(typeof metadata.attribution_script_tag === "object" &&
+              metadata.attribution_script_tag &&
+              !Array.isArray(metadata.attribution_script_tag)
+                ? (metadata.attribution_script_tag as Record<string, unknown>)
+                : {}),
+              unregistered_at: now,
+              error:
+                scriptErr instanceof Error
+                  ? scriptErr.message.slice(0, 300)
+                  : "No se pudo desregistrar ScriptTag de atribución.",
+            },
+          };
+        }
       } catch (err) {
         metadata = {
           ...metadata,

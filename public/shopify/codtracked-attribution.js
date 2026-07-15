@@ -26,6 +26,12 @@
   var syncing = false;
 
   function analyticsAllowed() {
+    // If UTMs are explicitly in the URL, always capture (ad click intent).
+    try {
+      if (hasSignals(readParamsFromSearch(window.location.search))) return true;
+    } catch (_) {
+      /* continue */
+    }
     try {
       var privacy = window.Shopify && window.Shopify.customerPrivacy;
       if (!privacy || typeof privacy.analyticsProcessingAllowed !== "function") return true;

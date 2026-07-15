@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
@@ -24,18 +24,6 @@ export function ShopifyConnectForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [appOrigin, setAppOrigin] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setAppOrigin(window.location.origin);
-  }, []);
-
-  const scriptUrl = useMemo(
-    () => (appOrigin ? `${appOrigin}/shopify/codtracked-attribution.js` : "/shopify/codtracked-attribution.js"),
-    [appOrigin],
-  );
-  const themeSnippet = `<script src="${scriptUrl}" defer></script>`;
 
   function connect() {
     setError(null);
@@ -85,8 +73,8 @@ export function ShopifyConnectForm({
       </h2>
       <p className="text-[12.5px] text-text-secondary">
         {connected
-          ? "Vuelve a autorizar la tienda para renovar el token y re-registrar webhooks en live."
-          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado por esta tienda."}
+          ? "Vuelve a autorizar para renovar el token, webhooks y el ScriptTag de atribución UTM (automático)."
+          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado y se instalará la captura de UTMs en la tienda online."}
       </p>
       {error ? (
         <Alert variant="danger" title="Shopify">
@@ -118,52 +106,37 @@ export function ShopifyConnectForm({
 
       {connected ? (
         <div className="space-y-2 border-t border-border pt-3">
-          <h3 className="text-sm font-semibold">Atribución UTM en tienda</h3>
+          <h3 className="text-sm font-semibold">Atribución UTM automática</h3>
           <p className="text-[12.5px] text-text-secondary">
-            En pedidos de prueba Shopify suele dejar vacío el “Resumen de conversión”. La solución es
-            guardar UTMs en atributos del carrito desde el tema (archivo en{" "}
-            <code className="text-text-primary">shopify-theme/</code> del repo).
+            Al conectar/reautorizar, CODTracked registra un ScriptTag en Shopify que carga{" "}
+            <code className="text-text-primary">/shopify/codtracked-attribution.js</code> en la tienda
+            (vía <code className="text-text-primary">content_for_header</code>). No hace falta editar el
+            tema a mano.
           </p>
           <ol className="list-decimal space-y-1 pl-4 text-[12.5px] text-text-secondary">
             <li>
-              Copia <code className="text-text-primary">shopify-theme/assets/codtracked-attribution.js</code>{" "}
-              a <code className="text-text-primary">assets/</code> de tu tema
+              En Vercel, asegúrate de que <code className="text-text-primary">SHOPIFY_SCOPES</code>{" "}
+              incluya <code className="text-text-primary">write_script_tags</code>
             </li>
             <li>
-              En <code className="text-text-primary">layout/theme.liquid</code>, dentro de{" "}
-              <code className="text-text-primary">{`<head>`}</code>, pega el snippet (asset del tema, sin
-              depender de Vercel)
+              En Partner Dashboard de Shopify, agrega el mismo scope a la app
             </li>
             <li>
-              Publica el tema → abre producto con UTMs → confirma{" "}
-              <code className="text-text-primary">/cart.js</code> trae attributes → compra
+              Pulsa <strong>Reautorizar Shopify</strong> (acepta el nuevo permiso)
+            </li>
+            <li>
+              El JS de atribución debe ser público (sin login de Vercel) en{" "}
+              <code className="text-text-primary">SHOPIFY_APP_URL</code>
+            </li>
+            <li>
+              Prueba: producto con UTMs → <code className="text-text-primary">/cart.js</code> debe
+              mostrar attributes → compra
             </li>
           </ol>
-          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-text-primary">
-            {`{% render 'codtracked-attribution' %}`}
-          </pre>
           <p className="text-[11px] text-text-secondary">
-            Alternativa remota (solo si el JS es público):
+            Nota: puedes quitar el snippet manual de <code className="text-text-primary">theme.liquid</code>{" "}
+            si lo habías pegado; con ScriptTag basta.
           </p>
-          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-text-primary">
-            {themeSnippet}
-          </pre>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!appOrigin}
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText("{% render 'codtracked-attribution' %}");
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 2000);
-              } catch {
-                setError("No se pudo copiar el snippet. Cópialo manualmente del recuadro.");
-              }
-            }}
-          >
-            {copied ? "Copiado" : "Copiar render del tema"}
-          </Button>
         </div>
       ) : null}
     </div>
