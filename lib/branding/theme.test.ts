@@ -60,11 +60,12 @@ describe("agency brand theme", () => {
     assert.equal(vars["--chart-1"], "#7C3AED");
     assert.equal(vars["--chart-2"], "#5B21B6");
     assert.equal(vars["--chart-3"], brandChartRamp("#7C3AED")[2]);
-    assert.match(softTintFromPrimary("#F47A32"), /^#[0-9A-F]{6}$/);
+    assert.match(softTintFromPrimary("#0D4F55"), /^#[0-9A-F]{6}$/);
   });
 
   it("matches curated palettes", () => {
-    const palette = findMatchingPalette("#F47A32", "#F5661F");
+    const palette = findMatchingPalette("#0D4F55", "#08383C");
     assert.equal(palette?.id, "codtracked");
+    assert.equal(findMatchingPalette("#F36A1D", "#C84E12")?.id, "codtracked-accion");
   });
 });

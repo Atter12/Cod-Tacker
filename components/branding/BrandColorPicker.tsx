@@ -20,8 +20,8 @@ export function BrandColorPicker({
   onChange: (next: { primaryColor: string; secondaryColor: string }) => void;
 }) {
   const matched = findMatchingPalette(primaryColor, secondaryColor);
-  const customPrimary = isValidBrandHex(primaryColor) ? primaryColor : "#F47A32";
-  const customSecondary = isValidBrandHex(secondaryColor) ? secondaryColor : "#F5661F";
+  const customPrimary = isValidBrandHex(primaryColor) ? primaryColor : "#0D4F55";
+  const customSecondary = isValidBrandHex(secondaryColor) ? secondaryColor : "#08383C";
 
   return (
     <div className="space-y-4">

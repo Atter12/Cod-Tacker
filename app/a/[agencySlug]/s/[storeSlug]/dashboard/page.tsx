@@ -91,8 +91,7 @@ export default async function StoreDashboard({
           Resumen operativo
         </h1>
         <p className="mt-1 text-[13px] text-text-secondary">
-          Indicadores con los datos disponibles. Carriers y cobros pueden tardar: lo provisional
-          no es dinero en puerta ni tiempo real absoluto.
+          Lo provisional no es cobro en puerta; carriers pueden tardar.
         </p>
       </header>
 

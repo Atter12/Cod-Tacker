@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { CollapsibleJson } from "@/components/admin/CollapsibleJson";
+import {
+  isLogisticsEventStale,
+  LogisticsLatencyNotice,
+} from "@/components/logistics/LogisticsLatencyNotice";
 import { ShipmentActionsPanel } from "@/components/logistics/ShipmentActionsPanel";
 import {
   DataTable,
@@ -49,6 +53,8 @@ export default async function ShipmentDetailPage({
     typeof shipment.metadata === "object" &&
     !Array.isArray(shipment.metadata) &&
     Boolean((shipment.metadata as Record<string, unknown>).needs_review);
+  const eventStale =
+    isLogisticsEventStale(shipment.last_event_at) || events.length === 0;
 
   return (
     <section className="space-y-5">
@@ -64,6 +70,12 @@ export default async function ShipmentDetailPage({
           </Link>
         }
       />
+
+      {eventStale ? (
+        <LogisticsLatencyNotice mode="empty" />
+      ) : (
+        <LogisticsLatencyNotice mode="general" />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4 text-sm lg:col-span-2">
