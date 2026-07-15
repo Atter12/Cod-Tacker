@@ -91,7 +91,7 @@ export default async function StoreDashboard({
           Resumen operativo
         </h1>
         <p className="mt-1 text-[13px] text-text-secondary">
-          Datos disponibles al momento; algunos movimientos pueden tardar en reflejarse.
+          Datos preliminares: no implican cobros confirmados; los carriers pueden reportar con demora.
         </p>
       </header>
 
