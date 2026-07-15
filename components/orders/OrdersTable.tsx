@@ -36,8 +36,9 @@ function formatDeliveryLabel(order: OrderListRow): string {
   return formatShortDate(raw);
 }
 
-function customerLabel(order: OrderListRow): string {
-  return order.customerName || order.customerPhone || order.customerEmail || "—";
+function displayOrDash(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "—";
 }
 
 function compactStatusLabel(status: string): string {
@@ -63,23 +64,25 @@ export function OrdersTable({
   return (
     <article className="overflow-hidden rounded-[10px] border border-border bg-surface-elevated shadow-[var(--card-shadow)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[780px] border-collapse text-left">
+        <table className="w-full min-w-[1040px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border">
-              {["Pedido", "Fecha", "Cliente", "Estado", "Entrega", "Total", "Fuente"].map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-2.5 text-[10.5px] font-medium uppercase tracking-wide text-text-secondary sm:px-5"
-                >
-                  {header}
-                </th>
-              ))}
+              {["Pedido", "Fecha", "Cliente", "Email", "Teléfono", "Estado", "Entrega", "Total", "Fuente"].map(
+                (header) => (
+                  <th
+                    key={header}
+                    className="px-4 py-2.5 text-[10.5px] font-medium uppercase tracking-wide text-text-secondary sm:px-5"
+                  >
+                    {header}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-14 sm:px-5">
+                <td colSpan={9} className="px-4 py-14 sm:px-5">
                   <div className="flex flex-col items-center justify-center text-center">
                     <span className="grid size-12 place-items-center rounded-full bg-brand-softer text-brand-primary">
                       <Package className="size-5" aria-hidden />
@@ -113,8 +116,14 @@ export function OrdersTable({
                   <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
                     {formatShortDate(order.created_at_source)}
                   </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
-                    {customerLabel(order)}
+                  <td className="max-w-[160px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
+                    {displayOrDash(order.customerName)}
+                  </td>
+                  <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                    {displayOrDash(order.customerEmail)}
+                  </td>
+                  <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
+                    {displayOrDash(order.customerPhone)}
                   </td>
                   <td className="px-4 py-3 sm:px-5">
                     <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />

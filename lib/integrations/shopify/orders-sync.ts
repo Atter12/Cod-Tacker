@@ -62,8 +62,13 @@ export async function fetchShopifyOrdersForSync(input: {
                 displayFulfillmentStatus
                 email
                 phone
+                note
                 tags
                 paymentGatewayNames
+                customAttributes {
+                  key
+                  value
+                }
                 totalPriceSet {
                   shopMoney {
                     amount
