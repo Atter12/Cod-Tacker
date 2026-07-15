@@ -356,4 +356,19 @@ describe("shopify order mapping", () => {
     assert.equal(payload.attribution?.ttclid, "TtClick9");
     assert.equal(payload.attribution?.platform, "tiktok");
   });
+
+  it("reads attribution from free-text order note", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 93,
+      name: "#1010",
+      currency: "USD",
+      total_price: "12",
+      note: "utm_source=facebook&utm_medium=cpc&utm_campaign=s3-test&fbclid=test123",
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "facebook");
+    assert.equal(payload.attribution?.utm_campaign, "s3-test");
+    assert.equal(payload.attribution?.fbclid, "test123");
+    assert.equal(payload.attribution?.platform, "meta");
+  });
 });

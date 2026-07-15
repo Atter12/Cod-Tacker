@@ -17,7 +17,6 @@ import {
   type ShopifyRestLineItem,
 } from "@/lib/integrations/shopify/map-line-items";
 import {
-  mapGraphqlOrderAttribution,
   mapRestOrderAttribution,
   type ShopifyGraphqlCustomerVisit,
   type ShopifyMappedAttribution,
@@ -98,6 +97,8 @@ export type ShopifyGraphqlOrderNode = {
   customer?: ShopifyGraphqlCustomer | null;
   shippingAddress?: ShopifyGraphqlMailingAddress | null;
   lineItems?: { edges: Array<{ node: ShopifyGraphqlLineItemNode }> } | null;
+  note?: string | null;
+  customAttributes?: Array<{ key?: string | null; value?: string | null }> | null;
   customerJourneySummary?: {
     lastVisit?: ShopifyGraphqlCustomerVisit | null;
     firstVisit?: ShopifyGraphqlCustomerVisit | null;
@@ -240,13 +241,28 @@ export function mapGraphqlOrderToEnqueue(
     phone: node.phone,
   });
   const journey = node.customerJourneySummary;
+  const visit = journey?.lastVisit ?? journey?.firstVisit ?? null;
+  const utm = visit?.utmParameters;
   const payload = attachMappedParts(base, {
     ...customerShipping,
     line_items: mapGraphqlLineItems(node.lineItems?.edges),
     payment,
-    attribution: mapGraphqlOrderAttribution({
-      lastVisit: journey?.lastVisit,
-      firstVisit: journey?.firstVisit,
+    // Prefer REST-style merge so GraphQL sync also picks up order.note (admin notes / UTM text).
+    attribution: mapRestOrderAttribution({
+      landing_site: visit?.landingPage,
+      referring_site: visit?.referrerUrl,
+      note: node.note,
+      note_attributes: [
+        ...(node.customAttributes ?? []).map((row) => ({
+          name: row.key,
+          value: row.value,
+        })),
+        { name: "utm_source", value: utm?.source },
+        { name: "utm_medium", value: utm?.medium },
+        { name: "utm_campaign", value: utm?.campaign },
+        { name: "utm_content", value: utm?.content },
+        { name: "utm_term", value: utm?.term },
+      ],
     }),
   });
   const jobType = action === "created" ? "shopify.order.created" : "shopify.order.updated";
