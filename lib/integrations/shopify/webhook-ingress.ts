@@ -10,6 +10,7 @@ import {
   mapRestOrderToUpdatedPayload,
   type ShopifyRestOrder,
 } from "@/lib/integrations/shopify/map-order";
+import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
 
@@ -98,6 +99,22 @@ export async function handleShopifyWebhookIngress(input: {
     return { status: 400, body: { error: "Pedido sin id" } };
   }
 
+  const attributionDebug = {
+    external_order_id: payload.external_order_id,
+    raw_landing_site: order.landing_site ?? null,
+    raw_referring_site: order.referring_site ?? null,
+    raw_note_present: Boolean(order.note?.trim()),
+    mapped_has_attribution: Boolean(payload.attribution?.has_attribution),
+    mapped_landing_site: payload.attribution?.landing_site ?? null,
+    mapped_utm_source: payload.attribution?.utm_source ?? null,
+    mapped_fbclid: payload.attribution?.fbclid ?? null,
+  };
+  logger.info("shopify.webhook.attribution_debug", {
+    shop,
+    topic,
+    ...attributionDebug,
+  });
+
   const jobType = isCreate ? "shopify.order.created" : "shopify.order.updated";
   const webhookId = input.webhookIdHeader?.trim() || "";
   const idempotencyKey =
@@ -124,6 +141,7 @@ export async function handleShopifyWebhookIngress(input: {
       created: enqueued.created,
       jobId: enqueued.jobId,
       rawEventId: enqueued.rawEventId,
+      attribution_debug: attributionDebug,
     },
   };
 }
