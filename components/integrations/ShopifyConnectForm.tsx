@@ -120,17 +120,31 @@ export function ShopifyConnectForm({
         <div className="space-y-2 border-t border-border pt-3">
           <h3 className="text-sm font-semibold">Atribución UTM en tienda</h3>
           <p className="text-[12.5px] text-text-secondary">
-            Shopify a veces no llena el resumen de conversión en pedidos de prueba. Este script guarda
-            UTMs/click IDs en atributos del carrito para que lleguen al pedido (note_attributes).
+            En pedidos de prueba Shopify suele dejar vacío el “Resumen de conversión”. La solución es
+            guardar UTMs en atributos del carrito desde el tema (archivo en{" "}
+            <code className="text-text-primary">shopify-theme/</code> del repo).
           </p>
           <ol className="list-decimal space-y-1 pl-4 text-[12.5px] text-text-secondary">
-            <li>Shopify Admin → Tienda online → Temas → … → Editar código</li>
             <li>
-              Abre <code className="text-text-primary">theme.liquid</code> y pega el snippet antes de{" "}
-              <code className="text-text-primary">{`</head>`}</code>
+              Copia <code className="text-text-primary">shopify-theme/assets/codtracked-attribution.js</code>{" "}
+              a <code className="text-text-primary">assets/</code> de tu tema
             </li>
-            <li>Guarda, prueba en incógnito con UTMs en la URL del producto y compra de nuevo</li>
+            <li>
+              En <code className="text-text-primary">layout/theme.liquid</code>, dentro de{" "}
+              <code className="text-text-primary">{`<head>`}</code>, pega el snippet (asset del tema, sin
+              depender de Vercel)
+            </li>
+            <li>
+              Publica el tema → abre producto con UTMs → confirma{" "}
+              <code className="text-text-primary">/cart.js</code> trae attributes → compra
+            </li>
           </ol>
+          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-text-primary">
+            {`{% render 'codtracked-attribution' %}`}
+          </pre>
+          <p className="text-[11px] text-text-secondary">
+            Alternativa remota (solo si el JS es público):
+          </p>
           <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-text-primary">
             {themeSnippet}
           </pre>
@@ -140,7 +154,7 @@ export function ShopifyConnectForm({
             disabled={!appOrigin}
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(themeSnippet);
+                await navigator.clipboard.writeText("{% render 'codtracked-attribution' %}");
                 setCopied(true);
                 window.setTimeout(() => setCopied(false), 2000);
               } catch {
@@ -148,7 +162,7 @@ export function ShopifyConnectForm({
               }
             }}
           >
-            {copied ? "Copiado" : "Copiar snippet"}
+            {copied ? "Copiado" : "Copiar render del tema"}
           </Button>
         </div>
       ) : null}
