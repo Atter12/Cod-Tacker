@@ -49,8 +49,9 @@ export type BrandingUpdateInput = z.infer<typeof brandingUpdateSchema>;
 
 export const BRANDING_DEFAULTS = {
   productName: "CODTracked",
-  primaryColor: "#F47A32",
-  secondaryColor: "#F5661F",
+  /** Deep Teal + COD Orange — brand default combination. */
+  primaryColor: "#0D4F55",
+  secondaryColor: "#F36A1D",
   logoUrl: null as string | null,
   faviconUrl: null as string | null,
   loginBackgroundUrl: null as string | null,

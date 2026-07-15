@@ -373,7 +373,7 @@ export function BrandingForm({
                 ) : (
                   <span
                     className="grid size-11 place-items-center rounded-xl text-[16px] font-bold text-white"
-                    style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                    style={{ backgroundColor: form.primaryColor || "#0D4F55" }}
                     aria-hidden
                   >
                     {(form.productName || "C").charAt(0).toUpperCase()}
@@ -396,13 +396,13 @@ export function BrandingForm({
                 </div>
                 <p
                   className="text-right text-[11.5px] font-medium"
-                  style={{ color: form.primaryColor || "#F47A32" }}
+                  style={{ color: form.primaryColor || "#0D4F55" }}
                 >
                   ¿Olvidaste tu contraseña?
                 </p>
                 <div
                   className="flex h-10 items-center justify-center rounded-lg text-[13px] font-semibold text-white"
-                  style={{ backgroundColor: form.primaryColor || "#F47A32" }}
+                  style={{ backgroundColor: form.primaryColor || "#0D4F55" }}
                 >
                   Iniciar sesión
                 </div>
