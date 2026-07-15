@@ -20,8 +20,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getOrderDetail } from "@/services/orders.service";
 
-function maskContact(value: string | null | undefined, reveal: boolean): string {
-  if (!value) return "—";
+function maskContact(value: string | null | undefined, reveal: boolean): string | null {
+  if (!value?.trim()) return null;
   if (reveal) return value;
   if (value.includes("@")) {
     const [user, domain] = value.split("@");
@@ -30,6 +30,30 @@ function maskContact(value: string | null | undefined, reveal: boolean): string 
   const digits = value.replace(/\D/g, "");
   if (digits.length < 4) return "***";
   return `***${digits.slice(-4)}`;
+}
+
+function ContactField({
+  label,
+  value,
+  emptyLabel,
+  reveal,
+}: {
+  label: string;
+  value: string | null | undefined;
+  emptyLabel: string;
+  reveal: boolean;
+}) {
+  const masked = maskContact(value, reveal);
+  return (
+    <p>
+      {label}:{" "}
+      {masked ? (
+        masked
+      ) : (
+        <span className="italic text-text-secondary">{emptyLabel}</span>
+      )}
+    </p>
+  );
 }
 
 export default async function OrderDetailPage({
@@ -164,8 +188,18 @@ export default async function OrderDetailPage({
                           <span className="italic text-text-secondary">Sin nombre</span>
                         )}
                       </p>
-                      <p>Email: {maskContact(customer.email, revealPii)}</p>
-                      <p>Teléfono: {maskContact(customer.phone, revealPii)}</p>
+                      <ContactField
+                        label="Email"
+                        value={customer.email}
+                        emptyLabel="Sin email registrado"
+                        reveal={revealPii}
+                      />
+                      <ContactField
+                        label="Teléfono"
+                        value={customer.phone}
+                        emptyLabel="Sin teléfono registrado"
+                        reveal={revealPii}
+                      />
                       <p className="text-text-secondary">
                         Historial: {customer.total_orders ?? 0} pedidos ·{" "}
                         {customer.delivered_orders ?? 0} entregados · {customer.returned_orders ?? 0}{" "}
