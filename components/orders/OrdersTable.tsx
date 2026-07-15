@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { labelOrderStatus } from "@/lib/orders/labels";
+import { displayShopifyContact } from "@/lib/orders/shopify-contact";
 import type { OrderListRow } from "@/types/orders";
 import { cn } from "@/lib/utils/cn";
 
@@ -34,11 +35,6 @@ function formatDeliveryLabel(order: OrderListRow): string {
   if (diffDays === -1) return "Ayer";
   if (diffDays === 1) return "Mañana";
   return formatShortDate(raw);
-}
-
-function displayOrDash(value: string | null | undefined): string {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : "—";
 }
 
 function compactStatusLabel(status: string): string {
@@ -116,14 +112,23 @@ export function OrdersTable({
                   <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
                     {formatShortDate(order.created_at_source)}
                   </td>
-                  <td className="max-w-[160px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
-                    {displayOrDash(order.customerName)}
+                  <td
+                    className="max-w-[180px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5"
+                    title={displayShopifyContact(order.customerName, "name", order.source_name)}
+                  >
+                    {displayShopifyContact(order.customerName, "name", order.source_name)}
                   </td>
-                  <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {displayOrDash(order.customerEmail)}
+                  <td
+                    className="max-w-[220px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5"
+                    title={displayShopifyContact(order.customerEmail, "email", order.source_name)}
+                  >
+                    {displayShopifyContact(order.customerEmail, "email", order.source_name)}
                   </td>
-                  <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
-                    {displayOrDash(order.customerPhone)}
+                  <td
+                    className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5"
+                    title={displayShopifyContact(order.customerPhone, "phone", order.source_name)}
+                  >
+                    {displayShopifyContact(order.customerPhone, "phone", order.source_name)}
                   </td>
                   <td className="px-4 py-3 sm:px-5">
                     <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
