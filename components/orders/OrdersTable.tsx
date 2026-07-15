@@ -144,10 +144,10 @@ export function OrdersTable({
                       </span>
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] sm:px-5">
-                      <ContactCell value={order.customerEmail} emptyLabel="Sin email registrado" />
+                      <ContactCell value={order.customerEmail} emptyLabel="Sin email" />
                     </td>
                     <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums sm:px-5">
-                      <ContactCell value={order.customerPhone} emptyLabel="Sin teléfono registrado" />
+                      <ContactCell value={order.customerPhone} emptyLabel="Sin teléfono" />
                     </td>
                     <td className="px-4 py-3 sm:px-5">
                       <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
