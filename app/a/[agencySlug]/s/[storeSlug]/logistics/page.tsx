@@ -108,10 +108,13 @@ export default async function LogisticsPage({
           <Link href={integrationsHref} className="font-medium text-brand-primary hover:underline">
             Integraciones
           </Link>
-          .
+          . Los eventos de carrier llegan con latencia: trátalos como provisionales hasta confirmarse.
         </p>
       </div>
-      <SectionHeader title="Logística" description={`${result.total} envío(s) en la tienda.`} />
+      <SectionHeader
+        title="Logística"
+        description={`${result.total} envío(s) en la tienda. Estados no son tiempo real absoluto.`}
+      />
       <Suspense fallback={<Skeleton className="h-32 w-full" />}>
         <LogisticsFiltersForm
           initial={{

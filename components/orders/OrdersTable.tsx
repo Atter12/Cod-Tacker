@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
+import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { labelOrderCustomer } from "@/lib/orders/customer-label";
 import { labelOrderStatus } from "@/lib/orders/labels";
 import type { OrderListRow } from "@/types/orders";
 import { cn } from "@/lib/utils/cn";
@@ -34,10 +36,6 @@ function formatDeliveryLabel(order: OrderListRow): string {
   if (diffDays === -1) return "Ayer";
   if (diffDays === 1) return "Mañana";
   return formatShortDate(raw);
-}
-
-function customerLabel(order: OrderListRow): string {
-  return order.customerName || order.customerPhone || order.customerEmail || "—";
 }
 
 function compactStatusLabel(status: string): string {
@@ -113,8 +111,20 @@ export function OrdersTable({
                   <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
                     {formatShortDate(order.created_at_source)}
                   </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
-                    {customerLabel(order)}
+                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] sm:px-5">
+                    {(() => {
+                      const customer = labelOrderCustomer(order);
+                      return (
+                        <span
+                          className={cn(
+                            customer.isEmpty ? "text-text-secondary italic" : "text-text-primary",
+                          )}
+                          title={customer.isEmpty ? "Cliente aún no vinculado (p. ej. sync pendiente)" : customer.text}
+                        >
+                          {customer.text}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 sm:px-5">
                     <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
@@ -125,8 +135,8 @@ export function OrdersTable({
                   <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
                     {formatCurrency(Number(order.total_amount), order.currency_code)}
                   </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {order.source_name ?? "—"}
+                  <td className="px-4 py-3 sm:px-5">
+                    <OrderSourceBadge sourceName={order.source_name} />
                   </td>
                 </tr>
               ))

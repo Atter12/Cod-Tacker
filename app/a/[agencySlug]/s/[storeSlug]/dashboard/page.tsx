@@ -81,7 +81,7 @@ export default async function StoreDashboard({
     returned: series.map((point) => point.ordersReturned),
     rto: series.map((point) => point.rto),
     roasCheckout: series.map((point) => point.roasCheckout),
-    roasDelivered: series.map((point) => point.roasDelivered),
+    roasCollected: series.map((point) => point.roasCollected),
   };
 
   return (
@@ -91,7 +91,8 @@ export default async function StoreDashboard({
           Resumen operativo
         </h1>
         <p className="mt-1 text-[13px] text-text-secondary">
-          Indicadores calculados con los datos disponibles.
+          Indicadores con los datos disponibles. Carriers y cobros pueden tardar: lo provisional
+          no es dinero en puerta ni tiempo real absoluto.
         </p>
       </header>
 
@@ -177,15 +178,19 @@ export default async function StoreDashboard({
           icon={TrendingUp}
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
+          confidence="provisional"
+          hint="Estimado con revenue de checkout / ads. Aún no es cobro."
         />
         <SecondaryMetricCard
-          label="ROAS entregado"
-          value={summary.kpis.roasDelivered.value.toFixed(2)}
-          metric={summary.kpis.roasDelivered}
-          sparkline={spark.roasDelivered}
+          label="ROAS cobrado"
+          value={summary.kpis.roasCollected.value.toFixed(2)}
+          metric={summary.kpis.roasCollected}
+          sparkline={spark.roasCollected}
           icon={Gauge}
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
+          confidence="confirmed"
+          hint="Efectivo cobrado registrado ÷ ads. No confundir con entrega estimada."
         />
       </div>
 

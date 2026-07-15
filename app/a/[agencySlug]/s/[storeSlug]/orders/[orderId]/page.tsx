@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
+import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
 import {
   ConfirmationStatusBadge,
+  DataConfidenceBadge,
   DataTable,
   EmptyState,
   OrderStatusBadge,
@@ -100,7 +102,40 @@ export default async function OrderDetailPage({
                 </div>
                 <div>
                   <dt className="text-text-secondary">Fuente</dt>
-                  <dd>{order.source_name ?? "—"}</dd>
+                  <dd className="mt-1 flex flex-wrap items-center gap-2">
+                    <OrderSourceBadge sourceName={order.source_name} />
+                    {order.source_name?.toLowerCase() === "shopify" ? (
+                      <span className="text-xs text-text-secondary">Origen commerce</span>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">UTM / campaña</dt>
+                  <dd className="mt-1 text-text-secondary">
+                    {primaryAttribution ? (
+                      <span>
+                        {primaryAttribution.platform}
+                        {primaryAttribution.attribution_reason
+                          ? ` · ${primaryAttribution.attribution_reason}`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span className="italic">Pendiente de atribución (UTM)</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">Confianza del dato</dt>
+                  <dd className="mt-1 flex flex-wrap items-center gap-2">
+                    {order.payment_status === "cash_collected" || order.cash_collected_at ? (
+                      <DataConfidenceBadge confidence="confirmed" />
+                    ) : (
+                      <DataConfidenceBadge confidence="provisional" />
+                    )}
+                    <span className="text-xs text-text-secondary">
+                      Cobro/carrier pueden tardar; no es tiempo real absoluto.
+                    </span>
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-text-secondary">Tags</dt>
@@ -120,17 +155,32 @@ export default async function OrderDetailPage({
               <div className="grid gap-4 sm:grid-cols-2 text-sm">
                 <div className="space-y-2">
                   <h3 className="font-medium">Cliente</h3>
-                  <p>
-                    {customer
-                      ? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "Sin nombre"
-                      : "Sin cliente vinculado"}
-                  </p>
-                  <p>Email: {maskContact(customer?.email, revealPii)}</p>
-                  <p>Teléfono: {maskContact(customer?.phone, revealPii)}</p>
-                  <p className="text-text-secondary">
-                    Historial: {customer?.total_orders ?? 0} pedidos · {customer?.delivered_orders ?? 0}{" "}
-                    entregados · {customer?.returned_orders ?? 0} devueltos
-                  </p>
+                  {customer ? (
+                    <>
+                      <p>
+                        {`${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() ? (
+                          `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
+                        ) : (
+                          <span className="italic text-text-secondary">Sin nombre</span>
+                        )}
+                      </p>
+                      <p>Email: {maskContact(customer.email, revealPii)}</p>
+                      <p>Teléfono: {maskContact(customer.phone, revealPii)}</p>
+                      <p className="text-text-secondary">
+                        Historial: {customer.total_orders ?? 0} pedidos ·{" "}
+                        {customer.delivered_orders ?? 0} entregados · {customer.returned_orders ?? 0}{" "}
+                        devueltos
+                      </p>
+                    </>
+                  ) : (
+                    <div className="rounded-md border border-dashed border-border bg-muted/40 px-3 py-3">
+                      <p className="font-medium text-text-primary">Sin cliente vinculado</p>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        El pedido llegó sin cliente o el sync aún no rellenó nombre/contacto. Cuando
+                        llegue el mapeo de cliente/UTM se mostrará aquí.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-medium">Dirección de envío</h3>
@@ -202,7 +252,10 @@ export default async function OrderDetailPage({
                 ]}
               />
             ) : (
-              <EmptyState title="Sin envíos" description="Aún no hay logística vinculada." />
+              <EmptyState
+                title="Sin envíos"
+                description="Aún no hay logística vinculada. El estado del carrier llegará con latencia; hasta entonces trátalo como provisional."
+              />
             ),
           },
           {

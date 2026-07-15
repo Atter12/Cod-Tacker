@@ -42,6 +42,7 @@ type PeriodTotals = {
   rto: number;
   roasCheckout: number;
   roasDelivered: number;
+  roasCollected: number;
 };
 
 const sum = <T>(items: readonly T[], value: (item: T) => number): number =>
@@ -89,6 +90,7 @@ function computePeriodTotals(
     rto,
     roasCheckout: ratio(checkoutRevenue, spend),
     roasDelivered: ratio(deliveredRevenue, spend),
+    roasCollected: ratio(cashCollected, spend),
   };
 }
 
@@ -152,6 +154,7 @@ function buildTimeSeries(
       rto: ratio(point.ordersReturned, terminal),
       roasCheckout: ratio(point.checkoutRevenue, point.adSpend),
       roasDelivered: ratio(deliveredRevenue, point.adSpend),
+      roasCollected: ratio(point.cashCollected, point.adSpend),
     };
   });
 }
@@ -288,8 +291,9 @@ export async function getStoreActiveAlertCount(
  * - confirmationRate = confirmed / generated
  * - deliveryRate = delivered / confirmed
  * - rto = returned / (delivered + returned)
- * - roasCheckout = attributed checkout revenue / ad spend
- * - roasDelivered = (expected COD × delivered/generated) / ad spend
+ * - roasCheckout = attributed checkout revenue / ad spend (provisional)
+ * - roasDelivered = (expected COD × delivered/generated) / ad spend (estimated; not cash)
+ * - roasCollected = cash collected / ad spend (confirmed cobro)
  * - Confirmed includes confirmed_at, confirmation_status=confirmed, or post-confirmation order_status
  */
 export async function getDashboardSummary(
@@ -379,6 +383,7 @@ export async function getDashboardSummary(
       rto: toMetric(currentTotals.rto, previousTotals.rto),
       roasCheckout: toMetric(currentTotals.roasCheckout, previousTotals.roasCheckout),
       roasDelivered: toMetric(currentTotals.roasDelivered, previousTotals.roasDelivered),
+      roasCollected: toMetric(currentTotals.roasCollected, previousTotals.roasCollected),
     },
     funnel: {
       generated: currentTotals.generated,
