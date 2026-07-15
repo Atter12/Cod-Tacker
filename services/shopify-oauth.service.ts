@@ -1,7 +1,11 @@
 import "server-only";
 
-import { encryptSecret, decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
+import {
+  ensureShopifyAccessToken,
+  packShopifyCredentials,
+} from "@/lib/integrations/shopify/credentials";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { exchangeShopifyAccessToken } from "@/lib/integrations/shopify/oauth";
 import type { ShopifyOAuthStatePayload } from "@/lib/integrations/shopify/oauth-state";
@@ -33,7 +37,13 @@ export async function completeShopifyOAuth(
 
   const token = await exchangeShopifyAccessToken(shop, input.code);
   const shopInfo = await fetchShopifyShopInfo(shop, token.access_token);
-  const secretRef = encryptSecret(token.access_token);
+  const secretRef = packShopifyCredentials({
+    access_token: token.access_token,
+    expiring: token.expiring,
+    refresh_token: token.refresh_token,
+    access_token_expires_at: token.access_token_expires_at,
+    refresh_token_expires_at: token.refresh_token_expires_at,
+  });
   const scopes = token.scope
     .split(",")
     .map((s) => s.trim())
@@ -66,8 +76,13 @@ export async function completeShopifyOAuth(
       shop_domain: shop,
       currency_code: shopInfo.currencyCode,
       shop_email: shopInfo.email,
+      shopify_token_expiring: Boolean(token.expiring),
     } as Json,
-    settings: { shop_domain: shop } as Json,
+    settings: {
+      shop_domain: shop,
+      shopify_token_expiring: Boolean(token.expiring),
+      shopify_access_token_expires_at: token.access_token_expires_at ?? null,
+    } as Json,
     connected_at: now,
     connected_by: input.state.userId,
     last_success_at: now,
@@ -220,7 +235,7 @@ export async function testShopifyLiveConnection(
   }
 
   try {
-    const token = decryptSecret(data.secret_reference);
+    const token = await ensureShopifyAccessToken(client, data, shop);
     const info = await fetchShopifyShopInfo(shop, token);
     const now = new Date().toISOString();
     await client

@@ -1,7 +1,8 @@
 import "server-only";
 
-import { decryptSecret, isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
+import { ensureShopifyAccessToken } from "@/lib/integrations/shopify/credentials";
 import { enrichShopifyOrderAttribution } from "@/lib/integrations/shopify/enrich-order-attribution";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
 import { verifyShopifyWebhookHmac } from "@/lib/integrations/shopify/hmac";
@@ -94,7 +95,7 @@ export async function handleShopifyWebhookIngress(input: {
   const store = storeLookup.data;
   const integrationLookup = await admin
     .from("integrations")
-    .select("id, secret_reference, status")
+    .select("id, agency_id, store_id, secret_reference, status, settings, metadata")
     .eq("agency_id", store.agency_id)
     .eq("store_id", store.id)
     .eq("provider", "shopify")
@@ -115,6 +116,8 @@ export async function handleShopifyWebhookIngress(input: {
     return { status: 409, body: { error: "Falta credencial live cifrada" } };
   }
 
+  const integration = integrationLookup.data;
+
   const isCreate = topic === "orders/create";
   let payload = isCreate ? mapRestOrderToCreatedPayload(order) : mapRestOrderToUpdatedPayload(order);
   if (!payload.external_order_id) {
@@ -124,9 +127,9 @@ export async function handleShopifyWebhookIngress(input: {
   let attributionEnriched = false;
   let journeyReady: boolean | null = null;
   // Near-realtime: if REST webhook lacks UTMs, pull GraphQL journey/attrs before enqueue.
-  if (!payload.attribution?.has_attribution && isEncryptedSecretRef(integrationLookup.data.secret_reference)) {
+  if (!payload.attribution?.has_attribution) {
     try {
-      const accessToken = decryptSecret(integrationLookup.data.secret_reference);
+      const accessToken = await ensureShopifyAccessToken(admin, integration, shop);
       const enrich = await enrichShopifyOrderAttribution({
         shop,
         accessToken,
@@ -179,7 +182,7 @@ export async function handleShopifyWebhookIngress(input: {
     agencyId: store.agency_id,
     storeId: store.id,
     provider: "shopify",
-    integrationId: integrationLookup.data.id,
+    integrationId: integration.id,
     eventType: jobType,
     jobType,
     idempotencyKey,
