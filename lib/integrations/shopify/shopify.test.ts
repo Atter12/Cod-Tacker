@@ -14,6 +14,10 @@ import {
   isShopifyPrivacyTopic,
   summarizeShopifyPrivacyPayload,
 } from "@/lib/integrations/shopify/privacy-webhooks";
+import {
+  extractRequestOrigin,
+  resolveAllowedShopifyOAuthReturnOrigin,
+} from "@/lib/integrations/shopify/oauth-return-origin";
 
 describe("shopify domain", () => {
   it("normalizes myshopify domains", () => {
@@ -23,6 +27,51 @@ describe("shopify domain", () => {
       "demo.myshopify.com",
     );
     assert.equal(normalizeShopifyShopDomain("not a shop"), null);
+  });
+});
+
+describe("shopify oauth return origin", () => {
+  it("extracts origin from request url", () => {
+    assert.equal(
+      extractRequestOrigin(
+        "https://cod-tracker-git-feat.vercel.app/api/integrations/shopify/connect?shop=x",
+      ),
+      "https://cod-tracker-git-feat.vercel.app",
+    );
+  });
+
+  it("allows configured app urls and vercel previews", () => {
+    const prod = "https://app.codtracked.com";
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin(prod, [prod]),
+      "https://app.codtracked.com",
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin(
+        "https://cod-tracker-git-feat-sandro.vercel.app",
+        [prod],
+      ),
+      "https://cod-tracker-git-feat-sandro.vercel.app",
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("http://localhost:3000", [prod]),
+      "http://localhost:3000",
+    );
+  });
+
+  it("rejects unrelated hosts", () => {
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("https://evil.example.com", [
+        "https://app.codtracked.com",
+      ]),
+      null,
+    );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("https://evil.vercel.app.attacker.com", [
+        "https://app.codtracked.com",
+      ]),
+      null,
+    );
   });
 });
 

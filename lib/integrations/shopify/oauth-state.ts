@@ -12,6 +12,8 @@ export type ShopifyOAuthStatePayload = {
   shop: string;
   agencySlug: string;
   storeSlug: string;
+  /** Browser origin that started OAuth (preview / localhost). Optional for older states. */
+  returnOrigin?: string;
   exp: number;
 };
 
