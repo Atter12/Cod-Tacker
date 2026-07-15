@@ -38,9 +38,18 @@ function formatDeliveryLabel(order: OrderListRow): string {
   return formatShortDate(raw);
 }
 
-function displayOrDash(value: string | null | undefined): string {
+function ContactCell({
+  value,
+  emptyLabel,
+}: {
+  value: string | null | undefined;
+  emptyLabel: string;
+}) {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : "—";
+  if (trimmed) {
+    return <span className="text-text-secondary">{trimmed}</span>;
+  }
+  return <span className="italic text-text-secondary">{emptyLabel}</span>;
 }
 
 function compactStatusLabel(status: string): string {
@@ -134,11 +143,11 @@ export function OrdersTable({
                         {customer.text}
                       </span>
                     </td>
-                    <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                      {displayOrDash(order.customerEmail)}
+                    <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] sm:px-5">
+                      <ContactCell value={order.customerEmail} emptyLabel="Sin email registrado" />
                     </td>
-                    <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
-                      {displayOrDash(order.customerPhone)}
+                    <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums sm:px-5">
+                      <ContactCell value={order.customerPhone} emptyLabel="Sin teléfono registrado" />
                     </td>
                     <td className="px-4 py-3 sm:px-5">
                       <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
