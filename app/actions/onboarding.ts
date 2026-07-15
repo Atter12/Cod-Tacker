@@ -167,7 +167,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
         agency_id: agency.id,
         product_name: "CODTracked",
         primary_color: "#0D4F55",
-        secondary_color: "#F36A1D",
+        secondary_color: "#08383C",
         hide_codtracked_branding: false,
         metadata: { schema_version: 1 },
       });

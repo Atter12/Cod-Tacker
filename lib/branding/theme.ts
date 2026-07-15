@@ -22,19 +22,18 @@ export type BrandColorPalette = {
 };
 
 /**
- * Brand tokens (CODTracked style guide):
- * Deep Teal #0D4F55 · COD Orange #F36A1D · Charcoal #171A1F · Warm White #FAF9F6
- * Soft Teal #DCEDEE · Amber #F4B740 · Slate Gray #8A95A1
+ * Brand tokens (CODTracked style guide), as solid same-hue pairs
+ * (primary + darker secondary), matching the picker swatch style.
+ * Deep Teal #0D4F55 · COD Orange #F36A1D · Charcoal #171A1F · Amber #F4B740 · Soft Teal #DCEDEE
  */
 export const BRAND_COLOR_PALETTES: readonly BrandColorPalette[] = [
-  // Recommended platform defaults first (Deep Teal + COD Orange)
-  { id: "codtracked", label: "CODTracked", primary: "#0D4F55", secondary: "#F36A1D" },
-  { id: "codtracked-accion", label: "CODTracked Acción", primary: "#F36A1D", secondary: "#0D4F55" },
-  { id: "codtracked-confianza", label: "CODTracked Confianza", primary: "#0D4F55", secondary: "#DCEDEE" },
-  { id: "codtracked-ambar", label: "CODTracked Ámbar", primary: "#0D4F55", secondary: "#F4B740" },
-  { id: "codtracked-carbon", label: "CODTracked Carbón", primary: "#171A1F", secondary: "#F36A1D" },
-  // Extra visual variants (still platform-tagged)
-  { id: "codtracked-suave", label: "CODTracked Suave", primary: "#0D4F55", secondary: "#FAF9F6" },
+  // Platform brand presets first
+  { id: "codtracked", label: "CODTracked", primary: "#0D4F55", secondary: "#08383C" },
+  { id: "codtracked-accion", label: "CODTracked Acción", primary: "#F36A1D", secondary: "#C84E12" },
+  { id: "codtracked-confianza", label: "CODTracked Confianza", primary: "#1F6B72", secondary: "#0D4F55" },
+  { id: "codtracked-ambar", label: "CODTracked Ámbar", primary: "#F4B740", secondary: "#D97706" },
+  { id: "codtracked-carbon", label: "CODTracked Carbón", primary: "#171A1F", secondary: "#0F1215" },
+  { id: "codtracked-suave", label: "CODTracked Suave", primary: "#5A9A9F", secondary: "#0D4F55" },
   // Generic extras
   { id: "sunset", label: "Atardecer", primary: "#EA580C", secondary: "#C2410C" },
   { id: "coral", label: "Coral", primary: "#F43F5E", secondary: "#BE123C" },

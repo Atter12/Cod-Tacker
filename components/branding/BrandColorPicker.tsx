@@ -21,7 +21,7 @@ export function BrandColorPicker({
 }) {
   const matched = findMatchingPalette(primaryColor, secondaryColor);
   const customPrimary = isValidBrandHex(primaryColor) ? primaryColor : "#0D4F55";
-  const customSecondary = isValidBrandHex(secondaryColor) ? secondaryColor : "#F36A1D";
+  const customSecondary = isValidBrandHex(secondaryColor) ? secondaryColor : "#08383C";
 
   return (
     <div className="space-y-4">

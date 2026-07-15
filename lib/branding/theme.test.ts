@@ -64,8 +64,8 @@ describe("agency brand theme", () => {
   });
 
   it("matches curated palettes", () => {
-    const palette = findMatchingPalette("#0D4F55", "#F36A1D");
+    const palette = findMatchingPalette("#0D4F55", "#08383C");
     assert.equal(palette?.id, "codtracked");
-    assert.equal(findMatchingPalette("#F36A1D", "#0D4F55")?.id, "codtracked-accion");
+    assert.equal(findMatchingPalette("#F36A1D", "#C84E12")?.id, "codtracked-accion");
   });
 });
