@@ -48,19 +48,23 @@ const rawBody = JSON.stringify(payload);
 const hmac = createHmac("sha256", secret).update(rawBody).digest("base64");
 const url = `${appUrl}/api/integrations/shopify/webhooks`;
 
-const res = await fetch(url, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "X-Shopify-Topic": topic,
-    "X-Shopify-Hmac-Sha256": hmac,
-    "X-Shopify-Shop-Domain": shop,
-    "X-Shopify-Webhook-Id": `test-privacy-${Date.now()}`,
-  },
-  body: rawBody,
-});
+async function main() {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Topic": topic,
+      "X-Shopify-Hmac-Sha256": hmac,
+      "X-Shopify-Shop-Domain": shop,
+      "X-Shopify-Webhook-Id": `test-privacy-${Date.now()}`,
+    },
+    body: rawBody,
+  });
 
-const text = await res.text();
-console.log(JSON.stringify({ url, topic, status: res.status, body: text }, null, 2));
-if (res.status !== 200) process.exit(1);
-console.log('OK — busca en Vercel Logs: shopify.webhook.privacy');
+  const text = await res.text();
+  console.log(JSON.stringify({ url, topic, status: res.status, body: text }, null, 2));
+  if (res.status !== 200) process.exit(1);
+  console.log("OK — busca en Vercel Logs: shopify.webhook.privacy");
+}
+
+void main();
