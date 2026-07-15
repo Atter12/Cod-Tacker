@@ -38,6 +38,11 @@ function formatDeliveryLabel(order: OrderListRow): string {
   return formatShortDate(raw);
 }
 
+function displayOrDash(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "—";
+}
+
 function compactStatusLabel(status: string): string {
   const label = labelOrderStatus(status);
   if (status === "pending_confirmation") return "Pendiente";
@@ -61,23 +66,25 @@ export function OrdersTable({
   return (
     <article className="overflow-hidden rounded-[10px] border border-border bg-surface-elevated shadow-[var(--card-shadow)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[780px] border-collapse text-left">
+        <table className="w-full min-w-[1040px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border">
-              {["Pedido", "Fecha", "Cliente", "Estado", "Entrega", "Total", "Fuente"].map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-2.5 text-[10.5px] font-medium uppercase tracking-wide text-text-secondary sm:px-5"
-                >
-                  {header}
-                </th>
-              ))}
+              {["Pedido", "Fecha", "Cliente", "Email", "Teléfono", "Estado", "Entrega", "Total", "Fuente"].map(
+                (header) => (
+                  <th
+                    key={header}
+                    className="px-4 py-2.5 text-[10.5px] font-medium uppercase tracking-wide text-text-secondary sm:px-5"
+                  >
+                    {header}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-14 sm:px-5">
+                <td colSpan={9} className="px-4 py-14 sm:px-5">
                   <div className="flex flex-col items-center justify-center text-center">
                     <span className="grid size-12 place-items-center rounded-full bg-brand-softer text-brand-primary">
                       <Package className="size-5" aria-hidden />
@@ -92,54 +99,62 @@ export function OrdersTable({
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <tr
-                  key={order.id}
-                  className="border-b border-border/80 transition-colors last:border-b-0 hover:bg-muted/70"
-                >
-                  <td className="px-4 py-3 sm:px-5">
-                    <Link
-                      href={routes.store.orderDetail(agencySlug, storeSlug, order.id)}
-                      className={cn(
-                        "text-[12.5px] font-semibold text-text-primary hover:text-brand-primary hover:underline",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      )}
-                    >
-                      {order.order_number ?? order.external_order_id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {formatShortDate(order.created_at_source)}
-                  </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] sm:px-5">
-                    {(() => {
-                      const customer = labelOrderCustomer(order);
-                      return (
-                        <span
-                          className={cn(
-                            customer.isEmpty ? "text-text-secondary italic" : "text-text-primary",
-                          )}
-                          title={customer.isEmpty ? "Cliente aún no vinculado (p. ej. sync pendiente)" : customer.text}
-                        >
-                          {customer.text}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 sm:px-5">
-                    <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {formatDeliveryLabel(order)}
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
-                    {formatCurrency(Number(order.total_amount), order.currency_code)}
-                  </td>
-                  <td className="px-4 py-3 sm:px-5">
-                    <OrderSourceBadge sourceName={order.source_name} />
-                  </td>
-                </tr>
-              ))
+              orders.map((order) => {
+                const customer = labelOrderCustomer(order);
+                return (
+                  <tr
+                    key={order.id}
+                    className="border-b border-border/80 transition-colors last:border-b-0 hover:bg-muted/70"
+                  >
+                    <td className="px-4 py-3 sm:px-5">
+                      <Link
+                        href={routes.store.orderDetail(agencySlug, storeSlug, order.id)}
+                        className={cn(
+                          "text-[12.5px] font-semibold text-text-primary hover:text-brand-primary hover:underline",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                      >
+                        {order.order_number ?? order.external_order_id}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {formatShortDate(order.created_at_source)}
+                    </td>
+                    <td className="max-w-[160px] truncate px-4 py-3 text-[12.5px] sm:px-5">
+                      <span
+                        className={cn(
+                          customer.isEmpty ? "text-text-secondary italic" : "text-text-primary",
+                        )}
+                        title={
+                          customer.isEmpty
+                            ? "Cliente aún no vinculado (p. ej. sync pendiente)"
+                            : customer.text
+                        }
+                      >
+                        {customer.text}
+                      </span>
+                    </td>
+                    <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {displayOrDash(order.customerEmail)}
+                    </td>
+                    <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
+                      {displayOrDash(order.customerPhone)}
+                    </td>
+                    <td className="px-4 py-3 sm:px-5">
+                      <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {formatDeliveryLabel(order)}
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
+                      {formatCurrency(Number(order.total_amount), order.currency_code)}
+                    </td>
+                    <td className="px-4 py-3 sm:px-5">
+                      <OrderSourceBadge sourceName={order.source_name} />
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

@@ -3,6 +3,7 @@ import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
 import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-order-payload";
 import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
+import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderCreatedPayloadSchema };
@@ -38,9 +39,43 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     throw new PermanentJobError("DATABASE_ERROR", "No se pudo consultar el pedido existente.");
   }
   if (existing.data) {
+    // Create is idempotent, but later webhooks/sync may inject attribution (e.g. note)
+    // that was missing on the first create — apply it on the existing row.
+    if (data.customer) {
+      const customerId = await upsertShopifyCustomer({
+        admin,
+        storeId: job.store_id,
+        customer: data.customer,
+      });
+      if (customerId) {
+        await admin
+          .from("orders")
+          .update({ customer_id: customerId })
+          .eq("id", existing.data.id)
+          .eq("store_id", job.store_id);
+      }
+    }
+    if (data.line_items) {
+      await syncShopifyOrderItems({
+        admin,
+        storeId: job.store_id,
+        orderId: existing.data.id,
+        lineItems: data.line_items,
+      });
+    }
+    if (data.attribution) {
+      await upsertShopifyOrderAttribution({
+        admin,
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        orderId: existing.data.id,
+        attributedValue: data.total_amount,
+        attribution: data.attribution,
+      });
+    }
     return {
       ok: true,
-      action: "skipped",
+      action: data.attribution?.has_attribution ? "updated" : "skipped",
       entityType: "order",
       entityId: existing.data.id,
       detail: "duplicate_external_order_id",
@@ -149,6 +184,18 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       storeId: job.store_id,
       orderId: insert.data.id,
       lineItems: data.line_items,
+    });
+  }
+
+  if (data.attribution) {
+    await upsertShopifyOrderAttribution({
+      admin,
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      orderId: insert.data.id,
+      customerId,
+      attributedValue: total,
+      attribution: data.attribution,
     });
   }
 

@@ -76,6 +76,27 @@ export const shopifyOrderPaymentFieldsSchema = {
   expected_cod_amount: z.number().nonnegative().nullable().optional(),
 };
 
+export const shopifyMappedAttributionSchema = z
+  .object({
+    landing_site: z.string().max(2000).nullable(),
+    referring_site: z.string().max(2000).nullable(),
+    has_attribution: z.boolean(),
+    utm_source: z.string().max(500).nullable(),
+    utm_medium: z.string().max(500).nullable(),
+    utm_campaign: z.string().max(500).nullable(),
+    utm_term: z.string().max(500).nullable(),
+    utm_content: z.string().max(500).nullable(),
+    fbclid: z.string().max(500).nullable(),
+    ttclid: z.string().max(500).nullable(),
+    gclid: z.string().max(500).nullable(),
+    platform: z.enum(["meta", "tiktok", "google", "organic", "direct", "other"]),
+  })
+  .strict();
+
+export const shopifyOrderAttributionFieldsSchema = {
+  attribution: shopifyMappedAttributionSchema.optional(),
+};
+
 export const shopifyOrderCreatedPayloadSchema = z.object({
   external_order_id: z.string().min(1).max(200),
   order_number: z.string().min(1).max(100).optional(),
@@ -88,6 +109,7 @@ export const shopifyOrderCreatedPayloadSchema = z.object({
   ...shopifyOrderCustomerFieldsSchema,
   ...shopifyOrderLineItemsFieldsSchema,
   ...shopifyOrderPaymentFieldsSchema,
+  ...shopifyOrderAttributionFieldsSchema,
 });
 
 export const shopifyOrderUpdatedPayloadSchema = z.object({
@@ -99,6 +121,7 @@ export const shopifyOrderUpdatedPayloadSchema = z.object({
   ...shopifyOrderCustomerFieldsSchema,
   ...shopifyOrderLineItemsFieldsSchema,
   ...shopifyOrderPaymentFieldsSchema,
+  ...shopifyOrderAttributionFieldsSchema,
 });
 
 export { ORDER_STATUSES };
