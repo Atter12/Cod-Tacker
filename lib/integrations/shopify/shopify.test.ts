@@ -357,6 +357,32 @@ describe("shopify order mapping", () => {
     assert.equal(payload.attribution?.platform, "tiktok");
   });
 
+  it("reads UTMs from codtracked_landing cart attribute when landing_site is empty", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 94,
+      name: "#1094",
+      currency: "USD",
+      total_price: "32.95",
+      note_attributes: [
+        {
+          name: "codtracked_landing",
+          value: "/products/selling-plans-ski-wax?utm_source=test&utm_medium=cpc&utm_campaign=demo",
+        },
+        { name: "utm_source", value: "test" },
+        { name: "utm_medium", value: "cpc" },
+        { name: "utm_campaign", value: "demo" },
+      ],
+    });
+    assert.equal(payload.attribution?.has_attribution, true);
+    assert.equal(payload.attribution?.utm_source, "test");
+    assert.equal(payload.attribution?.utm_medium, "cpc");
+    assert.equal(payload.attribution?.utm_campaign, "demo");
+    assert.equal(
+      payload.attribution?.landing_site,
+      "/products/selling-plans-ski-wax?utm_source=test&utm_medium=cpc&utm_campaign=demo",
+    );
+  });
+
   it("reads attribution from free-text order note", () => {
     const payload = mapRestOrderToCreatedPayload({
       id: 93,

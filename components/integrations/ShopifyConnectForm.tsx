@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
@@ -24,6 +24,18 @@ export function ShopifyConnectForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [appOrigin, setAppOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setAppOrigin(window.location.origin);
+  }, []);
+
+  const scriptUrl = useMemo(
+    () => (appOrigin ? `${appOrigin}/shopify/codtracked-attribution.js` : "/shopify/codtracked-attribution.js"),
+    [appOrigin],
+  );
+  const themeSnippet = `<script src="${scriptUrl}" defer></script>`;
 
   function connect() {
     setError(null);
@@ -103,6 +115,43 @@ export function ShopifyConnectForm({
           {pending ? "Probando…" : "Probar GraphQL"}
         </Button>
       </div>
+
+      {connected ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <h3 className="text-sm font-semibold">Atribución UTM en tienda</h3>
+          <p className="text-[12.5px] text-text-secondary">
+            Shopify a veces no llena el resumen de conversión en pedidos de prueba. Este script guarda
+            UTMs/click IDs en atributos del carrito para que lleguen al pedido (note_attributes).
+          </p>
+          <ol className="list-decimal space-y-1 pl-4 text-[12.5px] text-text-secondary">
+            <li>Shopify Admin → Tienda online → Temas → … → Editar código</li>
+            <li>
+              Abre <code className="text-text-primary">theme.liquid</code> y pega el snippet antes de{" "}
+              <code className="text-text-primary">{`</head>`}</code>
+            </li>
+            <li>Guarda, prueba en incógnito con UTMs en la URL del producto y compra de nuevo</li>
+          </ol>
+          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-[11px] text-text-primary">
+            {themeSnippet}
+          </pre>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!appOrigin}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(themeSnippet);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+              } catch {
+                setError("No se pudo copiar el snippet. Cópialo manualmente del recuadro.");
+              }
+            }}
+          >
+            {copied ? "Copiado" : "Copiar snippet"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
