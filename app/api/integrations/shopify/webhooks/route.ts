@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 
 /**
  * Shopify HTTPS webhook receiver.
- * Topics handled: orders/create, orders/updated.
+ * Topics:
+ * - orders/create, orders/updated (enqueue jobs)
+ * - customers/data_request, customers/redact, shop/redact (GDPR: HMAC + 200 + log)
  * Auth: X-Shopify-Hmac-Sha256 over raw body using SHOPIFY_CLIENT_SECRET.
- * After a successful enqueue, drains a small job batch so orders land without waiting for cron.
+ * After a successful order enqueue, drains a small job batch so orders land without waiting for cron.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
       shop: request.headers.get("x-shopify-shop-domain"),
       topic: request.headers.get("x-shopify-topic"),
     });
-  } else if (result.body.ok && !result.body.skipped) {
+  } else if (result.body.ok && !result.body.skipped && !result.body.privacy) {
     after(() => kickJobProcessing({ limit: 8, reason: "shopify-webhook" }));
   }
 

@@ -9,6 +9,11 @@ import {
   mapRestOrderToUpdatedPayload,
 } from "@/lib/integrations/shopify/map-order";
 import { shopifyWebhookCallbackUri, summarizeShopifyWebhooks } from "@/lib/integrations/shopify/webhooks-meta";
+import {
+  acknowledgeShopifyPrivacyWebhook,
+  isShopifyPrivacyTopic,
+  summarizeShopifyPrivacyPayload,
+} from "@/lib/integrations/shopify/privacy-webhooks";
 
 describe("shopify domain", () => {
   it("normalizes myshopify domains", () => {
@@ -47,6 +52,51 @@ describe("shopify webhook hmac", () => {
     const hmac = createHmac("sha256", secret).update(body).digest("base64");
     assert.equal(verifyShopifyWebhookHmac(body, hmac, secret), true);
     assert.equal(verifyShopifyWebhookHmac(body, "bad", secret), false);
+  });
+});
+
+describe("shopify privacy GDPR webhooks", () => {
+  it("recognizes compliance topics", () => {
+    assert.equal(isShopifyPrivacyTopic("customers/data_request"), true);
+    assert.equal(isShopifyPrivacyTopic("customers/redact"), true);
+    assert.equal(isShopifyPrivacyTopic("shop/redact"), true);
+    assert.equal(isShopifyPrivacyTopic("orders/create"), false);
+  });
+
+  it("summarizes payload without requiring PII fields in summary", () => {
+    const summary = summarizeShopifyPrivacyPayload(
+      JSON.stringify({
+        shop_id: 42,
+        customer: { id: 99, email: "secret@example.com" },
+        orders_to_redact: [1, 2, 3],
+        data_request: { id: 7 },
+      }),
+    );
+    assert.equal(summary.shop_id, "42");
+    assert.equal(summary.customer_id, "99");
+    assert.equal(summary.orders_to_redact, 3);
+    assert.equal(summary.data_request_id, "7");
+  });
+
+  it("acknowledges privacy webhook with 200", () => {
+    const result = acknowledgeShopifyPrivacyWebhook({
+      topic: "customers/redact",
+      shop: "demo.myshopify.com",
+      webhookId: "wh_test_1",
+      rawBody: JSON.stringify({ shop_id: 1, customer: { id: 2 }, orders_to_redact: [9] }),
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.privacy, true);
+    assert.equal(result.body.topic, "customers/redact");
+  });
+
+  it("rejects bad hmac the same way as order webhooks", () => {
+    const secret = "shpss_test_secret";
+    const body = '{"shop_id":1}';
+    assert.equal(verifyShopifyWebhookHmac(body, "invalid", secret), false);
+    const good = createHmac("sha256", secret).update(body).digest("base64");
+    assert.equal(verifyShopifyWebhookHmac(body, good, secret), true);
   });
 });
 

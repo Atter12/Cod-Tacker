@@ -11,6 +11,10 @@ import {
   mapRestOrderToUpdatedPayload,
   type ShopifyRestOrder,
 } from "@/lib/integrations/shopify/map-order";
+import {
+  acknowledgeShopifyPrivacyWebhook,
+  isShopifyPrivacyTopic,
+} from "@/lib/integrations/shopify/privacy-webhooks";
 import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
@@ -24,8 +28,7 @@ export type ShopifyWebhookHandled = {
 };
 
 /**
- * Verify HMAC, resolve tenant by shop domain, enqueue order job.
- * Returns 401-style failure as thrown Error with code, or handled result.
+ * Verify HMAC, handle GDPR compliance topics (200 + log), or resolve tenant and enqueue order jobs.
  */
 export async function handleShopifyWebhookIngress(input: {
   rawBody: string;
@@ -39,6 +42,25 @@ export async function handleShopifyWebhookIngress(input: {
     return { status: 401, body: { error: "HMAC inválido" } };
   }
 
+  const topic = (input.topicHeader ?? "").toLowerCase();
+
+  // GDPR / App Store compliance — HMAC already OK; always 200 + structured log (no DB wipe here).
+  if (isShopifyPrivacyTopic(topic)) {
+    let shop: string | null = null;
+    try {
+      shop = assertShopifyShopDomain(input.shopHeader ?? "");
+    } catch {
+      const raw = (input.shopHeader ?? "").trim();
+      shop = raw.length > 0 ? raw : null;
+    }
+    return acknowledgeShopifyPrivacyWebhook({
+      topic,
+      shop,
+      webhookId: input.webhookIdHeader?.trim() || null,
+      rawBody: input.rawBody,
+    });
+  }
+
   let shop: string;
   try {
     shop = assertShopifyShopDomain(input.shopHeader ?? "");
@@ -46,7 +68,6 @@ export async function handleShopifyWebhookIngress(input: {
     return { status: 400, body: { error: "Shop inválido" } };
   }
 
-  const topic = (input.topicHeader ?? "").toLowerCase();
   if (topic !== "orders/create" && topic !== "orders/updated") {
     return { status: 200, body: { ok: true, skipped: true, reason: "topic_ignored" } };
   }
