@@ -41,12 +41,19 @@ export function summarizeShopifyPrivacyPayload(rawBody: string): ShopifyPrivacyP
     }
     const orders = json.orders_to_redact;
     const ordersCount = Array.isArray(orders) ? orders.length : null;
-    const dataRequestId = json.data_request?.id ?? json.data_request_id;
+    let dataRequestId: string | null = null;
+    const dataRequest = json.data_request;
+    if (dataRequest && typeof dataRequest === "object" && !Array.isArray(dataRequest)) {
+      const id = (dataRequest as { id?: unknown }).id;
+      if (id != null) dataRequestId = String(id);
+    } else if (json.data_request_id != null) {
+      dataRequestId = String(json.data_request_id);
+    }
     return {
       shop_id: shopId != null ? String(shopId) : null,
       customer_id: customerId,
       orders_to_redact: ordersCount,
-      data_request_id: dataRequestId != null ? String(dataRequestId) : null,
+      data_request_id: dataRequestId,
     };
   } catch {
     return empty;
