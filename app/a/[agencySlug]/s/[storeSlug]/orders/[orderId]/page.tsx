@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  isLogisticsEventStale,
+  LogisticsLatencyNotice,
+} from "@/components/logistics/LogisticsLatencyNotice";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
@@ -356,21 +360,39 @@ export default async function OrderDetailPage({
           {
             value: "logistica",
             label: "Logística",
-            content: detail.shipments.length ? (
-              <DataTable
-                data={detail.shipments}
-                getRowId={(row) => row.id}
-                columns={[
-                  { id: "trk", header: "Tracking", cell: (row) => row.tracking_number ?? "—" },
-                  { id: "status", header: "Estado", cell: (row) => row.status },
-                  { id: "rto", header: "RTO", cell: (row) => (row.is_rto ? "Sí" : "No") },
-                ]}
-              />
-            ) : (
-              <EmptyState
-                title="Sin envíos"
-                description="Aún no hay logística vinculada. El estado del carrier llegará con latencia; hasta entonces trátalo como provisional."
-              />
+            content: (
+              <div className="space-y-3">
+                {detail.shipments.length === 0 ? (
+                  <LogisticsLatencyNotice mode="empty" />
+                ) : detail.shipments.some((row) => isLogisticsEventStale(row.last_event_at)) ? (
+                  <LogisticsLatencyNotice
+                    mode="stale"
+                    staleCount={
+                      detail.shipments.filter((row) => isLogisticsEventStale(row.last_event_at))
+                        .length
+                    }
+                    totalCount={detail.shipments.length}
+                  />
+                ) : (
+                  <LogisticsLatencyNotice mode="general" />
+                )}
+                {detail.shipments.length ? (
+                  <DataTable
+                    data={detail.shipments}
+                    getRowId={(row) => row.id}
+                    columns={[
+                      { id: "trk", header: "Tracking", cell: (row) => row.tracking_number ?? "—" },
+                      { id: "status", header: "Estado", cell: (row) => row.status },
+                      { id: "rto", header: "RTO", cell: (row) => (row.is_rto ? "Sí" : "No") },
+                    ]}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Sin envíos"
+                    description="Aún no hay logística vinculada a este pedido."
+                  />
+                )}
+              </div>
             ),
           },
           {

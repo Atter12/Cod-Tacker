@@ -2,6 +2,10 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { LogisticsFiltersForm } from "@/components/logistics/LogisticsFiltersForm";
 import {
+  isLogisticsEventStale,
+  LogisticsLatencyNotice,
+} from "@/components/logistics/LogisticsLatencyNotice";
+import {
   DataTable,
   EmptyState,
   ErrorState,
@@ -34,13 +38,17 @@ function formatDate(value: string | null) {
 }
 
 function freshnessLabel(lastEventAt: string | null): string {
-  if (!lastEventAt) return "Sin eventos";
+  if (!lastEventAt) return "Sin señal";
+  if (isLogisticsEventStale(lastEventAt)) {
+    const ageMs = Date.now() - Date.parse(lastEventAt);
+    if (!Number.isFinite(ageMs)) return "Sin señal";
+    const days = Math.max(1, Math.floor(ageMs / 86_400_000));
+    return `Sin señal · ${days} d`;
+  }
   const ageMs = Date.now() - Date.parse(lastEventAt);
-  if (!Number.isFinite(ageMs)) return "—";
   const hours = ageMs / 3_600_000;
   if (hours < 1) return "Hace minutos";
-  if (hours < 24) return `Hace ${Math.floor(hours)} h`;
-  return `Hace ${Math.floor(hours / 24)} d`;
+  return `Hace ${Math.floor(hours)} h`;
 }
 
 export default async function LogisticsPage({
@@ -89,6 +97,7 @@ export default async function LogisticsPage({
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
   const filtersActive = Boolean(status || q || rto != null || terminal != null || from || to);
   const integrationsHref = routes.store.integrations(p.agencySlug, p.storeSlug);
+  const staleCount = result.data.filter((row) => isLogisticsEventStale(row.last_event_at)).length;
   const buildPageHref = (page: number) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(sp)) {
@@ -108,13 +117,24 @@ export default async function LogisticsPage({
           <Link href={integrationsHref} className="font-medium text-brand-primary hover:underline">
             Integraciones
           </Link>
-          . Los eventos de carrier llegan con latencia: trátalos como provisionales hasta confirmarse.
+          .
         </p>
       </div>
       <SectionHeader
         title="Logística"
-        description={`${result.total} envío(s) en la tienda. Estados no son tiempo real absoluto.`}
+        description={`${result.total} envío(s) en la tienda.`}
       />
+      {result.data.length === 0 ? (
+        <LogisticsLatencyNotice mode="empty" />
+      ) : staleCount > 0 ? (
+        <LogisticsLatencyNotice
+          mode="stale"
+          staleCount={staleCount}
+          totalCount={result.data.length}
+        />
+      ) : (
+        <LogisticsLatencyNotice mode="general" />
+      )}
       <Suspense fallback={<Skeleton className="h-32 w-full" />}>
         <LogisticsFiltersForm
           initial={{
