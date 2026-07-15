@@ -8,6 +8,7 @@ export * from "./DateRangePicker";
 export * from "./Dialog";
 export * from "./Drawer";
 export * from "./Dropdown";
+export * from "./DataConfidenceBadge";
 export * from "./DemoModeBadge";
 export * from "./EmptyState";
 export * from "./FormField";

@@ -1,6 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { MetricSparkline } from "@/components/dashboard/MetricSparkline";
+import {
+  DataConfidenceBadge,
+  type DataConfidence,
+} from "@/components/ui/DataConfidenceBadge";
 import { cn } from "@/lib/utils/cn";
 import type { MetricComparison } from "@/types/dashboard";
 
@@ -32,6 +36,8 @@ export function SecondaryMetricCard({
   increaseIsGood = true,
   comparisonLabel,
   changeMode = "percent",
+  confidence,
+  hint,
 }: {
   label: string;
   value: string;
@@ -41,6 +47,8 @@ export function SecondaryMetricCard({
   increaseIsGood?: boolean;
   comparisonLabel: string;
   changeMode?: "percent" | "pp" | "absolute";
+  confidence?: DataConfidence;
+  hint?: string;
 }) {
   const delta = metric.value - metric.previousValue;
   const change = metric.changePercent;
@@ -64,10 +72,14 @@ export function SecondaryMetricCard({
         </span>
         <MetricSparkline data={sparkline} width={56} height={22} />
       </div>
-      <p className="mt-2.5 text-[12.5px] font-semibold text-text-secondary">{label}</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <p className="text-[12.5px] font-semibold text-text-secondary">{label}</p>
+        {confidence ? <DataConfidenceBadge confidence={confidence} /> : null}
+      </div>
       <p className="mt-0.5 text-[23px] font-bold leading-tight tracking-tight text-text-primary sm:text-[24px]">
         {value}
       </p>
+      {hint ? <p className="mt-1 text-[10.5px] leading-snug text-text-secondary">{hint}</p> : null}
       <p
         className={cn(
           "mt-auto flex flex-wrap items-center gap-1 pt-2 text-[11px]",

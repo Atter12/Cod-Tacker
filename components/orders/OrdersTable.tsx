@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
+import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { labelOrderCustomer } from "@/lib/orders/customer-label";
 import { labelOrderStatus } from "@/lib/orders/labels";
 import type { OrderListRow } from "@/types/orders";
 import { cn } from "@/lib/utils/cn";
@@ -97,48 +99,62 @@ export function OrdersTable({
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <tr
-                  key={order.id}
-                  className="border-b border-border/80 transition-colors last:border-b-0 hover:bg-muted/70"
-                >
-                  <td className="px-4 py-3 sm:px-5">
-                    <Link
-                      href={routes.store.orderDetail(agencySlug, storeSlug, order.id)}
-                      className={cn(
-                        "text-[12.5px] font-semibold text-text-primary hover:text-brand-primary hover:underline",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      )}
-                    >
-                      {order.order_number ?? order.external_order_id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {formatShortDate(order.created_at_source)}
-                  </td>
-                  <td className="max-w-[160px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
-                    {displayOrDash(order.customerName)}
-                  </td>
-                  <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {displayOrDash(order.customerEmail)}
-                  </td>
-                  <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
-                    {displayOrDash(order.customerPhone)}
-                  </td>
-                  <td className="px-4 py-3 sm:px-5">
-                    <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {formatDeliveryLabel(order)}
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
-                    {formatCurrency(Number(order.total_amount), order.currency_code)}
-                  </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {order.source_name ?? "—"}
-                  </td>
-                </tr>
-              ))
+              orders.map((order) => {
+                const customer = labelOrderCustomer(order);
+                return (
+                  <tr
+                    key={order.id}
+                    className="border-b border-border/80 transition-colors last:border-b-0 hover:bg-muted/70"
+                  >
+                    <td className="px-4 py-3 sm:px-5">
+                      <Link
+                        href={routes.store.orderDetail(agencySlug, storeSlug, order.id)}
+                        className={cn(
+                          "text-[12.5px] font-semibold text-text-primary hover:text-brand-primary hover:underline",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        )}
+                      >
+                        {order.order_number ?? order.external_order_id}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {formatShortDate(order.created_at_source)}
+                    </td>
+                    <td className="max-w-[160px] truncate px-4 py-3 text-[12.5px] sm:px-5">
+                      <span
+                        className={cn(
+                          customer.isEmpty ? "text-text-secondary italic" : "text-text-primary",
+                        )}
+                        title={
+                          customer.isEmpty
+                            ? "Cliente aún no vinculado (p. ej. sync pendiente)"
+                            : customer.text
+                        }
+                      >
+                        {customer.text}
+                      </span>
+                    </td>
+                    <td className="max-w-[200px] truncate px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {displayOrDash(order.customerEmail)}
+                    </td>
+                    <td className="max-w-[140px] truncate px-4 py-3 text-[12.5px] tabular-nums text-text-secondary sm:px-5">
+                      {displayOrDash(order.customerPhone)}
+                    </td>
+                    <td className="px-4 py-3 sm:px-5">
+                      <StatusBadge status={order.order_status} label={compactStatusLabel(order.order_status)} />
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
+                      {formatDeliveryLabel(order)}
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
+                      {formatCurrency(Number(order.total_amount), order.currency_code)}
+                    </td>
+                    <td className="px-4 py-3 sm:px-5">
+                      <OrderSourceBadge sourceName={order.source_name} />
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

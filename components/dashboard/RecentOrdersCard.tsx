@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
+import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { labelOrderCustomer } from "@/lib/orders/customer-label";
 import type { DashboardRecentOrder } from "@/types/dashboard";
+import { cn } from "@/lib/utils/cn";
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("es-PE", {
@@ -17,10 +20,6 @@ function deliveryCell(order: DashboardRecentOrder): string {
   if (order.deliveredAt) return formatDate(order.deliveredAt);
   if (order.deliveryStatus) return order.deliveryStatus.replaceAll("_", " ");
   return "Pendiente";
-}
-
-function customerCell(order: DashboardRecentOrder): string {
-  return order.customerName || order.customerPhone || order.customerEmail || "—";
 }
 
 export function RecentOrdersCard({
@@ -87,8 +86,19 @@ export function RecentOrdersCard({
                   <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
                     {formatDate(order.createdAt)}
                   </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] text-text-primary sm:px-5">
-                    {customerCell(order)}
+                  <td className="max-w-[180px] truncate px-4 py-3 text-[12.5px] sm:px-5">
+                    {(() => {
+                      const customer = labelOrderCustomer(order);
+                      return (
+                        <span
+                          className={cn(
+                            customer.isEmpty ? "text-text-secondary italic" : "text-text-primary",
+                          )}
+                        >
+                          {customer.text}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 sm:px-5">
                     <OrderStatusBadge status={order.status} />
@@ -99,8 +109,8 @@ export function RecentOrdersCard({
                   <td className="px-4 py-3 text-[12.5px] font-medium tabular-nums text-text-primary sm:px-5">
                     {formatCurrency(order.totalAmount, order.currencyCode)}
                   </td>
-                  <td className="px-4 py-3 text-[12.5px] text-text-secondary sm:px-5">
-                    {order.sourceName ?? "—"}
+                  <td className="px-4 py-3 sm:px-5">
+                    <OrderSourceBadge sourceName={order.sourceName} />
                   </td>
                 </tr>
               ))

@@ -29,7 +29,10 @@ export type DashboardTimeSeriesPoint = {
   deliveredRevenue: number;
   rto: number;
   roasCheckout: number;
+  /** Estimated from delivery mix — not cash at door. Prefer roasCollected for confirmed ROAS. */
   roasDelivered: number;
+  /** Cash collected ÷ ad spend (confirmed when cobro is registered). */
+  roasCollected: number;
 };
 
 export type DashboardIntegrationHealth = {
@@ -66,6 +69,7 @@ export type DashboardKpiBundle = {
   rto: MetricComparison;
   roasCheckout: MetricComparison;
   roasDelivered: MetricComparison;
+  roasCollected: MetricComparison;
 };
 
 export type DashboardFunnel = {
