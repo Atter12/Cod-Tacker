@@ -219,13 +219,13 @@ export default async function OrderDetailPage({
                       <ContactField
                         label="Email"
                         value={customer.email}
-                        emptyLabel="Sin email registrado"
+                        emptyLabel="Sin email"
                         reveal={revealPii}
                       />
                       <ContactField
                         label="Teléfono"
                         value={customer.phone}
-                        emptyLabel="Sin teléfono registrado"
+                        emptyLabel="Sin teléfono"
                         reveal={revealPii}
                       />
                       <p className="text-text-secondary">
