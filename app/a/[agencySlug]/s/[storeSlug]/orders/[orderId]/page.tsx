@@ -74,7 +74,6 @@ export default async function OrderDetailPage({
   const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
   const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
   const hasLanding = Boolean(order.landing_site?.trim() || order.referring_site?.trim());
-  const showAttributionDetails = Boolean(primaryAttribution || hasShopifySignals || hasLanding);
 
   return (
     <section className="space-y-5">
@@ -194,7 +193,17 @@ export default async function OrderDetailPage({
           {
             value: "atribucion",
             label: "Atribución",
-            content: showAttributionDetails ? (
+            content:
+              !hasShopifySignals && !hasLanding ? (
+                <EmptyState
+                  title="Sin atribución"
+                  description={
+                    primaryAttribution?.attribution_reason === "Sin atribución"
+                      ? "Pedido Shopify sin UTM ni click IDs (nota/landing vacíos)."
+                      : "No hay landing/UTM/fbclid asociados a este pedido."
+                  }
+                />
+              ) : (
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <dt className="text-text-secondary">Landing site</dt>
@@ -258,12 +267,7 @@ export default async function OrderDetailPage({
                   </div>
                 ) : null}
               </dl>
-            ) : (
-              <EmptyState
-                title="Sin atribución"
-                description="No hay landing/UTM/fbclid asociados a este pedido."
-              />
-            ),
+              ),
           },
           {
             value: "logistica",

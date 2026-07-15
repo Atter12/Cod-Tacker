@@ -2,11 +2,13 @@ import type { JobsAdminClient } from "@/lib/jobs/types";
 import type { ShopifyMappedAttribution } from "@/lib/integrations/shopify/map-attribution";
 import type { Json } from "@/types/database.generated";
 
+const SIN_ATRIBUCION = "Sin atribución";
+
 /**
  * Persist Shopify landing/UTM/click IDs onto the order and primary attribution rows.
  * - Always updates landing_site / referring_site + metadata.shopify_attribution when provided.
- * - Creates touchpoint + primary order_attribution only when has_attribution.
- * - Idempotent: skips creating another primary if one already exists.
+ * - With UTM/click IDs: touchpoint + primary utm_last_touch attribution.
+ * - Without signals (empty note / no landing UTMs): primary row model=unattributed, reason "Sin atribución".
  */
 export async function upsertShopifyOrderAttribution(input: {
   admin: JobsAdminClient;
@@ -59,19 +61,41 @@ export async function upsertShopifyOrderAttribution(input: {
     .eq("id", orderId)
     .eq("store_id", storeId);
 
-  if (!attribution.has_attribution) {
-    return;
-  }
-
   const existingPrimary = await admin
     .from("order_attributions")
-    .select("id")
+    .select("id, model")
     .eq("order_id", orderId)
     .eq("store_id", storeId)
     .eq("is_primary", true)
     .maybeSingle();
-  if (existingPrimary.data) {
+
+  if (!attribution.has_attribution) {
+    if (!existingPrimary.data) {
+      await admin.from("order_attributions").insert({
+        agency_id: agencyId,
+        store_id: storeId,
+        order_id: orderId,
+        model: "unattributed",
+        platform: "other",
+        credit: 0,
+        attributed_value: 0,
+        is_primary: true,
+        attribution_reason: SIN_ATRIBUCION,
+        metadata: {
+          provider: "shopify",
+          shopify_attribution: shopifyAttribution,
+        } as Json,
+      });
+    }
     return;
+  }
+
+  // Upgrade placeholder unattributed → real Shopify attribution when UTMs arrive later.
+  if (existingPrimary.data) {
+    if (existingPrimary.data.model !== "unattributed") {
+      return;
+    }
+    await admin.from("order_attributions").delete().eq("id", existingPrimary.data.id);
   }
 
   const touchpoint = await admin
