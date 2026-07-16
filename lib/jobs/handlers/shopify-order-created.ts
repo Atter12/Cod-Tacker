@@ -41,19 +41,32 @@ export const handleShopifyOrderCreated: JobHandler = async ({
   if (existing.data) {
     // Create is idempotent, but later webhooks/sync may inject attribution (e.g. note)
     // that was missing on the first create — apply it on the existing row.
+    // Also refresh money fields so shipping/subtotal stay aligned with Shopify.
+    const amountPatch: {
+      total_amount?: number;
+      subtotal_amount?: number;
+      shipping_amount?: number;
+      customer_id?: string;
+    } = {};
+    if (typeof data.total_amount === "number") amountPatch.total_amount = data.total_amount;
+    if (typeof data.subtotal_amount === "number") amountPatch.subtotal_amount = data.subtotal_amount;
+    if (typeof data.shipping_amount === "number") amountPatch.shipping_amount = data.shipping_amount;
+
     if (data.customer) {
       const customerId = await upsertShopifyCustomer({
         admin,
         storeId: job.store_id,
         customer: data.customer,
       });
-      if (customerId) {
-        await admin
-          .from("orders")
-          .update({ customer_id: customerId })
-          .eq("id", existing.data.id)
-          .eq("store_id", job.store_id);
-      }
+      if (customerId) amountPatch.customer_id = customerId;
+    }
+
+    if (Object.keys(amountPatch).length > 0) {
+      await admin
+        .from("orders")
+        .update(amountPatch)
+        .eq("id", existing.data.id)
+        .eq("store_id", job.store_id);
     }
     if (data.line_items) {
       await syncShopifyOrderItems({
@@ -75,7 +88,7 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     }
     return {
       ok: true,
-      action: data.attribution?.has_attribution ? "updated" : "skipped",
+      action: "updated",
       entityType: "order",
       entityId: existing.data.id,
       detail: "duplicate_external_order_id",

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createHmac } from "node:crypto";
 import { normalizeShopifyShopDomain } from "@/lib/integrations/shopify/domain";
-import { shopifyGidToExternalId } from "@/lib/integrations/shopify/map-order";
-import { verifyShopifyOAuthHmac, verifyShopifyWebhookHmac } from "@/lib/integrations/shopify/hmac";
 import {
+  mapGraphqlOrderToEnqueue,
   mapRestOrderToCreatedPayload,
   mapRestOrderToUpdatedPayload,
+  shopifyGidToExternalId,
 } from "@/lib/integrations/shopify/map-order";
+import { verifyShopifyOAuthHmac, verifyShopifyWebhookHmac } from "@/lib/integrations/shopify/hmac";
 import { shopifyWebhookCallbackUri, summarizeShopifyWebhooks } from "@/lib/integrations/shopify/webhooks-meta";
 import {
   acknowledgeShopifyPrivacyWebhook,
@@ -215,6 +216,62 @@ describe("shopify order mapping", () => {
     assert.equal(payload.subtotal_amount, 49.95);
     assert.equal(payload.shipping_amount, 8);
     assert.equal(payload.total_amount, 57.95);
+  });
+
+  it("maps shipping from shipping_lines price_set when plain price is absent", () => {
+    const payload = mapRestOrderToCreatedPayload({
+      id: 1010,
+      name: "#1010",
+      currency: "USD",
+      total_price: "57.95",
+      subtotal_price: "49.95",
+      shipping_lines: [{ price_set: { shop_money: { amount: "8.00" } } }],
+    });
+    assert.equal(payload.shipping_amount, 8);
+  });
+
+  it("maps GraphQL shipping from currentShippingPriceSet", () => {
+    const item = mapGraphqlOrderToEnqueue(
+      {
+        id: "gid://shopify/Order/7120003498162",
+        name: "#1037",
+        createdAt: "2026-07-16T19:32:00Z",
+        updatedAt: "2026-07-16T19:32:00Z",
+        totalPriceSet: { shopMoney: { amount: "57.95", currencyCode: "USD" } },
+        subtotalPriceSet: { shopMoney: { amount: "49.95", currencyCode: "USD" } },
+        currentShippingPriceSet: { shopMoney: { amount: "8.00", currencyCode: "USD" } },
+      },
+      "updated",
+    );
+    assert.equal(item.payload.shipping_amount, 8);
+    assert.equal(item.payload.subtotal_amount, 49.95);
+    assert.equal(item.payload.total_amount, 57.95);
+  });
+
+  it("maps GraphQL shipping from shippingLines when sets are missing", () => {
+    const item = mapGraphqlOrderToEnqueue(
+      {
+        id: "gid://shopify/Order/1",
+        name: "#1",
+        createdAt: "2026-07-16T19:32:00Z",
+        updatedAt: "2026-07-16T19:32:00Z",
+        totalPriceSet: { shopMoney: { amount: "57.95", currencyCode: "USD" } },
+        subtotalPriceSet: { shopMoney: { amount: "49.95", currencyCode: "USD" } },
+        shippingLines: {
+          edges: [
+            {
+              node: {
+                title: "Standard",
+                isRemoved: false,
+                discountedPriceSet: { shopMoney: { amount: "8.00", currencyCode: "USD" } },
+              },
+            },
+          ],
+        },
+      },
+      "created",
+    );
+    assert.equal(item.payload.shipping_amount, 8);
   });
 
   it("maps shipping amount from shipping_lines when set is missing", () => {

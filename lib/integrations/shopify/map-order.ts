@@ -65,10 +65,23 @@ export type ShopifyRestOrder = {
   total_shipping_price?: string | number | null;
   total_shipping_price_set?: {
     shop_money?: { amount?: string | number | null; currency_code?: string | null } | null;
+    presentment_money?: { amount?: string | number | null; currency_code?: string | null } | null;
+  } | null;
+  current_total_price?: string | number | null;
+  current_subtotal_price?: string | number | null;
+  current_shipping_price_set?: {
+    shop_money?: { amount?: string | number | null; currency_code?: string | null } | null;
+    presentment_money?: { amount?: string | number | null; currency_code?: string | null } | null;
   } | null;
   shipping_lines?: Array<{
     price?: string | number | null;
     discounted_price?: string | number | null;
+    price_set?: {
+      shop_money?: { amount?: string | number | null } | null;
+    } | null;
+    discounted_price_set?: {
+      shop_money?: { amount?: string | number | null } | null;
+    } | null;
   } | null> | null;
   cancelled_at?: string | null;
   financial_status?: string | null;
@@ -104,6 +117,17 @@ export type ShopifyGraphqlOrderNode = {
   totalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
   subtotalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
   totalShippingPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
+  currentShippingPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
+  shippingLines?: {
+    edges?: Array<{
+      node?: {
+        title?: string | null;
+        isRemoved?: boolean | null;
+        discountedPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
+        originalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
+      } | null;
+    } | null> | null;
+  } | null;
   customer?: ShopifyGraphqlCustomer | null;
   shippingAddress?: ShopifyGraphqlMailingAddress | null;
   lineItems?: { edges: Array<{ node: ShopifyGraphqlLineItemNode }> } | null;
@@ -124,20 +148,57 @@ function parseMoney(value: string | number | null | undefined): number {
   return 0;
 }
 
+function moneyFromSet(
+  set:
+    | {
+        shop_money?: { amount?: string | number | null } | null;
+        presentment_money?: { amount?: string | number | null } | null;
+      }
+    | null
+    | undefined,
+): number | null {
+  const raw = set?.shop_money?.amount ?? set?.presentment_money?.amount;
+  if (raw == null || String(raw).trim() === "") return null;
+  return parseMoney(raw);
+}
+
 /** Prefer Shopify shipping totals; fall back to summing shipping_lines. */
 export function mapRestShippingAmount(order: ShopifyRestOrder): number {
-  const fromSet = order.total_shipping_price_set?.shop_money?.amount;
-  if (fromSet != null && String(fromSet).trim() !== "") {
-    return parseMoney(fromSet);
-  }
+  const fromCurrent = moneyFromSet(order.current_shipping_price_set);
+  if (fromCurrent != null) return fromCurrent;
+
+  const fromSet = moneyFromSet(order.total_shipping_price_set);
+  if (fromSet != null) return fromSet;
+
   if (order.total_shipping_price != null && String(order.total_shipping_price).trim() !== "") {
     return parseMoney(order.total_shipping_price);
   }
   if (!Array.isArray(order.shipping_lines) || order.shipping_lines.length === 0) return 0;
   return order.shipping_lines.reduce((sum, line) => {
     if (!line) return sum;
+    const fromLineSet = moneyFromSet(line.discounted_price_set) ?? moneyFromSet(line.price_set);
+    if (fromLineSet != null) return sum + fromLineSet;
     const price = line.discounted_price ?? line.price;
     return sum + parseMoney(price);
+  }, 0);
+}
+
+/** Shopify GraphQL shipping: current set → total set → sum of active shippingLines. */
+export function mapGraphqlShippingAmount(node: ShopifyGraphqlOrderNode): number {
+  const current = node.currentShippingPriceSet?.shopMoney?.amount;
+  if (current != null && String(current).trim() !== "") return parseMoney(current);
+
+  const total = node.totalShippingPriceSet?.shopMoney?.amount;
+  if (total != null && String(total).trim() !== "") return parseMoney(total);
+
+  const edges = node.shippingLines?.edges;
+  if (!Array.isArray(edges) || edges.length === 0) return 0;
+  return edges.reduce((sum, edge) => {
+    const line = edge?.node;
+    if (!line || line.isRemoved) return sum;
+    const amount =
+      line.discountedPriceSet?.shopMoney?.amount ?? line.originalPriceSet?.shopMoney?.amount;
+    return sum + parseMoney(amount);
   }, 0);
 }
 
@@ -188,11 +249,12 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
   const orderNumber =
     (typeof order.name === "string" && order.name.replace(/^#/, "").trim()) ||
     (order.order_number != null ? String(order.order_number) : undefined);
-  const total_amount = parseMoney(order.total_price);
+  const total_amount = parseMoney(order.current_total_price ?? order.total_price);
   const shipping_amount = mapRestShippingAmount(order);
+  const rawSubtotal = order.current_subtotal_price ?? order.subtotal_price;
   const subtotal_amount =
-    order.subtotal_price != null
-      ? parseMoney(order.subtotal_price)
+    rawSubtotal != null
+      ? parseMoney(rawSubtotal)
       : Math.max(0, total_amount - shipping_amount);
   const order_status = mapFulfillmentToStatus({
     cancelledAt: order.cancelled_at,
@@ -246,9 +308,8 @@ export function mapGraphqlOrderToEnqueue(
   const externalId = shopifyGidToExternalId(node.id);
   const money = node.totalPriceSet?.shopMoney;
   const sub = node.subtotalPriceSet?.shopMoney;
-  const ship = node.totalShippingPriceSet?.shopMoney;
+  const shipping_amount = mapGraphqlShippingAmount(node);
   const total_amount = parseMoney(money?.amount);
-  const shipping_amount = ship?.amount != null ? parseMoney(ship.amount) : 0;
   const subtotal_amount =
     sub?.amount != null
       ? parseMoney(sub.amount)
