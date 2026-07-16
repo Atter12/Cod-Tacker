@@ -99,11 +99,19 @@ function buildTimeSeries(
   shipments: ShipmentRow[],
   attributions: AttributionLite[],
   spendRows: SpendLite[],
+  timeZone: string,
 ): DashboardTimeSeriesPoint[] {
-  const map = new Map(eachDayKey(from, to).map((date) => [date, emptySeriesPoint(date)]));
+  const map = new Map(eachDayKey(from, to, timeZone).map((date) => [date, emptySeriesPoint(date)]));
+
+  const keyFor = (value: string) => {
+    const trimmed = value.trim();
+    // Ads spend metric_date is already a calendar day (YYYY-MM-DD).
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    return dayKey(value, timeZone);
+  };
 
   for (const order of orders) {
-    const key = dayKey(order.created_at_source);
+    const key = dayKey(order.created_at_source, timeZone);
     const point = map.get(key);
     if (!point) continue;
     point.ordersGenerated += 1;
@@ -112,32 +120,32 @@ function buildTimeSeries(
 
   for (const order of orders) {
     if (!isCashCollected(order)) continue;
-    const cashKey = dayKey(order.cash_collected_at ?? order.created_at_source);
+    const cashKey = dayKey(order.cash_collected_at ?? order.created_at_source, timeZone);
     const cashPoint = map.get(cashKey);
     if (cashPoint) cashPoint.cashCollected += order.collected_cod_amount ?? 0;
   }
 
   for (const shipment of shipments) {
     if (shipment.status === "delivered") {
-      const key = dayKey(shipment.delivered_at ?? shipment.created_at);
+      const key = dayKey(shipment.delivered_at ?? shipment.created_at, timeZone);
       const point = map.get(key);
       if (point) point.ordersDelivered += 1;
     }
     if (shipment.status === "returned" || shipment.is_rto) {
-      const key = dayKey(shipment.returned_at ?? shipment.created_at);
+      const key = dayKey(shipment.returned_at ?? shipment.created_at, timeZone);
       const point = map.get(key);
       if (point) point.ordersReturned += 1;
     }
   }
 
   for (const attribution of attributions) {
-    const key = dayKey(attribution.calculated_at);
+    const key = dayKey(attribution.calculated_at, timeZone);
     const point = map.get(key);
     if (point) point.checkoutRevenue += attribution.attributed_value;
   }
 
   for (const spend of spendRows) {
-    const key = dayKey(spend.metric_date);
+    const key = keyFor(spend.metric_date);
     const point = map.get(key);
     if (point) point.adSpend += spend.spend;
   }
@@ -361,6 +369,7 @@ export async function getDashboardSummary(
   }
 
   const currencyCode = storeResult.data?.currency_code ?? "PEN";
+  const storeTimeZone = storeResult.data?.timezone?.trim() || "America/Lima";
   const rangeLabel = options?.rangePreset
     ? dateRangeLabels[options.rangePreset]
     : "periodo anterior";
@@ -393,6 +402,7 @@ export async function getDashboardSummary(
       current.shipments,
       current.attributions,
       current.spendRows,
+      storeTimeZone,
     ),
     integrationHealth: integrationHealth((integrationsResult.data ?? []) as IntegrationRow[]),
     recentOrders: mapRecentOrders(current.orders, current.shipments, customers),

@@ -41,6 +41,7 @@ export type ShopifyOrderJobPayload = {
   currency_code: string;
   total_amount: number;
   subtotal_amount?: number;
+  shipping_amount?: number;
   order_status?: string;
   mode: "live";
   customer?: ShopifyMappedCustomer;
@@ -61,6 +62,14 @@ export type ShopifyRestOrder = {
   currency?: string | null;
   total_price?: string | number | null;
   subtotal_price?: string | number | null;
+  total_shipping_price?: string | number | null;
+  total_shipping_price_set?: {
+    shop_money?: { amount?: string | number | null; currency_code?: string | null } | null;
+  } | null;
+  shipping_lines?: Array<{
+    price?: string | number | null;
+    discounted_price?: string | number | null;
+  } | null> | null;
   cancelled_at?: string | null;
   financial_status?: string | null;
   fulfillment_status?: string | null;
@@ -94,6 +103,7 @@ export type ShopifyGraphqlOrderNode = {
   paymentGatewayNames?: string[] | null;
   totalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
   subtotalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
+  totalShippingPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } | null } | null;
   customer?: ShopifyGraphqlCustomer | null;
   shippingAddress?: ShopifyGraphqlMailingAddress | null;
   lineItems?: { edges: Array<{ node: ShopifyGraphqlLineItemNode }> } | null;
@@ -112,6 +122,23 @@ function parseMoney(value: string | number | null | undefined): number {
     return Number.isFinite(n) ? Math.max(0, n) : 0;
   }
   return 0;
+}
+
+/** Prefer Shopify shipping totals; fall back to summing shipping_lines. */
+export function mapRestShippingAmount(order: ShopifyRestOrder): number {
+  const fromSet = order.total_shipping_price_set?.shop_money?.amount;
+  if (fromSet != null && String(fromSet).trim() !== "") {
+    return parseMoney(fromSet);
+  }
+  if (order.total_shipping_price != null && String(order.total_shipping_price).trim() !== "") {
+    return parseMoney(order.total_shipping_price);
+  }
+  if (!Array.isArray(order.shipping_lines) || order.shipping_lines.length === 0) return 0;
+  return order.shipping_lines.reduce((sum, line) => {
+    if (!line) return sum;
+    const price = line.discounted_price ?? line.price;
+    return sum + parseMoney(price);
+  }, 0);
 }
 
 function mapFulfillmentToStatus(input: {
@@ -162,6 +189,11 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
     (typeof order.name === "string" && order.name.replace(/^#/, "").trim()) ||
     (order.order_number != null ? String(order.order_number) : undefined);
   const total_amount = parseMoney(order.total_price);
+  const shipping_amount = mapRestShippingAmount(order);
+  const subtotal_amount =
+    order.subtotal_price != null
+      ? parseMoney(order.subtotal_price)
+      : Math.max(0, total_amount - shipping_amount);
   const order_status = mapFulfillmentToStatus({
     cancelledAt: order.cancelled_at,
     financialStatus: order.financial_status,
@@ -179,7 +211,8 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
     order_number: orderNumber,
     currency_code: (order.currency || "PEN").slice(0, 3).toUpperCase(),
     total_amount,
-    subtotal_amount: order.subtotal_price != null ? parseMoney(order.subtotal_price) : undefined,
+    subtotal_amount,
+    shipping_amount,
     mode: "live",
     ...(order_status ? { order_status } : {}),
   };
@@ -213,7 +246,13 @@ export function mapGraphqlOrderToEnqueue(
   const externalId = shopifyGidToExternalId(node.id);
   const money = node.totalPriceSet?.shopMoney;
   const sub = node.subtotalPriceSet?.shopMoney;
+  const ship = node.totalShippingPriceSet?.shopMoney;
   const total_amount = parseMoney(money?.amount);
+  const shipping_amount = ship?.amount != null ? parseMoney(ship.amount) : 0;
+  const subtotal_amount =
+    sub?.amount != null
+      ? parseMoney(sub.amount)
+      : Math.max(0, total_amount - shipping_amount);
   const order_status = mapFulfillmentToStatus({
     cancelledAt: node.cancelledAt,
     financialStatus: node.displayFinancialStatus,
@@ -230,7 +269,8 @@ export function mapGraphqlOrderToEnqueue(
     order_number: node.name.replace(/^#/, "").trim() || externalId,
     currency_code: (money?.currencyCode || "PEN").slice(0, 3).toUpperCase(),
     total_amount,
-    subtotal_amount: sub?.amount != null ? parseMoney(sub.amount) : undefined,
+    subtotal_amount,
+    shipping_amount,
     mode: "live",
     ...(order_status ? { order_status } : {}),
   };

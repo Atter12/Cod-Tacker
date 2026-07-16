@@ -5,8 +5,10 @@ import { routes } from "@/config/routes";
 import { actionFail, type ActionResult } from "@/lib/actions/action-result";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
+import { recordPurchaseConversionEvent } from "@/lib/conversions/record-purchase-conversion";
 import { ValidationError } from "@/lib/errors";
 import { toUserMessage } from "@/lib/errors/to-user-message";
+import { logger } from "@/lib/observability/logger";
 import {
   assertCanManageOrders,
   assertConfirmationTransition,
@@ -167,6 +169,26 @@ export async function updateOrderPaymentStatus(
     }
     const { error } = await client.from("orders").update(patch).eq("id", order.id).eq("store_id", order.store_id);
     if (error) return { error: toUserMessage(error) };
+
+    if (next === "cash_collected" || next === "partially_collected") {
+      try {
+        await recordPurchaseConversionEvent({
+          admin: client,
+          agencyId: membership.agencyId,
+          storeId: order.store_id,
+          orderId: order.id,
+          value: Number(patch.collected_cod_amount ?? order.total_amount ?? 0),
+          currencyCode: order.currency_code || "PEN",
+          eventTime: patch.cash_collected_at,
+        });
+      } catch (convErr) {
+        logger.warn("order.payment.conversion_record_failed", {
+          order_id: order.id,
+          error: convErr instanceof Error ? convErr.message : "conversion_failed",
+        });
+      }
+    }
+
     await writeAuditLog({
       action: "order_payment_status_changed",
       entityType: "order",

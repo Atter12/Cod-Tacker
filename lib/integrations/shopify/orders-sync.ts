@@ -105,6 +105,12 @@ export async function fetchShopifyOrdersForSync(input: {
                     currencyCode
                   }
                 }
+                totalShippingPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
                 customer {
                   id
                   email
