@@ -29,6 +29,7 @@ import {
   getSettlementProvider,
   getIntegrationRuntimeMode,
   isDemoIntegrationMode,
+  resolveLiveEnviameCredentials,
 } from "@/lib/integrations/registry";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
@@ -146,7 +147,7 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
   }
 }
 
-/** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify). */
+/** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify + Enviame). */
 export async function resolveStoreProviderForIntegration(
   provider: string,
   integration: IntegrationRow,
@@ -161,6 +162,22 @@ export async function resolveStoreProviderForIntegration(
     const admin = createAdminClient();
     const accessToken = await ensureShopifyAccessToken(admin, integration, shop);
     const adapter = getCommerceProvider("shopify", { shopDomain: shop, accessToken });
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "enviame" && getIntegrationRuntimeMode() === "live") {
+    const creds = resolveLiveEnviameCredentials(integration.settings, integration.metadata);
+    if (!creds) {
+      throw new IntegrationError(
+        "Enviame live requiere ENVIAME_API_KEY en Vercel o api_key en settings de la integración.",
+      );
+    }
+    const adapter = getCarrierProvider("enviame", creds);
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),
