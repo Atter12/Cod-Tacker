@@ -56,7 +56,7 @@ async function resolveAdsIntegration(
     .select("id, provider, status, settings, metadata")
     .eq("agency_id", agencyId)
     .eq("store_id", storeId)
-    .in("provider", ["meta", "tiktok", "google"])
+    .in("provider", ["meta", "tiktok"])
     .in("status", ["connected", "pending", "degraded", "error"])
     .order("created_at", { ascending: false })
     .limit(1)
@@ -122,9 +122,7 @@ export async function recordPurchaseConversionEvent(
   }
 
   const platform =
-    integration.provider === "meta" ||
-    integration.provider === "tiktok" ||
-    integration.provider === "google"
+    integration.provider === "meta" || integration.provider === "tiktok"
       ? integration.provider
       : "meta";
 
