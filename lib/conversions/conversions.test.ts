@@ -31,4 +31,9 @@ describe("purchase conversion helpers", () => {
     assert.equal(result.mode, "dry_run");
     assert.equal(result.ok, true);
   });
+
+  it("keeps purchase event_id stable for Meta dedupe", () => {
+    assert.equal(purchaseConversionEventId("abc"), purchaseConversionEventId("abc"));
+    assert.notEqual(purchaseConversionEventId("a"), purchaseConversionEventId("b"));
+  });
 });

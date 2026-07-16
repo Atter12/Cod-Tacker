@@ -7,7 +7,9 @@ import {
 } from "@/lib/conversions/meta-capi";
 import { logger } from "@/lib/observability/logger";
 import type { DatabaseClient } from "@/services/_shared";
-import type { Json } from "@/types/database.generated";
+import type { Database, Json } from "@/types/database.generated";
+
+type AdPlatform = Database["public"]["Enums"]["ad_platform"];
 
 export type RecordPurchaseConversionInput = {
   admin: DatabaseClient;
@@ -74,12 +76,29 @@ async function resolveAdsIntegration(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return shopify.data ?? null;
+  if (shopify.data) return shopify.data;
+
+  // Last resort: any store integration (row still requires a FK when present).
+  const any = await admin
+    .from("integrations")
+    .select("id, provider, status, settings, metadata")
+    .eq("agency_id", agencyId)
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return any.data ?? null;
+}
+
+function platformForIntegration(provider: string | undefined): AdPlatform {
+  if (provider === "meta" || provider === "tiktok") return provider;
+  return "meta";
 }
 
 /**
  * Ensure a Purchase conversion_events row exists (deduped by event_id) and
  * attempt Meta CAPI when credentials are configured; otherwise dry-run log.
+ * Always persists a row even when no ads integration exists yet (integration_id null).
  */
 export async function recordPurchaseConversionEvent(
   input: RecordPurchaseConversionInput,
@@ -107,27 +126,17 @@ export async function recordPurchaseConversionEvent(
 
   const integration = await resolveAdsIntegration(input.admin, input.agencyId, input.storeId);
   if (!integration) {
-    logger.warn("conversion.purchase.no_integration", {
+    logger.info("conversion.purchase.no_integration_dry_run", {
       store_id: input.storeId,
       order_id: input.orderId,
       event_id: eventId,
     });
-    return {
-      created: false,
-      eventId,
-      conversionEventRowId: null,
-      deliveryStatus: "failed",
-      capiMode: "dry_run",
-    };
   }
 
-  const platform =
-    integration.provider === "meta" || integration.provider === "tiktok"
-      ? integration.provider
-      : "meta";
+  const platform = platformForIntegration(integration?.provider);
 
   const creds =
-    platform === "meta"
+    platform === "meta" && integration
       ? readMetaCapiCredentials(integration.settings, integration.metadata)
       : null;
 
@@ -141,11 +150,13 @@ export async function recordPurchaseConversionEvent(
     phone: input.phone,
   });
 
+  // Enum has queued (not pending); queued = awaiting live CAPI / dry-run.
   const status = capi.mode === "dry_run" ? "queued" : capi.ok ? "sent" : "failed";
   const customData = {
     dry_run: capi.mode === "dry_run",
     source: "cash_collected",
     order_id: input.orderId,
+    no_integration: !integration,
   } as Json;
   const responsePayload = (capi.body ?? {
     mode: capi.mode,
@@ -192,7 +203,7 @@ export async function recordPurchaseConversionEvent(
       agency_id: input.agencyId,
       store_id: input.storeId,
       order_id: input.orderId,
-      integration_id: integration.id,
+      integration_id: integration?.id ?? null,
       platform,
       event_id: eventId,
       event_name: "Purchase",

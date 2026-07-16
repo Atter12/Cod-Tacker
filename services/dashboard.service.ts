@@ -1,4 +1,4 @@
-import { dateRangeLabels, type DateRangePreset } from "@/lib/formatting/date-range";
+import { dateRangeLabels, dateRangeToBounds, type DateRangePreset } from "@/lib/formatting/date-range";
 import {
   dayKey,
   eachDayKey,
@@ -231,7 +231,10 @@ async function fetchPeriodDatasets(
   storeId: string,
   from: string,
   to: string,
+  timeZone: string,
 ) {
+  const spendFrom = dayKey(from, timeZone);
+  const spendTo = dayKey(to, timeZone);
   const [ordersResult, shipmentsResult, attributionsResult, spendResult] = await Promise.all([
     client
       .from("orders")
@@ -256,8 +259,8 @@ async function fetchPeriodDatasets(
       .from("ad_spend_daily")
       .select("spend, metric_date")
       .eq("store_id", storeId)
-      .gte("metric_date", from.slice(0, 10))
-      .lte("metric_date", to.slice(0, 10)),
+      .gte("metric_date", spendFrom)
+      .lte("metric_date", spendTo),
   ]);
 
   for (const result of [ordersResult, shipmentsResult, attributionsResult, spendResult]) {
@@ -309,13 +312,30 @@ export async function getDashboardSummary(
 ): Promise<DashboardSummary> {
   const aid = requireValue(agencyId, "Agencia inválida.");
   const id = requireValue(storeId, "Tienda inválida.");
-  const from = requireValue(dateRange.from, "Fecha inicial inválida.");
-  const to = requireValue(dateRange.to, "Fecha final inválida.");
+
+  const storeResult = await client
+    .from("stores")
+    .select("currency_code, timezone")
+    .eq("id", id)
+    .maybeSingle();
+  throwQueryError(storeResult.error);
+
+  const storeTimeZone =
+    dateRange.timezone?.trim() || storeResult.data?.timezone?.trim() || "America/Lima";
+
+  // Prefer preset bounds in store TZ so "Hoy" matches stores.timezone (not UTC host midnight).
+  let from = requireValue(dateRange.from, "Fecha inicial inválida.");
+  let to = requireValue(dateRange.to, "Fecha final inválida.");
+  if (options?.rangePreset) {
+    const bounds = dateRangeToBounds(options.rangePreset, new Date(), storeTimeZone);
+    from = bounds.from.toISOString();
+    to = bounds.to.toISOString();
+  }
   const previous = previousPeriodBounds(from, to);
 
-  const [current, previousData, alertsResult, integrationsResult, storeResult] = await Promise.all([
-    fetchPeriodDatasets(client, id, from, to),
-    fetchPeriodDatasets(client, id, previous.from, previous.to),
+  const [current, previousData, alertsResult, integrationsResult] = await Promise.all([
+    fetchPeriodDatasets(client, id, from, to, storeTimeZone),
+    fetchPeriodDatasets(client, id, previous.from, previous.to, storeTimeZone),
     client
       .from("alerts")
       .select("id", { count: "exact", head: true })
@@ -328,12 +348,10 @@ export async function getDashboardSummary(
       .eq("agency_id", aid)
       .eq("store_id", id)
       .order("created_at", { ascending: false }),
-    client.from("stores").select("currency_code, timezone").eq("id", id).maybeSingle(),
   ]);
 
   throwQueryError(alertsResult.error);
   throwQueryError(integrationsResult.error);
-  throwQueryError(storeResult.error);
 
   const currentTotals = computePeriodTotals(
     current.orders,
@@ -369,7 +387,6 @@ export async function getDashboardSummary(
   }
 
   const currencyCode = storeResult.data?.currency_code ?? "PEN";
-  const storeTimeZone = storeResult.data?.timezone?.trim() || "America/Lima";
   const rangeLabel = options?.rangePreset
     ? dateRangeLabels[options.rangePreset]
     : "periodo anterior";
