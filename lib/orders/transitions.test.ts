@@ -27,4 +27,9 @@ describe("order transitions", () => {
       ValidationError,
     );
   });
+
+  it("allows unpaid → cash_collected for prepaid Shopify orders", () => {
+    assert.equal(canTransitionPaymentStatus("unpaid", "cash_collected"), true);
+    assert.equal(canTransitionPaymentStatus("unpaid", "cash_expected"), true);
+  });
 });

@@ -25,7 +25,8 @@ export const ORDER_STATUS_TRANSITIONS: Readonly<Record<OrderStatus, readonly Ord
  * `settled` is only reachable from `settlement_pending` unless adminOverride is explicit and audited.
  */
 export const PAYMENT_STATUS_TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
-  unpaid: ["cash_expected", "refunded", "written_off"],
+  // Prepaid Shopify orders land as unpaid; allow Cobrado for S8 / collection without COD detour.
+  unpaid: ["cash_expected", "cash_collected", "partially_collected", "refunded", "written_off"],
   cash_expected: ["cash_collected", "partially_collected", "unpaid", "disputed"],
   cash_collected: ["settlement_pending", "disputed", "refunded"],
   partially_collected: ["cash_collected", "settlement_pending", "disputed"],

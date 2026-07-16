@@ -27,9 +27,15 @@ describe("dashboard metrics helpers", () => {
   });
 
   it("fills continuous day keys without gaps", () => {
-    const keys = eachDayKey("2026-01-01T12:00:00.000Z", "2026-01-03T12:00:00.000Z");
+    const keys = eachDayKey("2026-01-01T12:00:00.000Z", "2026-01-03T12:00:00.000Z", "UTC");
     assert.deepEqual(keys, ["2026-01-01", "2026-01-02", "2026-01-03"]);
-    assert.equal(dayKey("2026-01-02T23:15:00.000Z"), "2026-01-02");
+    assert.equal(dayKey("2026-01-02T23:15:00.000Z", "UTC"), "2026-01-02");
+  });
+
+  it("buckets late UTC evening into America/Lima calendar day", () => {
+    // 2026-01-03 02:00 UTC = 2026-01-02 21:00 in Lima (UTC-5)
+    assert.equal(dayKey("2026-01-03T02:00:00.000Z", "America/Lima"), "2026-01-02");
+    assert.equal(dayKey("2026-01-03T02:00:00.000Z", "UTC"), "2026-01-03");
   });
 
   it("treats post-confirmation statuses as confirmed", () => {

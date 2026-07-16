@@ -13,6 +13,8 @@ const CONFIRMED_ORDER_STATUSES = new Set([
   "closed",
 ]);
 
+const DEFAULT_STORE_TIMEZONE = "America/Lima";
+
 export function isOrderConfirmed(order: {
   confirmed_at: string | null;
   confirmation_status: string;
@@ -43,14 +45,36 @@ export function toMetric(current: number, previous: number) {
   };
 }
 
-/** Stable YYYY-MM-DD key from an ISO timestamp using UTC calendar parts (matches toISOString bounds). */
-export function dayKey(value: string | Date): string {
+function zonedYmd(date: Date, timeZone: string): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes): number => {
+    const part = parts.find((entry) => entry.type === type);
+    return part ? Number(part.value) : 0;
+  };
+  return { y: read("year"), m: read("month"), d: read("day") };
+}
+
+/**
+ * Stable YYYY-MM-DD key from an ISO timestamp in the store timezone
+ * (falls back to America/Lima). Pass timeZone=UTC for UTC calendar days.
+ */
+export function dayKey(value: string | Date, timeZone: string = DEFAULT_STORE_TIMEZONE): string {
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const tz = timeZone.trim() || DEFAULT_STORE_TIMEZONE;
+  if (tz === "UTC" || tz === "Etc/UTC") {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const { y, m, d } = zonedYmd(date, tz);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 export function previousPeriodBounds(fromIso: string, toIso: string): { from: string; to: string } {
@@ -62,15 +86,27 @@ export function previousPeriodBounds(fromIso: string, toIso: string): { from: st
   return { from: previousFrom.toISOString(), to: previousTo.toISOString() };
 }
 
-export function eachDayKey(fromIso: string, toIso: string): string[] {
-  const start = dayKey(fromIso);
-  const end = dayKey(toIso);
+/**
+ * Continuous calendar day keys from `from`..`to` inclusive, using store timezone
+ * for the range endpoints. Intermediate keys are consecutive YYYY-MM-DD strings.
+ */
+export function eachDayKey(
+  fromIso: string,
+  toIso: string,
+  timeZone: string = DEFAULT_STORE_TIMEZONE,
+): string[] {
+  const start = dayKey(fromIso, timeZone);
+  const end = dayKey(toIso, timeZone);
   if (!start || !end) return [];
   const keys: string[] = [];
-  const cursor = new Date(`${start}T00:00:00.000Z`);
-  const last = new Date(`${end}T00:00:00.000Z`);
+  // Noon UTC avoids DST edge cases when stepping calendar dates as plain YMD.
+  const cursor = new Date(`${start}T12:00:00.000Z`);
+  const last = new Date(`${end}T12:00:00.000Z`);
   while (cursor <= last) {
-    keys.push(dayKey(cursor));
+    const y = cursor.getUTCFullYear();
+    const m = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getUTCDate()).padStart(2, "0");
+    keys.push(`${y}-${m}-${d}`);
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return keys;

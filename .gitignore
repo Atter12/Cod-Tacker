@@ -40,6 +40,9 @@ supabase/.temp/
 # vercel
 .vercel
 
+# Shopify CLI local cache / auth state
+.shopify/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

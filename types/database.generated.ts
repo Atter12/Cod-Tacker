@@ -1590,7 +1590,7 @@ export type Database = {
           event_name: string
           event_time: string
           id: string
-          integration_id: string
+          integration_id: string | null
           last_error_message: string | null
           max_attempts: number
           next_retry_at: string | null
@@ -1615,7 +1615,7 @@ export type Database = {
           event_name: string
           event_time: string
           id?: string
-          integration_id: string
+          integration_id?: string | null
           last_error_message?: string | null
           max_attempts?: number
           next_retry_at?: string | null
@@ -1640,7 +1640,7 @@ export type Database = {
           event_name?: string
           event_time?: string
           id?: string
-          integration_id?: string
+          integration_id?: string | null
           last_error_message?: string | null
           max_attempts?: number
           next_retry_at?: string | null

@@ -81,6 +81,8 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
   const patch: {
     order_status?: (typeof ORDER_STATUSES)[number];
     total_amount?: number;
+    subtotal_amount?: number;
+    shipping_amount?: number;
     expected_cod_amount?: number | null;
     payment_status?: "cash_expected" | "unpaid" | "refunded";
     customer_id?: string;
@@ -103,6 +105,12 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
   if (data.order_status) patch.order_status = data.order_status;
   if (typeof data.total_amount === "number") {
     patch.total_amount = data.total_amount;
+  }
+  if (typeof data.subtotal_amount === "number") {
+    patch.subtotal_amount = data.subtotal_amount;
+  }
+  if (typeof data.shipping_amount === "number") {
+    patch.shipping_amount = data.shipping_amount;
   }
 
   if (canSyncPayment) {

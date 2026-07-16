@@ -105,6 +105,38 @@ export async function fetchShopifyOrdersForSync(input: {
                     currencyCode
                   }
                 }
+                totalShippingPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+                currentShippingPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
+                  }
+                }
+                shippingLines(first: 10) {
+                  edges {
+                    node {
+                      title
+                      isRemoved
+                      discountedPriceSet {
+                        shopMoney {
+                          amount
+                          currencyCode
+                        }
+                      }
+                      originalPriceSet {
+                        shopMoney {
+                          amount
+                          currencyCode
+                        }
+                      }
+                    }
+                  }
+                }
                 customer {
                   id
                   email

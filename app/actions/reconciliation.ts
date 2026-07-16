@@ -5,8 +5,10 @@ import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-re
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
 import { routes } from "@/config/routes";
+import { recordPurchaseConversionEvent } from "@/lib/conversions/record-purchase-conversion";
 import { ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
+import { logger } from "@/lib/observability/logger";
 import { parseCsv, rowsToObjects } from "@/lib/reconciliation/csv";
 import {
   applyCollectedPatch,
@@ -295,7 +297,7 @@ export async function confirmCollectedMatch(
     const orderRes = await client
       .from("orders")
       .select(
-        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount",
+        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code",
       )
       .eq("id", item.order_id)
       .eq("store_id", membership.storeId)
@@ -310,6 +312,23 @@ export async function confirmCollectedMatch(
 
     const upd = await client.from("orders").update(patch).eq("id", orderRes.data.id).eq("store_id", membership.storeId);
     if (upd.error) throw new ValidationError("No se pudo actualizar el cobro del pedido.");
+
+    try {
+      await recordPurchaseConversionEvent({
+        admin: createAdminClient(),
+        agencyId: membership.agencyId,
+        storeId: membership.storeId,
+        orderId: orderRes.data.id,
+        value: Number(patch.collected_cod_amount ?? collectedAmount),
+        currencyCode: orderRes.data.currency_code || "PEN",
+        eventTime: patch.cash_collected_at ?? undefined,
+      });
+    } catch (convErr) {
+      logger.warn("reconciliation.collected.conversion_record_failed", {
+        order_id: orderRes.data.id,
+        error: convErr instanceof Error ? convErr.message : "conversion_failed",
+      });
+    }
 
     await client
       .from("settlement_items")
@@ -387,6 +406,22 @@ export async function approveSettlementBatch(
         await client.from("orders").update(collectedPatch).eq("id", snap.id).eq("store_id", membership.storeId);
         snap.collectedCodAmount = collectedPatch.collected_cod_amount ?? null;
         snap.paymentStatus = collectedPatch.payment_status;
+        try {
+          await recordPurchaseConversionEvent({
+            admin: createAdminClient(),
+            agencyId: membership.agencyId,
+            storeId: membership.storeId,
+            orderId: snap.id,
+            value: Number(collectedPatch.collected_cod_amount ?? 0),
+            currencyCode: "PEN",
+            eventTime: collectedPatch.cash_collected_at ?? undefined,
+          });
+        } catch (convErr) {
+          logger.warn("reconciliation.batch.conversion_record_failed", {
+            order_id: snap.id,
+            error: convErr instanceof Error ? convErr.message : "conversion_failed",
+          });
+        }
       }
 
       const settledPatch = applySettledPatch({

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { formatDateTime } from "@/lib/formatting/date";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -72,8 +73,15 @@ export default async function OrderDetailPage({
   const member = await requireStoreAccess(p.agencySlug, p.storeSlug);
   if (!member.storeId || !can(member.roles, "orders.view")) notFound();
 
-  const detail = await getOrderDetail(await createClient(), member.storeId, p.orderId);
+  const client = await createClient();
+  const [detail, storeResult] = await Promise.all([
+    getOrderDetail(client, member.storeId, p.orderId),
+    client.from("stores").select("timezone").eq("id", member.storeId).maybeSingle(),
+  ]);
   if (!detail) notFound();
+
+  const storeTimeZone = storeResult.data?.timezone?.trim() || "America/Lima";
+  const formatWhen = (value: string) => formatDateTime(value, "es-PE", storeTimeZone);
 
   const { order, customer } = detail;
   const revealPii = can(member.roles, "orders.manage") || can(member.roles, "agency.manage");
@@ -177,7 +185,7 @@ export default async function OrderDetailPage({
                 </div>
                 <div>
                   <dt className="text-text-secondary">Creado</dt>
-                  <dd>{new Date(order.created_at_source).toLocaleString("es-PE")}</dd>
+                  <dd>{formatWhen(order.created_at_source)}</dd>
                 </div>
               </dl>
             ),
@@ -367,7 +375,7 @@ export default async function OrderDetailPage({
                 <p>
                   Estado: <ConfirmationStatusBadge status={order.confirmation_status} />
                 </p>
-                <p>Confirmado en: {order.confirmed_at ? new Date(order.confirmed_at).toLocaleString("es-PE") : "—"}</p>
+                <p>Confirmado en: {order.confirmed_at ? formatWhen(order.confirmed_at) : "—"}</p>
                 <p>Conversaciones WhatsApp: {detail.whatsappConversations.length}</p>
                 <p>Mensajes: {detail.whatsappMessages.length}</p>
               </div>
@@ -400,7 +408,7 @@ export default async function OrderDetailPage({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-medium">{item.title}</span>
                       <time className="text-xs text-text-secondary">
-                        {new Date(item.occurredAt).toLocaleString("es-PE")}
+                        {formatWhen(item.occurredAt)}
                       </time>
                     </div>
                     {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
@@ -422,7 +430,7 @@ export default async function OrderDetailPage({
                   {
                     id: "when",
                     header: "Cuándo",
-                    cell: (row) => new Date(row.created_at).toLocaleString("es-PE"),
+                    cell: (row) => formatWhen(row.created_at),
                   },
                   {
                     id: "actor",
@@ -446,7 +454,7 @@ export default async function OrderDetailPage({
               <li key={note.id} className="rounded-md border border-border px-3 py-2 text-sm">
                 <p>{note.body}</p>
                 <p className="mt-1 text-xs text-text-secondary">
-                  {new Date(note.created_at).toLocaleString("es-PE")}
+                  {formatWhen(note.created_at)}
                 </p>
               </li>
             ))}
