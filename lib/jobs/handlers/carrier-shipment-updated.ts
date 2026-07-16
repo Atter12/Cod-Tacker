@@ -53,29 +53,23 @@ async function ensureCarrier(
   const existing = await admin.from("carriers").select("id").eq("code", code).maybeSingle();
   if (existing.data) return existing.data.id;
 
-  const meta =
-    code === "enviame"
-      ? {
-          code: "enviame" as const,
-          name: "Enviame",
-          country_codes: ["CL", "PE", "MX"],
-          is_active: true,
-          is_aggregator: true,
-          supports_polling: true,
-          supports_webhooks: true,
-          metadata: { live: true, docs: "https://docs.enviame.io/docs/webhooks/" } as Json,
-        }
-      : {
-          code,
-          name: code === "custom_carrier" ? "Custom Carrier" : "Mock Carrier",
-          country_codes: ["PE"],
-          is_active: true,
-          is_aggregator: false,
-          supports_polling: true,
-          metadata: { demo: true } as Json,
-        };
-
-  const created = await admin.from("carriers").insert(meta).select("id").single();
+  const isEnviame = code === "enviame";
+  const created = await admin
+    .from("carriers")
+    .insert({
+      code,
+      name: isEnviame ? "Enviame" : code === "custom_carrier" ? "Custom Carrier" : "Mock Carrier",
+      country_codes: isEnviame ? ["CL", "PE", "MX"] : ["PE"],
+      is_active: true,
+      is_aggregator: isEnviame,
+      supports_polling: true,
+      supports_webhooks: isEnviame,
+      metadata: (isEnviame
+        ? { live: true, docs: "https://docs.enviame.io/docs/webhooks/" }
+        : { demo: true }) as Json,
+    })
+    .select("id")
+    .single();
   if (created.error || !created.data) {
     throw new PermanentJobError("DATABASE_ERROR", `No se pudo asegurar el carrier ${code}.`);
   }
