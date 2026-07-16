@@ -315,7 +315,7 @@ export async function confirmCollectedMatch(
 
     try {
       await recordPurchaseConversionEvent({
-        admin: client,
+        admin: createAdminClient(),
         agencyId: membership.agencyId,
         storeId: membership.storeId,
         orderId: orderRes.data.id,
@@ -408,7 +408,7 @@ export async function approveSettlementBatch(
         snap.paymentStatus = collectedPatch.payment_status;
         try {
           await recordPurchaseConversionEvent({
-            admin: client,
+            admin: createAdminClient(),
             agencyId: membership.agencyId,
             storeId: membership.storeId,
             orderId: snap.id,

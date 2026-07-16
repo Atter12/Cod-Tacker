@@ -16,6 +16,7 @@ import {
   assertPaymentStatusTransition,
 } from "@/lib/orders/transitions";
 import { can } from "@/lib/permissions/can";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getOrderById } from "@/services/orders.service";
@@ -172,8 +173,9 @@ export async function updateOrderPaymentStatus(
 
     if (next === "cash_collected" || next === "partially_collected") {
       try {
+        // Service role: conversion_events inserts are not granted to the user RLS role.
         await recordPurchaseConversionEvent({
-          admin: client,
+          admin: createAdminClient(),
           agencyId: membership.agencyId,
           storeId: order.store_id,
           orderId: order.id,
