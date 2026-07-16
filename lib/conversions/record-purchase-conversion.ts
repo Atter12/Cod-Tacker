@@ -2,7 +2,7 @@ import "server-only";
 
 import { purchaseConversionEventId } from "@/lib/conversions/purchase-event-id";
 import {
-  readMetaCapiCredentials,
+  resolveMetaCapiCredentials,
   sendMetaCapiPurchase,
 } from "@/lib/conversions/meta-capi";
 import { logger } from "@/lib/observability/logger";
@@ -65,7 +65,7 @@ async function resolveAdsIntegration(
     .maybeSingle();
   if (anyAds.data) return anyAds.data;
 
-  // Fallback so the DB row can exist for dry-run even before Meta is connected.
+  // Optional FK only — CAPI creds can come from Vercel env without a meta row.
   const shopify = await admin
     .from("integrations")
     .select("id, provider, status, settings, metadata")
@@ -78,7 +78,6 @@ async function resolveAdsIntegration(
     .maybeSingle();
   if (shopify.data) return shopify.data;
 
-  // Last resort: any store integration (row still requires a FK when present).
   const any = await admin
     .from("integrations")
     .select("id, provider, status, settings, metadata")
@@ -90,15 +89,9 @@ async function resolveAdsIntegration(
   return any.data ?? null;
 }
 
-function platformForIntegration(provider: string | undefined): AdPlatform {
-  if (provider === "meta" || provider === "tiktok") return provider;
-  return "meta";
-}
-
 /**
  * Ensure a Purchase conversion_events row exists (deduped by event_id) and
- * attempt Meta CAPI when credentials are configured; otherwise dry-run log.
- * Always persists a row even when no ads integration exists yet (integration_id null).
+ * attempt Meta CAPI (integration settings → Vercel env). Missing secrets → status failed.
  */
 export async function recordPurchaseConversionEvent(
   input: RecordPurchaseConversionInput,
@@ -120,25 +113,28 @@ export async function recordPurchaseConversionEvent(
       eventId,
       conversionEventRowId: existing.data.id,
       deliveryStatus: existing.data.status,
-      capiMode: "dry_run",
+      capiMode: "live",
     };
   }
 
   const integration = await resolveAdsIntegration(input.admin, input.agencyId, input.storeId);
-  if (!integration) {
-    logger.info("conversion.purchase.no_integration_dry_run", {
+  // Purchase CAPI is Meta-only for S10. Prefer meta integration settings; else Vercel env.
+  // FK may still point at shopify/tiktok when no meta row exists.
+  const metaSettings = integration?.provider === "meta" ? integration.settings : null;
+  const metaMetadata = integration?.provider === "meta" ? integration.metadata : null;
+  const creds = resolveMetaCapiCredentials(metaSettings, metaMetadata);
+  const platform: AdPlatform =
+    integration?.provider === "tiktok" && !creds ? "tiktok" : "meta";
+
+  if (!creds) {
+    logger.warn("conversion.purchase.missing_capi_credentials", {
       store_id: input.storeId,
       order_id: input.orderId,
       event_id: eventId,
+      has_integration: Boolean(integration),
+      integration_provider: integration?.provider ?? null,
     });
   }
-
-  const platform = platformForIntegration(integration?.provider);
-
-  const creds =
-    platform === "meta" && integration
-      ? readMetaCapiCredentials(integration.settings, integration.metadata)
-      : null;
 
   const capi = await sendMetaCapiPurchase(creds, {
     eventId,
@@ -150,13 +146,14 @@ export async function recordPurchaseConversionEvent(
     phone: input.phone,
   });
 
-  // Enum has queued (not pending); queued = awaiting live CAPI / dry-run.
-  const status = capi.mode === "dry_run" ? "queued" : capi.ok ? "sent" : "failed";
+  const status = capi.ok ? "sent" : "failed";
   const customData = {
-    dry_run: capi.mode === "dry_run",
+    dry_run: false,
     source: "cash_collected",
     order_id: input.orderId,
     no_integration: !integration,
+    credentials_source: capi.credentialsSource ?? null,
+    missing_credentials: !creds,
   } as Json;
   const responsePayload = (capi.body ?? {
     mode: capi.mode,
@@ -186,6 +183,7 @@ export async function recordPurchaseConversionEvent(
       order_id: input.orderId,
       status,
       capi_mode: capi.mode,
+      credentials_source: capi.credentialsSource ?? null,
     });
 
     return {
@@ -225,7 +223,6 @@ export async function recordPurchaseConversionEvent(
     .maybeSingle();
 
   if (inserted.error) {
-    // Race: another worker inserted the same event_id.
     const again = await input.admin
       .from("conversion_events")
       .select("id, status")
@@ -260,6 +257,7 @@ export async function recordPurchaseConversionEvent(
     order_id: input.orderId,
     status,
     capi_mode: capi.mode,
+    credentials_source: capi.credentialsSource ?? null,
     conversion_event_id: inserted.data?.id ?? null,
   });
 
