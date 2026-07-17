@@ -6,18 +6,31 @@ import { logger } from "@/lib/observability/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PROBE_BODY = {
+  ok: true,
+  service: "codtracked-envia-webhook",
+  message: "Webhook reachable. Use POST with tracking payload for events.",
+};
+
 /**
  * Envia.com shipment status webhook.
  *
  * Register in Envia UI (Desarrolladores → Webhooks):
- *   POST {APP_URL}/api/integrations/envia/webhooks
+ *   {APP_URL}/api/integrations/envia/webhooks
+ *   or shorter: {APP_URL}/api/webhooks/envia
  *   Tipo: onShipmentStatusUpdate
  *
- * Optional auth: ENVIA_WEBHOOK_SECRET (Bearer or X-Webhook-Signature).
- * Optional tenant pin: ENVIA_DEFAULT_STORE_ID or header x-codtracked-store-id
- *
+ * GET/HEAD return 200 so Envia "Probar" connection checks succeed.
  * Docs: https://docs.envia.com/docs/webhooks
  */
+export async function GET() {
+  return Response.json(PROBE_BODY, { status: 200 });
+}
+
+export async function HEAD() {
+  return new Response(null, { status: 200 });
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const result = await handleEnviaWebhookIngress({
