@@ -11,6 +11,11 @@ import type { Database, Json } from "@/types/database.generated";
 
 type AdPlatform = Database["public"]["Enums"]["ad_platform"];
 
+export type PurchaseConversionSource =
+  | "cash_collected"
+  | "delivered"
+  | "reconciliation";
+
 export type RecordPurchaseConversionInput = {
   admin: DatabaseClient;
   agencyId: string;
@@ -19,6 +24,8 @@ export type RecordPurchaseConversionInput = {
   value: number;
   currencyCode: string;
   eventTime?: string;
+  /** Provenance for conversion_events.custom_data (default cash_collected). */
+  source?: PurchaseConversionSource;
   email?: string | null;
   phone?: string | null;
   countryCode?: string | null;
@@ -201,7 +208,7 @@ export async function recordPurchaseConversionEvent(
   const status = capi.ok ? "sent" : "failed";
   const customData = {
     dry_run: false,
-    source: "cash_collected",
+    source: input.source ?? "cash_collected",
     order_id: input.orderId,
     no_integration: !integration,
     credentials_source: capi.credentialsSource ?? null,

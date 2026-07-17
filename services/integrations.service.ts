@@ -31,6 +31,7 @@ import {
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
 } from "@/lib/integrations/registry";
+import { resolveEnviaApiToken } from "@/lib/integrations/envia/env";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
@@ -126,6 +127,14 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
         connectMock: () => adapter.connect({ credentialRef }),
       };
     }
+    case "envia_com": {
+      const adapter = getCarrierProvider("envia_com");
+      return {
+        sync: (input) => adapter.sync(input),
+        health: () => adapter.health(),
+        connectMock: () => adapter.connect({ credentialRef }),
+      };
+    }
     case "custom_carrier": {
       const adapter = getCarrierProvider("custom_carrier");
       return {
@@ -178,6 +187,22 @@ export async function resolveStoreProviderForIntegration(
       );
     }
     const adapter = getCarrierProvider("enviame", creds);
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "envia_com" && getIntegrationRuntimeMode() === "live") {
+    const token = resolveEnviaApiToken(integration.settings, integration.metadata);
+    if (!token) {
+      throw new IntegrationError(
+        "Envia.com live requiere ENVIA_API_TOKEN en Vercel o api_token en settings de la integración.",
+      );
+    }
+    const adapter = getCarrierProvider("envia_com", { apiToken: token });
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),

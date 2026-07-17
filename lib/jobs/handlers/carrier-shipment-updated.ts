@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { isNewlyDeliveredTerminal } from "@/lib/conversions/delivered-purchase-policy";
 import { ENVIAME_DEFAULT_MAPPINGS } from "@/lib/integrations/enviame/map-status";
+import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import { applyShipmentEvent } from "@/lib/logistics/apply-shipment-event";
 import type { CarrierMappingRule } from "@/lib/logistics/normalize";
@@ -33,8 +35,8 @@ export const carrierShipmentUpdatedPayloadSchema = z.object({
   external_event_id: z.string().min(1).max(200).optional(),
   occurred_at: z.string().min(1).max(80).optional(),
   demo_seed: z.string().min(1).max(200).optional(),
-  /** DB carriers.code — enviame for live S11, mock_carrier for demos. */
-  carrier_code: z.enum(["enviame", "mock_carrier", "custom_carrier"]).optional(),
+  /** DB carriers.code — enviame / envia_com for live, mock_carrier for demos. */
+  carrier_code: z.enum(["enviame", "envia_com", "mock_carrier", "custom_carrier"]).optional(),
   mode: z.enum(["live", "mock"]).optional(),
   source: z.string().min(1).max(80).optional(),
 });
@@ -48,25 +50,34 @@ function asObject(payload: Json): Record<string, unknown> {
 
 async function ensureCarrier(
   admin: JobsAdminClient,
-  code: "enviame" | "mock_carrier" | "custom_carrier",
+  code: "enviame" | "envia_com" | "mock_carrier" | "custom_carrier",
 ): Promise<string> {
   const existing = await admin.from("carriers").select("id").eq("code", code).maybeSingle();
   if (existing.data) return existing.data.id;
 
   const isEnviame = code === "enviame";
+  const isEnvia = code === "envia_com";
   const created = await admin
     .from("carriers")
     .insert({
       code,
-      name: isEnviame ? "Enviame" : code === "custom_carrier" ? "Custom Carrier" : "Mock Carrier",
-      country_codes: isEnviame ? ["CL", "PE", "MX"] : ["PE"],
+      name: isEnviame
+        ? "Enviame"
+        : isEnvia
+          ? "Envia.com"
+          : code === "custom_carrier"
+            ? "Custom Carrier"
+            : "Mock Carrier",
+      country_codes: isEnviame || isEnvia ? ["CL", "PE", "MX"] : ["PE"],
       is_active: true,
-      is_aggregator: isEnviame,
+      is_aggregator: isEnviame || isEnvia,
       supports_polling: true,
-      supports_webhooks: isEnviame,
+      supports_webhooks: isEnviame || isEnvia,
       metadata: (isEnviame
         ? { live: true, docs: "https://docs.enviame.io/docs/webhooks/" }
-        : { demo: true }) as Json,
+        : isEnvia
+          ? { live: true, docs: "https://docs.envia.com/docs/webhooks" }
+          : { demo: true }) as Json,
     })
     .select("id")
     .single();
@@ -157,25 +168,32 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   }
 
   const data = parsed.data;
-  const isLive = data.mode === "live" || data.carrier_code === "enviame" || !job.job_type.endsWith(".mock");
-  const carrierCode = data.carrier_code ?? (isLive ? "enviame" : "mock_carrier");
+  const isLive =
+    data.mode === "live" ||
+    data.carrier_code === "enviame" ||
+    data.carrier_code === "envia_com" ||
+    !job.job_type.endsWith(".mock");
+  const carrierCode =
+    data.carrier_code ?? (isLive ? "enviame" : "mock_carrier");
   const carrierId = await ensureCarrier(admin, carrierCode);
   const mappings = await loadMappings(admin, carrierId);
 
-  // Prefer DB mappings; Enviame falls back to documented status codes; mock uses identity enums.
+  // Prefer DB mappings; Enviame/Envia fall back to documented status codes; mock uses identity enums.
   const effectiveMappings: CarrierMappingRule[] =
     mappings.length > 0
       ? mappings
       : carrierCode === "enviame"
         ? [...ENVIAME_DEFAULT_MAPPINGS]
-        : SHIPMENT_STATUSES.map((status) => ({
-            external_status_code: status,
-            normalized_status: status,
-            is_rto: status === "returned" || status === "return_in_transit",
-            is_terminal: ["delivered", "returned", "lost", "cancelled"].includes(status),
-            priority: 0,
-            is_active: true,
-          }));
+        : carrierCode === "envia_com"
+          ? [...ENVIA_DEFAULT_MAPPINGS]
+          : SHIPMENT_STATUSES.map((status) => ({
+              external_status_code: status,
+              normalized_status: status,
+              is_rto: status === "returned" || status === "return_in_transit",
+              is_terminal: ["delivered", "returned", "lost", "cancelled"].includes(status),
+              priority: 0,
+              is_active: true,
+            }));
 
   const externalCode = data.external_status_code ?? data.status ?? "unknown";
 
@@ -212,7 +230,7 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   if (!shipment && !orderId && isLive) {
     throw new PermanentJobError(
       "ORDER_NOT_FOUND",
-      "Enviame live: no hay pedido/shipment para este tracking. Crea el envío en CODTracked o usa imported_id = external_order_id.",
+      "Carrier live: no hay pedido/shipment para este tracking. Crea el envío en CODTracked o usa order_external_id / imported_id.",
     );
   }
 
@@ -320,13 +338,41 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     };
   }
 
+  let capiDetail = "";
+  if (
+    isNewlyDeliveredTerminal({
+      skippedDuplicate: false,
+      skipStatusUpdate: applied.plan.skipStatusUpdate,
+      normalizedStatus: applied.plan.normalize.normalizedStatus,
+    })
+  ) {
+    // Dynamic import keeps this handler loadable in unit tests (server-only CAPI module).
+    const { maybeRecordPurchaseOnDelivered } = await import(
+      "@/lib/conversions/delivered-purchase"
+    );
+    const purchase = await maybeRecordPurchaseOnDelivered({
+      admin,
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      orderId,
+      deliveredAt: occurredAt,
+      shipmentId: applied.shipmentId,
+      jobId: job.id,
+    });
+    if (purchase.attempted && purchase.conversion) {
+      capiDetail = `:capi:${purchase.conversion.deliveryStatus}:${purchase.conversion.eventId}`;
+    } else if (purchase.skippedReason) {
+      capiDetail = `:capi_skip:${purchase.skippedReason}`;
+    }
+  }
+
   return {
     ok: true,
     action: "updated",
     entityType: "shipment",
     entityId: applied.shipmentId,
     detail: applied.plan.conflict
-      ? `event:${applied.eventId}:terminal_conflict`
-      : `event:${applied.eventId}`,
+      ? `event:${applied.eventId}:terminal_conflict${capiDetail}`
+      : `event:${applied.eventId}${capiDetail}`,
   };
 };

@@ -322,6 +322,7 @@ export async function confirmCollectedMatch(
         value: Number(patch.collected_cod_amount ?? collectedAmount),
         currencyCode: orderRes.data.currency_code || "PEN",
         eventTime: patch.cash_collected_at ?? undefined,
+        source: "reconciliation",
       });
     } catch (convErr) {
       logger.warn("reconciliation.collected.conversion_record_failed", {
@@ -415,6 +416,7 @@ export async function approveSettlementBatch(
             value: Number(collectedPatch.collected_cod_amount ?? 0),
             currencyCode: "PEN",
             eventTime: collectedPatch.cash_collected_at ?? undefined,
+            source: "reconciliation",
           });
         } catch (convErr) {
           logger.warn("reconciliation.batch.conversion_record_failed", {

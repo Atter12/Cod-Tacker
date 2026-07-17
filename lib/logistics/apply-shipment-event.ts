@@ -30,7 +30,8 @@ export type ApplyShipmentEventResult = {
 
 /**
  * Idempotent apply: insert shipment_event (by external_event_id), update shipment,
- * optionally patch order. Never sets payment settled on deliver.
+ * optionally patch order logistics fields. Never sets payment settled here —
+ * S11 COD Purchase CAPI runs in the carrier handler after a newly delivered terminal.
  */
 export async function applyShipmentEvent(
   input: ApplyShipmentEventInput,

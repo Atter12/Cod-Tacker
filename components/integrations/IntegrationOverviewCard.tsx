@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { routes } from "@/config/routes";
-import { cn } from "@/lib/utils/cn";
+import { labelProviderKind } from "@/lib/integrations/catalog";
 import { labelOverviewStatus } from "@/lib/integrations/overview";
+import { cn } from "@/lib/utils/cn";
 import type { IntegrationOverviewItem } from "@/types/integrations";
 import { IntegrationHealthBadge } from "./IntegrationHealthBadge";
 import { IntegrationProviderIcon } from "./IntegrationProviderIcon";
@@ -35,6 +36,9 @@ export function IntegrationOverviewCard({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14px] font-semibold leading-snug text-text-primary">
           {item.name}
+        </span>
+        <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+          {labelProviderKind(item.kind)}
         </span>
         <span className="mt-1 line-clamp-2 block text-[12.5px] leading-snug text-text-secondary">
           {item.operationalMessage}
