@@ -71,7 +71,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
   {
     provider: "tiktok",
     name: "TikTok Ads",
-    description: "Gasto y campañas; Events API en el roadmap de conversiones.",
+    description: "Gasto y campañas; Events API Purchase terminal (CompletePayment).",
     kind: "ads",
   },
   {
