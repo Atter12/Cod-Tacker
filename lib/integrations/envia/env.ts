@@ -4,17 +4,19 @@ import "server-only";
  * Envia.com — server env. Do not invent values.
  *
  * Vercel (Preview/Production):
- *   ENVIA_API_TOKEN           — Bearer token from Desarrolladores → Acceso de API
+ *   ENVIA_API_TOKEN           — optional global fallback (prefer token on integrations row)
  *   ENVIA_WEBHOOK_SECRET      — optional; if set, require Authorization Bearer or valid HMAC signature
  *   ENVIA_API_BASE_URL        — optional; default https://api.envia.com (sandbox: https://api-test.envia.com)
- *   ENVIA_DEFAULT_STORE_ID    — optional UUID to pin tenant when Probar / tracking is unknown
+ *   ENVIA_DEFAULT_STORE_ID    — demo only; last-resort store pin when tenant cannot be resolved
  *
- * Webhook URL to register in Envia UI:
- *   {NEXT_PUBLIC_APP_URL}/api/integrations/envia/webhooks
- * Type: onShipmentStatusUpdate
+ * Webhook URLs (register in Envia → Desarrolladores → Webhooks, tipo onShipmentStatusUpdate):
+ *   Global (multi-tenant resolve):  {APP_URL}/api/webhooks/envia
+ *   Per-store (explicit):           {APP_URL}/api/webhooks/envia/{agencySlug}/{storeSlug}
  *
  * Docs: https://docs.envia.com/docs/webhooks · https://docs.envia.com/docs/authentication
  */
+
+export { buildEnviaWebhookUrls, type EnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 
 export const ENVIA_MISSING_TOKEN_ERROR =
   "missing_envia_api_token: set ENVIA_API_TOKEN in Vercel (Desarrolladores → Acceso de API)";

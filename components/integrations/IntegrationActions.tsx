@@ -144,9 +144,12 @@ export function IntegrationActions({
               variant="outline"
               disabled={pending}
               onClick={() => {
-                const confirmMsg = liveProvider
-                  ? "¿Ejecutar backfill histórico desde Shopify? Se importarán pedidos reales (últimos ~90 días)."
-                  : "¿Ejecutar backfill histórico mock? Puede generar más registros de demostración.";
+                const confirmMsg =
+                  liveProvider && provider === "shopify"
+                    ? "¿Ejecutar backfill histórico desde Shopify? Se importarán pedidos reales (últimos ~90 días)."
+                    : liveProvider
+                      ? "¿Ejecutar backfill para esta integración live?"
+                      : "¿Ejecutar backfill histórico mock? Puede generar más registros de demostración.";
                 if (!window.confirm(confirmMsg)) {
                   return;
                 }
@@ -162,7 +165,7 @@ export function IntegrationActions({
               <Button size="sm" variant="outline" disabled={pending} onClick={startLiveOauthReconnect}>
                 {pending ? "Redirigiendo…" : "Reconectar (OAuth)"}
               </Button>
-            ) : (
+            ) : liveProvider && provider === "envia_com" ? null : (
               <Button
                 size="sm"
                 variant="outline"

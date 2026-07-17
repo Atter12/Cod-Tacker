@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
 import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import {
@@ -9,6 +10,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/ui";
+import { getPublicEnv } from "@/config/env";
 import { routes } from "@/config/routes";
 import {
   getCatalogEntry,
@@ -17,8 +19,9 @@ import {
   labelSyncStatus,
   labelSyncType,
 } from "@/lib/integrations/catalog";
+import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
-import { isDemoIntegrationMode } from "@/lib/integrations/registry";
+import { getIntegrationRuntimeMode, isDemoIntegrationMode } from "@/lib/integrations/registry";
 import {
   parseShopifyWebhooksMetadata,
   summarizeShopifyWebhooks,
@@ -67,6 +70,11 @@ export default async function IntegrationDetailPage({
   const demo = isDemoIntegrationMode() || Boolean((integration?.metadata as { demo?: boolean } | null)?.demo);
   const canManage = can(member.roles, "integrations.manage");
   const shopifyLive = p.provider === "shopify" && isShopifyConfigured();
+  const enviaProvider = p.provider === "envia_com";
+  const liveMode = getIntegrationRuntimeMode() === "live";
+  const enviaUrls = enviaProvider
+    ? buildEnviaWebhookUrls(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
+    : null;
   const shopDomain =
     (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
     (integration?.metadata as { shop_domain?: string } | null)?.shop_domain ||
@@ -86,7 +94,7 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo && !shopifyLive ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive && !enviaProvider ? <DemoModeBadge /> : null}
         />
       </div>
 
@@ -101,7 +109,7 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
-      {demo && !shopifyLive ? (
+      {demo && !shopifyLive && !enviaProvider ? (
         <Alert variant="info" title="Modo demostración">
           Esta conexión usa adaptadores mock. No se realizan llamadas a APIs externas.
         </Alert>
@@ -159,6 +167,17 @@ export default async function IntegrationDetailPage({
         />
       ) : null}
 
+      {enviaProvider && canManage && enviaUrls ? (
+        <EnviaConnectForm
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          globalWebhookUrl={enviaUrls.global}
+          storeWebhookUrl={enviaUrls.store}
+          connected={connected}
+          externalAccountId={integration?.external_account_id}
+        />
+      ) : null}
+
       {shopifyLive ? (
         <div className="rounded-lg border border-border bg-surface-elevated p-4">
           <h2 className="text-sm font-semibold">Webhooks Shopify</h2>
@@ -204,8 +223,8 @@ export default async function IntegrationDetailPage({
         provider={p.provider}
         canManage={canManage}
         connected={connected}
-        hideMockConnect={shopifyLive}
-        liveProvider={shopifyLive && !isDemoIntegrationMode()}
+        hideMockConnect={shopifyLive || (enviaProvider && liveMode)}
+        liveProvider={(shopifyLive || enviaProvider) && !isDemoIntegrationMode()}
         liveReconnectShop={shopDomain}
       />
 

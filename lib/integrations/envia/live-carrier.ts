@@ -36,7 +36,9 @@ export function createLiveEnviaCarrierProvider(
       return {
         ok: true,
         mode: "live",
-        externalAccountId: "envia_com",
+        externalAccountId: input.credentialRef?.startsWith("envia:")
+          ? input.credentialRef
+          : "envia_com",
         displayName: "Envia.com",
         credentialRef: input.credentialRef || "envia-live",
       };

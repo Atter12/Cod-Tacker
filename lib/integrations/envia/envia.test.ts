@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
+import { fingerprintEnviaApiToken } from "@/lib/integrations/envia/token-fingerprint";
+import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { resolveEnviaExternalStatusCode } from "@/lib/integrations/envia/map-status";
 import { mapEnviaWebhookToJobPayload } from "@/lib/integrations/envia/map-webhook";
 import { signEnviaWebhook, verifyEnviaWebhookAuth } from "@/lib/integrations/envia/webhook-auth";
@@ -78,5 +81,26 @@ describe("envia webhook / status mapping", () => {
       eventHeader: null,
     });
     assert.equal(ok.ok, true);
+  });
+
+  it("fingerprints API token stably", () => {
+    const a = fingerprintEnviaApiToken("tok-abc");
+    const b = fingerprintEnviaApiToken("tok-abc");
+    const expected = createHash("sha256").update("tok-abc", "utf8").digest("hex");
+    assert.equal(a, b);
+    assert.equal(a, expected);
+  });
+
+  it("builds global + store webhook URLs", () => {
+    const urls = buildEnviaWebhookUrls(
+      "holistic-ecommerce",
+      "flipy",
+      "https://app.codtracked.com/",
+    );
+    assert.equal(urls.global, "https://app.codtracked.com/api/webhooks/envia");
+    assert.equal(
+      urls.store,
+      "https://app.codtracked.com/api/webhooks/envia/holistic-ecommerce/flipy",
+    );
   });
 });

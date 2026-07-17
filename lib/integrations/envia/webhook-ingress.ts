@@ -1,5 +1,8 @@
 import "server-only";
 
+import {
+  fingerprintEnviaApiToken,
+} from "@/lib/integrations/envia/token-fingerprint";
 import { getEnviaEnv } from "@/lib/integrations/envia/env";
 import { mapEnviaWebhookToJobPayload } from "@/lib/integrations/envia/map-webhook";
 import { verifyEnviaWebhookAuth } from "@/lib/integrations/envia/webhook-auth";
@@ -8,8 +11,17 @@ import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
 
+type ResolvedStore = {
+  agencyId: string;
+  storeId: string;
+  integrationId: string | null;
+  via: "path_slug" | "tracking" | "order" | "bearer_token" | "store_hint";
+};
+
 /**
- * Envia.com webhook ingress.
+ * Envia.com webhook ingress (hybrid tenant resolve).
+ *
+ * Order: path slug → tracking → order → Bearer API-token fingerprint → demo store hint.
  * Auth (when ENVIA_WEBHOOK_SECRET is set): Bearer or X-Webhook-Signature.
  * When secret unset: accept (UI Probar) + warn — set secret in production.
  */
@@ -21,6 +33,8 @@ export async function handleEnviaWebhookIngress(input: {
   eventHeader: string | null;
   webhookIdHeader: string | null;
   storeIdHeader: string | null;
+  agencySlug?: string | null;
+  storeSlug?: string | null;
 }): Promise<{ status: number; body: Record<string, unknown>; enqueued?: boolean }> {
   const env = getEnviaEnv();
   const authOk = verifyEnviaWebhookAuth({
@@ -55,11 +69,11 @@ export async function handleEnviaWebhookIngress(input: {
   });
   if (!mapped.ok) {
     // Envia UI "Probar" often sends an empty/`{}` ping without tracking.
-    // Ack 200 so connection tests succeed; real events always include tracking.
     if (mapped.error === "missing_tracking_number" || mapped.error === "payload_not_object") {
       logger.info("envia.webhook.probe_ack", {
         error: mapped.error,
-        endpoint: "POST /api/integrations/envia/webhooks",
+        agency_slug: input.agencySlug ?? null,
+        store_slug: input.storeSlug ?? null,
       });
       return {
         status: 200,
@@ -77,15 +91,20 @@ export async function handleEnviaWebhookIngress(input: {
 
   const admin = createAdminClient();
   const resolved = await resolveStoreForEnviaWebhook(admin, {
+    agencySlug: input.agencySlug?.trim() || null,
+    storeSlug: input.storeSlug?.trim() || null,
     storeIdHint: input.storeIdHeader?.trim() || env.defaultStoreId,
     trackingNumber: mapped.payload.tracking_number,
     orderExternalId: mapped.payload.order_external_id ?? null,
+    authorizationHeader: input.authorizationHeader,
   });
 
   if (!resolved) {
     logger.warn("envia.webhook.store_unresolved", {
       tracking_number: mapped.payload.tracking_number,
-      hint: "Set ENVIA_DEFAULT_STORE_ID or header x-codtracked-store-id",
+      agency_slug: input.agencySlug ?? null,
+      store_slug: input.storeSlug ?? null,
+      hint: "Use /api/webhooks/envia/{agencySlug}/{storeSlug}, connect Envia token, or match shipment tracking",
     });
     return {
       status: 200,
@@ -94,7 +113,7 @@ export async function handleEnviaWebhookIngress(input: {
         ok: true,
         enqueued: false,
         warning:
-          "Tienda no resuelta: define ENVIA_DEFAULT_STORE_ID o header x-codtracked-store-id, o un shipment/order con ese tracking",
+          "Tienda no resuelta: usa URL por slug, conecta el token Envia en Integraciones, o envía un tracking ya ligado a un shipment/order",
         tracking_number: mapped.payload.tracking_number,
         external_status_code: mapped.payload.external_status_code,
       },
@@ -118,9 +137,9 @@ export async function handleEnviaWebhookIngress(input: {
     store_id: resolved.storeId,
     job_id: enqueued.jobId,
     created: enqueued.created,
+    via: resolved.via,
     tracking_number: mapped.payload.tracking_number,
     external_status_code: mapped.payload.external_status_code,
-    endpoint: "POST /api/integrations/envia/webhooks",
   });
 
   return {
@@ -132,33 +151,33 @@ export async function handleEnviaWebhookIngress(input: {
       jobId: enqueued.jobId,
       rawEventId: enqueued.rawEventId,
       created: enqueued.created,
+      via: resolved.via,
       tracking_number: mapped.payload.tracking_number,
       external_status_code: mapped.payload.external_status_code,
     },
   };
 }
 
-async function resolveStoreForEnviaWebhook(
+function bearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return m?.[1]?.trim() || null;
+}
+
+export async function resolveStoreForEnviaWebhook(
   admin: ReturnType<typeof createAdminClient>,
   input: {
+    agencySlug: string | null;
+    storeSlug: string | null;
     storeIdHint: string | null;
     trackingNumber: string;
     orderExternalId: string | null;
+    authorizationHeader: string | null;
   },
-): Promise<{ agencyId: string; storeId: string; integrationId: string | null } | null> {
-  if (input.storeIdHint) {
-    const store = await admin
-      .from("stores")
-      .select("id, agency_id")
-      .eq("id", input.storeIdHint)
-      .maybeSingle();
-    if (store.data) {
-      return {
-        agencyId: store.data.agency_id,
-        storeId: store.data.id,
-        integrationId: await findEnviaIntegrationId(admin, store.data.agency_id, store.data.id),
-      };
-    }
+): Promise<ResolvedStore | null> {
+  if (input.agencySlug && input.storeSlug) {
+    const byPath = await resolveByPathSlugs(admin, input.agencySlug, input.storeSlug);
+    if (byPath) return { ...byPath, via: "path_slug" };
   }
 
   const byTracking = await admin
@@ -172,6 +191,7 @@ async function resolveStoreForEnviaWebhook(
       agencyId: row.agency_id,
       storeId: row.store_id,
       integrationId: await findEnviaIntegrationId(admin, row.agency_id, row.store_id),
+      via: "tracking",
     };
   }
 
@@ -187,11 +207,100 @@ async function resolveStoreForEnviaWebhook(
         agencyId: row.agency_id,
         storeId: row.store_id,
         integrationId: await findEnviaIntegrationId(admin, row.agency_id, row.store_id),
+        via: "order",
+      };
+    }
+  }
+
+  const bearer = bearerToken(input.authorizationHeader);
+  if (bearer) {
+    const byToken = await resolveByApiTokenFingerprint(admin, bearer);
+    if (byToken === "ambiguous") {
+      logger.warn("envia.webhook.store_ambiguous", {
+        reason: "multiple_integrations_for_bearer_fingerprint",
+      });
+      return null;
+    }
+    if (byToken) return { ...byToken, via: "bearer_token" };
+  }
+
+  if (input.storeIdHint) {
+    const store = await admin
+      .from("stores")
+      .select("id, agency_id")
+      .eq("id", input.storeIdHint)
+      .maybeSingle();
+    if (store.data) {
+      return {
+        agencyId: store.data.agency_id,
+        storeId: store.data.id,
+        integrationId: await findEnviaIntegrationId(admin, store.data.agency_id, store.data.id),
+        via: "store_hint",
       };
     }
   }
 
   return null;
+}
+
+async function resolveByPathSlugs(
+  admin: ReturnType<typeof createAdminClient>,
+  agencySlug: string,
+  storeSlug: string,
+): Promise<{ agencyId: string; storeId: string; integrationId: string | null } | null> {
+  const agency = await admin
+    .from("agencies")
+    .select("id")
+    .eq("slug", agencySlug)
+    .maybeSingle();
+  if (!agency.data) return null;
+
+  const store = await admin
+    .from("stores")
+    .select("id, agency_id")
+    .eq("agency_id", agency.data.id)
+    .eq("slug", storeSlug)
+    .maybeSingle();
+  if (!store.data) return null;
+
+  return {
+    agencyId: store.data.agency_id,
+    storeId: store.data.id,
+    integrationId: await findEnviaIntegrationId(admin, store.data.agency_id, store.data.id),
+  };
+}
+
+async function resolveByApiTokenFingerprint(
+  admin: ReturnType<typeof createAdminClient>,
+  apiToken: string,
+): Promise<
+  | { agencyId: string; storeId: string; integrationId: string | null }
+  | "ambiguous"
+  | null
+> {
+  const fingerprint = fingerprintEnviaApiToken(apiToken);
+  const result = await admin
+    .from("integrations")
+    .select("id, agency_id, store_id, settings, status")
+    .eq("provider", "envia_com")
+    .in("status", ["connected", "degraded", "pending"])
+    .filter("settings->>token_fingerprint", "eq", fingerprint)
+    .limit(3);
+
+  if (result.error || !result.data?.length) return null;
+
+  const withStore = result.data.filter(
+    (row): row is typeof row & { store_id: string } => typeof row.store_id === "string" && !!row.store_id,
+  );
+  if (withStore.length === 0) return null;
+  if (withStore.length > 1) return "ambiguous";
+
+  const row = withStore[0]!;
+  return {
+    agencyId: row.agency_id,
+    storeId: row.store_id,
+    integrationId: row.id,
+  };
 }
 
 async function findEnviaIntegrationId(

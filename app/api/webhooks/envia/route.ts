@@ -12,7 +12,11 @@ const PROBE_BODY = {
   message: "Webhook reachable. Use POST with tracking payload for events.",
 };
 
-/** Short URL for Envia UI: /api/webhooks/envia */
+/**
+ * Global Envia webhook URL (multi-tenant).
+ * Resolve: tracking → order → Bearer token fingerprint → ENVIA_DEFAULT_STORE_ID (demo).
+ * Prefer per-store URL when possible: /api/webhooks/envia/{agencySlug}/{storeSlug}
+ */
 export async function GET() {
   return Response.json(PROBE_BODY, { status: 200 });
 }

@@ -31,7 +31,11 @@ import {
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
 } from "@/lib/integrations/registry";
-import { resolveEnviaApiToken } from "@/lib/integrations/envia/env";
+import {
+  fingerprintEnviaApiToken,
+  packEnviaApiToken,
+  resolveEnviaApiTokenFromIntegration,
+} from "@/lib/integrations/envia/credentials";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
@@ -196,10 +200,10 @@ export async function resolveStoreProviderForIntegration(
     };
   }
   if (provider === "envia_com" && getIntegrationRuntimeMode() === "live") {
-    const token = resolveEnviaApiToken(integration.settings, integration.metadata);
+    const token = resolveEnviaApiTokenFromIntegration(integration);
     if (!token) {
       throw new IntegrationError(
-        "Envia.com live requiere ENVIA_API_TOKEN en Vercel o api_token en settings de la integración.",
+        "Envia.com live requiere token en Integraciones (Conectar Envia) o ENVIA_API_TOKEN en Vercel.",
       );
     }
     const adapter = getCarrierProvider("envia_com", { apiToken: token });
@@ -528,6 +532,13 @@ export async function disconnect(
       .eq("agency_id", agencyId);
   }
 
+  if (provider === "envia_com") {
+    delete settings.token_fingerprint;
+    delete settings.api_token;
+    delete settings.access_token;
+    delete settings.token;
+  }
+
   const result = await client
     .from("integrations")
     .update({
@@ -563,7 +574,108 @@ export async function reconnect(
       "En modo live, reconecta Shopify con OAuth (Conectar / Reautorizar Shopify), no con reconnect mock.",
     );
   }
+  if (input.provider === "envia_com" && getIntegrationRuntimeMode() === "live") {
+    throw new IntegrationError(
+      "En modo live, actualiza Envia con el formulario de token (Conectar Envia), no con reconnect mock.",
+    );
+  }
   return connectMock(client, input);
+}
+
+/**
+ * Live Envia.com connect: encrypt API token, store fingerprint for webhook tenant resolve.
+ */
+export async function connectEnviaLive(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    userId: string;
+    apiToken: string;
+    externalAccountId?: string | null;
+  },
+): Promise<IntegrationRow> {
+  const scope = assertStoreScope(input.agencyId, input.storeId);
+  const token = input.apiToken.trim();
+  if (!token) throw new ValidationError("Token de Envia requerido.");
+
+  let secretRef: string;
+  try {
+    secretRef = packEnviaApiToken(token);
+  } catch {
+    throw new IntegrationError(
+      "ENCRYPTION_KEY no configurada. No se puede guardar el token de Envia de forma segura.",
+    );
+  }
+
+  const fingerprint = fingerprintEnviaApiToken(token);
+  const externalAccountId =
+    input.externalAccountId?.trim() ||
+    `envia:${fingerprint.slice(0, 12)}`;
+  const now = new Date().toISOString();
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "envia_com");
+
+  const settings = {
+    ...(existing?.settings &&
+    typeof existing.settings === "object" &&
+    !Array.isArray(existing.settings)
+      ? (existing.settings as Record<string, unknown>)
+      : {}),
+    token_fingerprint: fingerprint,
+  } as Record<string, unknown>;
+  delete settings.api_token;
+  delete settings.access_token;
+  delete settings.token;
+  delete settings.ENVIA_API_TOKEN;
+
+  const metadata = {
+    ...(existing?.metadata &&
+    typeof existing.metadata === "object" &&
+    !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {}),
+    mode: "live",
+    demo: false,
+  } as Record<string, unknown>;
+
+  const payload = {
+    agency_id: scope.agencyId,
+    store_id: scope.storeId,
+    provider: "envia_com" as const,
+    status: "connected" as const,
+    display_name: "Envia.com",
+    external_account_id: externalAccountId,
+    external_account_name: "Envia.com",
+    secret_reference: secretRef,
+    scopes: ["envia:api"],
+    metadata: metadata as Json,
+    settings: settings as Json,
+    connected_at: now,
+    connected_by: input.userId,
+    last_error_at: null,
+    last_error_message: null,
+    last_success_at: now,
+    updated_at: now,
+  };
+
+  if (existing) {
+    const result = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("agency_id", scope.agencyId)
+      .eq("store_id", scope.storeId)
+      .select()
+      .single();
+    throwQueryError(result.error);
+    if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo actualizar Envia.");
+    return result.data;
+  }
+
+  const result = await client.from("integrations").insert(payload).select().single();
+  throwQueryError(result.error);
+  if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Envia.");
+  return result.data;
 }
 
 export async function testConnection(
