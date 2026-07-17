@@ -44,7 +44,7 @@ export async function handleEnviaWebhookIngress(input: {
 
   let json: unknown;
   try {
-    json = JSON.parse(input.rawBody) as unknown;
+    json = input.rawBody.trim() ? (JSON.parse(input.rawBody) as unknown) : {};
   } catch {
     return { status: 400, body: { error: "JSON inválido" } };
   }
@@ -54,6 +54,24 @@ export async function handleEnviaWebhookIngress(input: {
     event: input.eventHeader,
   });
   if (!mapped.ok) {
+    // Envia UI "Probar" often sends an empty/`{}` ping without tracking.
+    // Ack 200 so connection tests succeed; real events always include tracking.
+    if (mapped.error === "missing_tracking_number" || mapped.error === "payload_not_object") {
+      logger.info("envia.webhook.probe_ack", {
+        error: mapped.error,
+        endpoint: "POST /api/integrations/envia/webhooks",
+      });
+      return {
+        status: 200,
+        enqueued: false,
+        body: {
+          ok: true,
+          enqueued: false,
+          probe: true,
+          message: "Webhook reachable. Send a payload with tracking_number/status to enqueue.",
+        },
+      };
+    }
     return { status: 400, body: { error: mapped.error } };
   }
 
