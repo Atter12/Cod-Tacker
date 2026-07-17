@@ -82,6 +82,7 @@ export default async function StoreDashboard({
     rto: series.map((point) => point.rto),
     roasCheckout: series.map((point) => point.roasCheckout),
     roasDelivered: series.map((point) => point.roasDelivered),
+    roasCollected: series.map((point) => point.roasCollected),
   };
 
   return (
@@ -142,7 +143,7 @@ export default async function StoreDashboard({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
         <div className="md:col-span-2 xl:col-span-2">
           <IntegrationHealthCard
             health={summary.integrationHealth}
@@ -184,6 +185,15 @@ export default async function StoreDashboard({
           metric={summary.kpis.roasDelivered}
           sparkline={spark.roasDelivered}
           icon={Gauge}
+          comparisonLabel={comparisonLabel}
+          changeMode="absolute"
+        />
+        <SecondaryMetricCard
+          label="ROAS cobrado"
+          value={summary.kpis.roasCollected.value.toFixed(2)}
+          metric={summary.kpis.roasCollected}
+          sparkline={spark.roasCollected}
+          icon={DollarSign}
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
         />

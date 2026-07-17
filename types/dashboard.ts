@@ -30,6 +30,8 @@ export type DashboardTimeSeriesPoint = {
   rto: number;
   roasCheckout: number;
   roasDelivered: number;
+  /** Door cash / ad spend (terminal collected COD). */
+  roasCollected: number;
 };
 
 export type DashboardIntegrationHealth = {
@@ -66,6 +68,8 @@ export type DashboardKpiBundle = {
   rto: MetricComparison;
   roasCheckout: MetricComparison;
   roasDelivered: MetricComparison;
+  /** ROAS on real door cash (collected_cod_amount). */
+  roasCollected: MetricComparison;
 };
 
 export type DashboardFunnel = {

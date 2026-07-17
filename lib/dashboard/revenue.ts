@@ -1,0 +1,102 @@
+import { ratio } from "@/lib/dashboard/metrics";
+
+/** Minimal order shape for dashboard revenue / ROAS. */
+export type DashboardRevenueOrder = {
+  id: string;
+  expected_cod_amount: number | null;
+  collected_cod_amount: number | null;
+  total_amount: number;
+  payment_status: string;
+  cash_collected_at: string | null;
+};
+
+/** Minimal shipment shape for delivered value. */
+export type DashboardRevenueShipment = {
+  order_id: string;
+  status: string;
+  is_rto: boolean;
+};
+
+export type DashboardRevenueTotals = {
+  checkoutRevenue: number;
+  /** Expected COD (or total) for orders with a delivered shipment — not a delivery-rate proxy. */
+  deliveredRevenue: number;
+  /** Door cash: sum of collected_cod_amount on terminal collected orders. */
+  collectedRevenue: number;
+  spend: number;
+  roasCheckout: number;
+  roasDelivered: number;
+  roasCollected: number;
+};
+
+export function isCashCollectedOrder(order: {
+  payment_status: string;
+  cash_collected_at: string | null;
+}): boolean {
+  return order.payment_status === "cash_collected" || Boolean(order.cash_collected_at);
+}
+
+/** COD expected at door; falls back to order total when expected COD is unset. */
+export function orderDeliveredValue(order: {
+  expected_cod_amount: number | null;
+  total_amount: number;
+}): number {
+  const expected = order.expected_cod_amount;
+  if (expected != null && Number.isFinite(expected)) return expected;
+  return order.total_amount ?? 0;
+}
+
+/**
+ * Legacy (pre-S13) proxy — do not use in product metrics.
+ * Inflates/deflates revenue by delivered/generated order counts.
+ */
+export function legacyDeliveredRevenueProxy(input: {
+  cashExpected: number;
+  deliveredCount: number;
+  generatedCount: number;
+}): number {
+  return input.cashExpected * ratio(input.deliveredCount, input.generatedCount);
+}
+
+/**
+ * Honest revenue layers for dashboard ROAS:
+ * - checkout: attributed checkout value
+ * - delivered: sum of expected COD for uniquely delivered orders (excludes RTO shipments)
+ * - collected: sum of collected_cod_amount for cash-collected orders
+ */
+export function computeDashboardRevenueTotals(input: {
+  orders: readonly DashboardRevenueOrder[];
+  shipments: readonly DashboardRevenueShipment[];
+  checkoutRevenue: number;
+  spend: number;
+}): DashboardRevenueTotals {
+  const ordersById = new Map(input.orders.map((order) => [order.id, order]));
+
+  const deliveredOrderIds = new Set<string>();
+  for (const shipment of input.shipments) {
+    if (shipment.status === "delivered" && !shipment.is_rto) {
+      deliveredOrderIds.add(shipment.order_id);
+    }
+  }
+
+  let deliveredRevenue = 0;
+  for (const orderId of deliveredOrderIds) {
+    const order = ordersById.get(orderId);
+    if (order) deliveredRevenue += orderDeliveredValue(order);
+  }
+
+  const collectedRevenue = input.orders
+    .filter(isCashCollectedOrder)
+    .reduce((total, order) => total + (order.collected_cod_amount ?? 0), 0);
+
+  const { checkoutRevenue, spend } = input;
+  return {
+    checkoutRevenue,
+    deliveredRevenue,
+    collectedRevenue,
+    spend,
+    roasCheckout: ratio(checkoutRevenue, spend),
+    roasDelivered: ratio(deliveredRevenue, spend),
+    roasCollected: ratio(collectedRevenue, spend),
+  };
+}

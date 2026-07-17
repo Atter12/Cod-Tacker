@@ -126,5 +126,6 @@ export function emptySeriesPoint(date: string) {
     rto: 0,
     roasCheckout: 0,
     roasDelivered: 0,
+    roasCollected: 0,
   };
 }
