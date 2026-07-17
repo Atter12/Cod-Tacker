@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { logger } from "@/lib/observability/logger";
 
 export type MetaCapiCredentials = {
@@ -16,6 +17,9 @@ export type MetaCapiPurchasePayload = {
   orderId: string;
   email?: string | null;
   phone?: string | null;
+  /** ISO-3166 alpha-2 (sent unhashed per Meta docs). */
+  countryCode?: string | null;
+  city?: string | null;
 };
 
 export type MetaCapiSendResult = {
@@ -44,6 +48,56 @@ function readEnvTrimmed(name: string): string | null {
   const raw = process.env[name];
   if (typeof raw === "string" && raw.trim()) return raw.trim();
   return null;
+}
+
+/** Meta CAPI: SHA-256 hex of already-normalized value. */
+export function hashMetaCapiValue(normalized: string): string {
+  return createHash("sha256").update(normalized, "utf8").digest("hex");
+}
+
+export function normalizeMetaEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** Digits only; include country code when available (Meta recommendation). */
+export function normalizeMetaPhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+/**
+ * Build Meta `user_data` with hashed PII.
+ * Always includes `external_id` so the request satisfies customer-info matching requirements
+ * (error_subcode 2804050 when empty / fake keys like em_present).
+ */
+export function buildMetaCapiUserData(payload: MetaCapiPurchasePayload): Record<string, string> {
+  const userData: Record<string, string> = {
+    external_id: hashMetaCapiValue(payload.orderId.trim()),
+  };
+
+  const email = payload.email?.trim();
+  if (email) {
+    userData.em = hashMetaCapiValue(normalizeMetaEmail(email));
+  }
+
+  const phone = payload.phone?.trim();
+  if (phone) {
+    const digits = normalizeMetaPhone(phone);
+    if (digits.length >= 7) {
+      userData.ph = hashMetaCapiValue(digits);
+    }
+  }
+
+  const country = payload.countryCode?.trim();
+  if (country && country.length === 2) {
+    userData.country = country.toLowerCase();
+  }
+
+  const city = payload.city?.trim();
+  if (city) {
+    userData.ct = hashMetaCapiValue(city.toLowerCase());
+  }
+
+  return userData;
 }
 
 /** Extract Pixel ID + CAPI token from integration settings/metadata when present. */
@@ -142,11 +196,7 @@ export async function sendMetaCapiPurchase(
   const url = new URL(`https://graph.facebook.com/v21.0/${encodeURIComponent(creds.pixelId)}/events`);
   url.searchParams.set("access_token", creds.accessToken);
 
-  const userData: Record<string, string> = {};
-  // Meta expects hashed PII; without hashing libs we omit email/phone in live sends
-  // and rely on event_id + custom_data.order_id for dedupe.
-  if (payload.email) userData.em_present = "1";
-  if (payload.phone) userData.ph_present = "1";
+  const userData = buildMetaCapiUserData(payload);
 
   const body: Record<string, unknown> = {
     data: [
@@ -154,6 +204,7 @@ export async function sendMetaCapiPurchase(
         event_name: "Purchase",
         event_time: payload.eventTimeUnix,
         event_id: payload.eventId,
+        // COD ops are not browser pixel; "other" is valid when user_data has match keys.
         action_source: "other",
         user_data: userData,
         custom_data: {
@@ -202,6 +253,7 @@ export async function sendMetaCapiPurchase(
       order_id: payload.orderId,
       status: res.status,
       credentials_source: creds.source,
+      user_data_keys: Object.keys(userData),
     });
     return {
       mode: "live",

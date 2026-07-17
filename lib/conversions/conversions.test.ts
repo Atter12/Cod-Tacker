@@ -97,6 +97,29 @@ describe("purchase conversion helpers", () => {
     assert.equal(result.error, META_CAPI_MISSING_CREDENTIALS_ERROR);
   });
 
+  it("builds hashed Meta user_data with external_id always present", async () => {
+    const { buildMetaCapiUserData, hashMetaCapiValue, normalizeMetaEmail } = await import(
+      "@/lib/conversions/meta-capi"
+    );
+    const userData = buildMetaCapiUserData({
+      eventId: "purchase:ord-1",
+      eventTimeUnix: 1,
+      value: 10,
+      currency: "USD",
+      orderId: "ord-1",
+      email: "  User@Example.COM ",
+      phone: "+51 999 888 777",
+      countryCode: "PE",
+      city: "Lima",
+    });
+    assert.equal(userData.external_id, hashMetaCapiValue("ord-1"));
+    assert.equal(userData.em, hashMetaCapiValue(normalizeMetaEmail("User@Example.COM")));
+    assert.ok(userData.ph);
+    assert.equal(userData.country, "pe");
+    assert.ok(userData.ct);
+    assert.equal(userData.em_present, undefined);
+  });
+
   it("keeps purchase event_id stable for Meta dedupe", () => {
     assert.equal(purchaseConversionEventId("abc"), purchaseConversionEventId("abc"));
     assert.notEqual(purchaseConversionEventId("a"), purchaseConversionEventId("b"));

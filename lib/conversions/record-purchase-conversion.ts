@@ -21,6 +21,8 @@ export type RecordPurchaseConversionInput = {
   eventTime?: string;
   email?: string | null;
   phone?: string | null;
+  countryCode?: string | null;
+  city?: string | null;
 };
 
 export type RecordPurchaseConversionResult = {
@@ -89,6 +91,44 @@ async function resolveAdsIntegration(
   return any.data ?? null;
 }
 
+async function resolveOrderCustomerContact(
+  admin: DatabaseClient,
+  storeId: string,
+  orderId: string,
+): Promise<{
+  email: string | null;
+  phone: string | null;
+  countryCode: string | null;
+  city: string | null;
+}> {
+  const order = await admin
+    .from("orders")
+    .select("customer_id, shipping_country_code, shipping_city")
+    .eq("id", orderId)
+    .eq("store_id", storeId)
+    .maybeSingle();
+
+  let email: string | null = null;
+  let phone: string | null = null;
+  if (order.data?.customer_id) {
+    const customer = await admin
+      .from("customers")
+      .select("email, phone")
+      .eq("id", order.data.customer_id)
+      .eq("store_id", storeId)
+      .maybeSingle();
+    email = customer.data?.email?.trim() || null;
+    phone = customer.data?.phone?.trim() || null;
+  }
+
+  return {
+    email,
+    phone,
+    countryCode: order.data?.shipping_country_code?.trim() || null,
+    city: order.data?.shipping_city?.trim() || null,
+  };
+}
+
 /**
  * Ensure a Purchase conversion_events row exists (deduped by event_id) and
  * attempt Meta CAPI (integration settings → Vercel env). Missing secrets → status failed.
@@ -136,14 +176,26 @@ export async function recordPurchaseConversionEvent(
     });
   }
 
+  const contact =
+    input.email || input.phone || input.countryCode || input.city
+      ? {
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          countryCode: input.countryCode ?? null,
+          city: input.city ?? null,
+        }
+      : await resolveOrderCustomerContact(input.admin, input.storeId, input.orderId);
+
   const capi = await sendMetaCapiPurchase(creds, {
     eventId,
     eventTimeUnix,
     value: input.value,
     currency: input.currencyCode.slice(0, 3).toUpperCase(),
     orderId: input.orderId,
-    email: input.email,
-    phone: input.phone,
+    email: contact.email,
+    phone: contact.phone,
+    countryCode: contact.countryCode,
+    city: contact.city,
   });
 
   const status = capi.ok ? "sent" : "failed";
@@ -211,8 +263,11 @@ export async function recordPurchaseConversionEvent(
       value: input.value,
       currency_code: input.currencyCode.slice(0, 3).toUpperCase(),
       user_data: {
-        email_present: Boolean(input.email?.trim()),
-        phone_present: Boolean(input.phone?.trim()),
+        email_present: Boolean(contact.email?.trim()),
+        phone_present: Boolean(contact.phone?.trim()),
+        country_present: Boolean(contact.countryCode?.trim()),
+        city_present: Boolean(contact.city?.trim()),
+        external_id_hashed: true,
       } as Json,
       custom_data: customData,
       response_payload: responsePayload,
