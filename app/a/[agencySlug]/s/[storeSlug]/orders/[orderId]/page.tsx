@@ -498,37 +498,49 @@ export default async function OrderDetailPage({
             ),
           },
           {
-            value: "conversiones",
-            label: "Conversiones",
-            content: <ConversionEventsPanel events={detail.conversionEvents} />,
-          },
-          {
             value: "eventos",
             label: "Eventos",
-            content: detail.timeline.length ? (
-              <ul className="space-y-3">
-                {detail.timeline.map((item) => (
-                  <li key={item.id} className="rounded-md border border-border px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{item.title}</span>
-                      <time className="text-xs text-text-secondary">
-                        {new Date(item.occurredAt).toLocaleString("es-PE")}
-                      </time>
-                    </div>
-                    {item.description ? (
-                      <p className="mt-1 text-text-secondary">{item.description}</p>
-                    ) : null}
-                    <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">
-                      {item.kind}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState
-                title="Sin eventos"
-                description="Todavía no hay actividad registrada en este pedido."
-              />
+            content: (
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Conversión (Meta / TikTok)</h3>
+                  <p className="text-xs text-text-secondary">
+                    Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
+                  </p>
+                  <ConversionEventsPanel events={detail.conversionEvents} />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Actividad del pedido</h3>
+                  {detail.timeline.length ? (
+                    <ul className="space-y-3">
+                      {detail.timeline.map((item) => (
+                        <li
+                          key={item.id}
+                          className="rounded-md border border-border px-3 py-2 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">{item.title}</span>
+                            <time className="text-xs text-text-secondary">
+                              {new Date(item.occurredAt).toLocaleString("es-PE")}
+                            </time>
+                          </div>
+                          {item.description ? (
+                            <p className="mt-1 text-text-secondary">{item.description}</p>
+                          ) : null}
+                          <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">
+                            {item.kind}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState
+                      title="Sin eventos"
+                      description="Todavía no hay actividad registrada en este pedido."
+                    />
+                  )}
+                </div>
+              </div>
             ),
           },
           {
