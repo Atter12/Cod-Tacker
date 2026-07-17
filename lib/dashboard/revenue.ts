@@ -24,10 +24,17 @@ export type DashboardRevenueTotals = {
   /** Door cash: sum of collected_cod_amount on terminal collected orders. */
   collectedRevenue: number;
   spend: number;
-  roasCheckout: number;
-  roasDelivered: number;
-  roasCollected: number;
+  /** null when spend <= 0 (no fake 0.00 ROAS). */
+  roasCheckout: number | null;
+  roasDelivered: number | null;
+  roasCollected: number | null;
 };
+
+/** Revenue ÷ spend; null when there is no ad spend (same rule as attribution KPIs). */
+export function roasRatio(numerator: number, spend: number): number | null {
+  if (!Number.isFinite(numerator) || !Number.isFinite(spend) || spend <= 0) return null;
+  return numerator / spend;
+}
 
 export function isCashCollectedOrder(order: {
   payment_status: string;
@@ -95,8 +102,8 @@ export function computeDashboardRevenueTotals(input: {
     deliveredRevenue,
     collectedRevenue,
     spend,
-    roasCheckout: ratio(checkoutRevenue, spend),
-    roasDelivered: ratio(deliveredRevenue, spend),
-    roasCollected: ratio(collectedRevenue, spend),
+    roasCheckout: roasRatio(checkoutRevenue, spend),
+    roasDelivered: roasRatio(deliveredRevenue, spend),
+    roasCollected: roasRatio(collectedRevenue, spend),
   };
 }

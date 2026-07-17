@@ -12,6 +12,7 @@ import {
   computeDashboardRevenueTotals,
   isCashCollectedOrder,
   orderDeliveredValue,
+  roasRatio,
 } from "@/lib/dashboard/revenue";
 import type {
   DashboardIntegrationHealth,
@@ -46,9 +47,9 @@ type PeriodTotals = {
   confirmationRate: number;
   deliveryRate: number;
   rto: number;
-  roasCheckout: number;
-  roasDelivered: number;
-  roasCollected: number;
+  roasCheckout: number | null;
+  roasDelivered: number | null;
+  roasCollected: number | null;
 };
 
 const sum = <T>(items: readonly T[], value: (item: T) => number): number =>
@@ -172,9 +173,9 @@ function buildTimeSeries(
     return {
       ...point,
       rto: ratio(point.ordersReturned, terminal),
-      roasCheckout: ratio(point.checkoutRevenue, point.adSpend),
-      roasDelivered: ratio(point.deliveredRevenue, point.adSpend),
-      roasCollected: ratio(point.cashCollected, point.adSpend),
+      roasCheckout: roasRatio(point.checkoutRevenue, point.adSpend) ?? 0,
+      roasDelivered: roasRatio(point.deliveredRevenue, point.adSpend) ?? 0,
+      roasCollected: roasRatio(point.cashCollected, point.adSpend) ?? 0,
     };
   });
 }
@@ -410,6 +411,7 @@ export async function getDashboardSummary(
   return {
     currencyCode,
     rangeLabel,
+    adSpend: currentTotals.spend,
     kpis: {
       ordersGenerated: toMetric(currentTotals.generated, previousTotals.generated),
       ordersConfirmed: toMetric(currentTotals.confirmed, previousTotals.confirmed),
@@ -419,9 +421,9 @@ export async function getDashboardSummary(
       confirmationRate: toMetric(currentTotals.confirmationRate, previousTotals.confirmationRate),
       deliveryRate: toMetric(currentTotals.deliveryRate, previousTotals.deliveryRate),
       rto: toMetric(currentTotals.rto, previousTotals.rto),
-      roasCheckout: toMetric(currentTotals.roasCheckout, previousTotals.roasCheckout),
-      roasDelivered: toMetric(currentTotals.roasDelivered, previousTotals.roasDelivered),
-      roasCollected: toMetric(currentTotals.roasCollected, previousTotals.roasCollected),
+      roasCheckout: toMetric(currentTotals.roasCheckout ?? 0, previousTotals.roasCheckout ?? 0),
+      roasDelivered: toMetric(currentTotals.roasDelivered ?? 0, previousTotals.roasDelivered ?? 0),
+      roasCollected: toMetric(currentTotals.roasCollected ?? 0, previousTotals.roasCollected ?? 0),
     },
     funnel: {
       generated: currentTotals.generated,

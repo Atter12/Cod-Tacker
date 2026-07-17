@@ -51,6 +51,11 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatRoas(value: number, adSpend: number): string {
+  if (adSpend <= 0) return "—";
+  return value.toFixed(2);
+}
+
 export default async function StoreDashboard({
   params,
   searchParams,
@@ -172,7 +177,7 @@ export default async function StoreDashboard({
         />
         <SecondaryMetricCard
           label="ROAS checkout"
-          value={summary.kpis.roasCheckout.value.toFixed(2)}
+          value={formatRoas(summary.kpis.roasCheckout.value, summary.adSpend)}
           metric={summary.kpis.roasCheckout}
           sparkline={spark.roasCheckout}
           icon={TrendingUp}
@@ -181,7 +186,7 @@ export default async function StoreDashboard({
         />
         <SecondaryMetricCard
           label="ROAS entregado"
-          value={summary.kpis.roasDelivered.value.toFixed(2)}
+          value={formatRoas(summary.kpis.roasDelivered.value, summary.adSpend)}
           metric={summary.kpis.roasDelivered}
           sparkline={spark.roasDelivered}
           icon={Gauge}
@@ -190,7 +195,7 @@ export default async function StoreDashboard({
         />
         <SecondaryMetricCard
           label="ROAS cobrado"
-          value={summary.kpis.roasCollected.value.toFixed(2)}
+          value={formatRoas(summary.kpis.roasCollected.value, summary.adSpend)}
           metric={summary.kpis.roasCollected}
           sparkline={spark.roasCollected}
           icon={DollarSign}

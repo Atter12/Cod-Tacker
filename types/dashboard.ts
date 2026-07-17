@@ -82,6 +82,8 @@ export type DashboardFunnel = {
 export type DashboardSummary = {
   currencyCode: string;
   rangeLabel: string;
+  /** Current-period ad spend (ROAS denominator). When 0, ROAS KPIs should show "—". */
+  adSpend: number;
   kpis: DashboardKpiBundle;
   funnel: DashboardFunnel;
   timeSeries: DashboardTimeSeriesPoint[];

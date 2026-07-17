@@ -91,6 +91,26 @@ describe("dashboard revenue (S13)", () => {
     assert.notEqual(after.roasCheckout, after.roasCollected);
   });
 
+  it("returns null ROAS when ad spend is missing (no fake 0.00)", () => {
+    const totals = computeDashboardRevenueTotals({
+      orders: [
+        order({
+          id: "a",
+          collected_cod_amount: 372.35,
+          payment_status: "cash_collected",
+          cash_collected_at: "2026-07-17T12:00:00.000Z",
+        }),
+      ],
+      shipments: [{ order_id: "a", status: "delivered", is_rto: false }],
+      checkoutRevenue: 400,
+      spend: 0,
+    });
+    assert.equal(totals.collectedRevenue, 372.35);
+    assert.equal(totals.roasCheckout, null);
+    assert.equal(totals.roasDelivered, null);
+    assert.equal(totals.roasCollected, null);
+  });
+
   it("shows before/after gap when proxy inflated delivered revenue", () => {
     // High expected COD on undelivered orders → proxy pulls them into "delivered revenue"
     const orders = [
