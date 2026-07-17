@@ -156,7 +156,7 @@ export default async function LogisticsPage({
         ) : (
           <EmptyState
             title="Aún no hay envíos"
-            description="Conecta un proveedor logístico para sincronizar guías, o genera envíos mock desde Integraciones (Enviame / custom carrier) para probar el embudo de entrega y devolución."
+            description="Conectá Enviame (u otro carrier) en Integraciones para sincronizar guías. En entornos demo, usá mock local; en producción el carrier live lo activa el equipo cuando esté listo."
             action={{ label: "Ir a Integraciones", href: integrationsHref }}
           />
         )
@@ -184,6 +184,16 @@ export default async function LogisticsPage({
                 cell: (row) => (
                   <StatusBadge status={row.status} label={labelShipmentStatus(row.status)} />
                 ),
+              },
+              {
+                id: "cierre",
+                header: "Cierre",
+                cell: (row) =>
+                  row.is_terminal ? (
+                    <StatusBadge status="delivered" label="Confirmado" />
+                  ) : (
+                    <StatusBadge status="pending" label="En curso" />
+                  ),
               },
               {
                 id: "rto",

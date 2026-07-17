@@ -115,37 +115,63 @@ export default async function IntegrationDetailPage({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-border bg-surface-elevated p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">Estado</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Conexión
+          </p>
           <div className="mt-2">
             <StatusBadge
               status={integration?.status ?? "disconnected"}
               label={labelIntegrationStatus(integration?.status ?? "disconnected")}
             />
           </div>
-        </div>
-        <div className="rounded-lg border border-border bg-surface-elevated p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">Último éxito</p>
-          <p className="mt-2 text-sm">
-            {integration?.last_success_at
-              ? new Date(integration.last_success_at).toLocaleString("es-PE")
-              : "—"}
+          <p className="mt-2 text-xs text-text-secondary">
+            {connected
+              ? "Carrier vinculado a esta tienda."
+              : "Todavía no hay conexión activa con este proveedor."}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-surface-elevated p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">Salud reciente</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Última sincronización
+          </p>
+          <p className="mt-2 text-sm">
+            {integration?.last_success_at
+              ? new Date(integration.last_success_at).toLocaleString("es-PE")
+              : "Aún no hubo un sync exitoso"}
+          </p>
+          {integration?.last_error_at ? (
+            <p className="mt-1 text-xs text-text-secondary">
+              Último problema: {new Date(integration.last_error_at).toLocaleString("es-PE")}
+            </p>
+          ) : null}
+        </div>
+        <div className="rounded-lg border border-border bg-surface-elevated p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Salud
+          </p>
           <p className="mt-2 text-sm">
             {health
-              ? `${health.status} · ${health.latency_ms ?? "—"} ms`
+              ? health.status === "healthy"
+                ? "Bien"
+                : health.status === "degraded"
+                  ? "Con demoras"
+                  : "Con problemas"
               : "Sin pruebas registradas"}
           </p>
           {health?.safe_message ? (
             <p className="mt-1 text-xs text-text-secondary">{health.safe_message}</p>
-          ) : null}
+          ) : (
+            <p className="mt-1 text-xs text-text-secondary">
+              {connected
+                ? "Cuando haya sync, aquí verás si el carrier responde bien."
+                : "Conectá el proveedor para empezar a sincronizar guías."}
+            </p>
+          )}
         </div>
       </div>
 
       {integration?.last_error_message ? (
-        <Alert variant="warning" title="Último error seguro">
+        <Alert variant="warning" title="Último problema">
           {integration.last_error_message}
         </Alert>
       ) : null}

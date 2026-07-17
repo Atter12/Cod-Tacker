@@ -178,7 +178,7 @@ export default async function StoreDashboard({
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
           confidence="provisional"
-          hint="Estimado con revenue de checkout / ads. Aún no es cobro."
+          hint="Solo ventas en checkout ÷ ads. No es plata cobrada en puerta."
         />
         <SecondaryMetricCard
           label="ROAS cobrado"
@@ -189,7 +189,8 @@ export default async function StoreDashboard({
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
           confidence="confirmed"
-          hint="Efectivo cobrado registrado ÷ ads. No confundir con entrega estimada."
+          confidenceLabel="Cobrado"
+          hint="Efectivo cobrado en puerta ÷ ads. No uses el ROAS de checkout como si fuera esto."
         />
       </div>
 

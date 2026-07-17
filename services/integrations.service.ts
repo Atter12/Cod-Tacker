@@ -338,7 +338,9 @@ export async function connectMock(
     throw new ValidationError("Proveedor de integración no soportado.");
   }
   if (!isDemoIntegrationMode()) {
-    throw new IntegrationError("Las integraciones mock no están habilitadas en este entorno.");
+    throw new IntegrationError(
+      "En este entorno no se puede conectar el modo demo. Usá un entorno local con mocks activos, o esperá la conexión live del carrier.",
+    );
   }
 
   const provider = resolveStoreProvider(input.provider);
