@@ -15,6 +15,7 @@ import {
   evaluatePurchaseRelease,
   type ConversionReleaseStatus,
 } from "@/lib/conversions/release-policy";
+import { computeRetryAt } from "@/lib/jobs/backoff";
 import { logger } from "@/lib/observability/logger";
 import type { DatabaseClient } from "@/services/_shared";
 import type { Database, Json } from "@/types/database.generated";
@@ -210,7 +211,7 @@ export async function sendQueuedPurchaseConversion(input: {
   const row = await input.admin
     .from("conversion_events")
     .select(
-      "id, event_id, order_id, value, currency_code, event_time, status, attempts, sent_at, release_status, custom_data",
+      "id, event_id, order_id, value, currency_code, event_time, status, attempts, max_attempts, sent_at, release_status, custom_data",
     )
     .eq("id", input.conversionEventRowId)
     .eq("store_id", input.storeId)
@@ -352,11 +353,25 @@ export async function sendQueuedPurchaseConversion(input: {
     tiktok: tiktok.body ?? { mode: tiktok.mode, ok: tiktok.ok, error: tiktok.error ?? null },
   } as Json;
 
+  const attemptsAfter = (event.attempts ?? 0) + 1;
+  // Not sent → schedule the sweep retry (1 min base, capped at 1 h) until
+  // attempts are exhausted; then next_retry_at clears and only manual retry remains.
+  const nextRetryAt =
+    aggregated.status === "sent" || attemptsAfter >= (event.max_attempts ?? 5)
+      ? null
+      : computeRetryAt(
+          attemptsAfter,
+          60_000,
+          60 * 60_000,
+          `conversion:${event.id}`,
+        ).toISOString();
+
   await input.admin
     .from("conversion_events")
     .update({
       status: aggregated.status,
-      attempts: (event.attempts ?? 0) + 1,
+      attempts: attemptsAfter,
+      next_retry_at: nextRetryAt,
       sent_at: aggregated.status === "sent" ? new Date().toISOString() : null,
       last_error_message: aggregated.lastError,
       response_payload: responsePayload,
