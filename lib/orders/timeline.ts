@@ -1,4 +1,12 @@
-import { labelConfirmationStatus, labelOrderStatus, labelPaymentStatus } from "@/lib/orders/labels";
+import {
+  labelAuditAction,
+  labelAttributionModel,
+  labelConfirmationStatus,
+  labelOrderStatus,
+  labelPaymentStatus,
+  labelPlatform,
+  labelShipmentStatus,
+} from "@/lib/orders/labels";
 import type { OrderDetailBundle, OrderTimelineItem } from "@/types/orders";
 import type { Json } from "@/types/database.generated";
 
@@ -52,6 +60,18 @@ export function parseConversionChannels(
   return channels;
 }
 
+function channelOutcomeLabelEs(outcome: ConversionChannelOutcome): string {
+  switch (outcome) {
+    case "live":
+    case "sent":
+      return "enviado";
+    case "failed":
+      return "falló";
+    case "dry_run":
+      return "prueba";
+  }
+}
+
 /** Prefer dual Meta+TikTok labels from custom_data (S12); fall back to platform column. */
 export function formatConversionTimelineDescription(conversion: {
   platform: string;
@@ -61,12 +81,44 @@ export function formatConversionTimelineDescription(conversion: {
   const channels = parseConversionChannels(conversion.custom_data);
 
   if (channels.length === 0) {
-    return conversion.status ? `${conversion.platform} · ${conversion.status}` : conversion.platform;
+    const platform = labelPlatform(conversion.platform);
+    if (!conversion.status) return platform;
+    const statusLabel =
+      conversion.status === "sent"
+        ? "enviado"
+        : conversion.status === "failed"
+          ? "falló"
+          : conversion.status === "queued"
+            ? "en cola"
+            : conversion.status;
+    return `${platform} · ${statusLabel}`;
   }
 
-  return channels.map((channel) => `${channel.name} ${channel.outcome}`).join(" · ");
+  return channels
+    .map((channel) => `${labelPlatform(channel.name)} · ${channelOutcomeLabelEs(channel.outcome)}`)
+    .join(" · ");
 }
 
+function labelConversionEventName(eventName: string): string {
+  return eventName === "Purchase" ? "Compra" : eventName;
+}
+
+function labelWhatsappDirection(direction: string): string {
+  if (direction === "inbound") return "entrante";
+  if (direction === "outbound") return "saliente";
+  return direction;
+}
+
+/** Audit actions already covered by a clearer business timeline item. */
+const REDUNDANT_AUDIT_ACTIONS = new Set([
+  "order_payment_status_changed",
+  "order_note_added",
+]);
+
+/**
+ * Client-facing order history: business events in Spanish.
+ * Omits raw webhook noise (still available under Auditoría / ops tooling).
+ */
 export function buildOrderTimeline(
   bundle: Omit<OrderDetailBundle, "timeline">,
 ): OrderTimelineItem[] {
@@ -126,16 +178,19 @@ export function buildOrderTimeline(
       id: `shipment-${shipment.id}`,
       kind: "shipment",
       title: `Envío ${shipment.tracking_number ?? shipment.id.slice(0, 8)}`,
-      description: shipment.status,
+      description: labelShipmentStatus(shipment.status),
       occurredAt: shipment.created_at,
     });
   }
 
   for (const event of bundle.shipmentEvents) {
+    const statusLabel = labelShipmentStatus(
+      event.normalized_status || event.external_status_label || event.external_status_code,
+    );
     items.push({
       id: `ship-event-${event.id}`,
       kind: "shipment",
-      title: event.external_status_label ?? event.normalized_status,
+      title: `Actualización de envío: ${statusLabel}`,
       description: event.location_text ?? undefined,
       occurredAt: event.occurred_at,
     });
@@ -146,7 +201,7 @@ export function buildOrderTimeline(
       id: `attr-${attr.id}`,
       kind: "attribution",
       title: attr.is_primary ? "Atribución principal" : "Atribución",
-      description: `${attr.platform} · ${attr.model}`,
+      description: `${labelPlatform(attr.platform)} · ${labelAttributionModel(attr.model)}`,
       occurredAt: attr.calculated_at,
     });
   }
@@ -155,7 +210,7 @@ export function buildOrderTimeline(
     items.push({
       id: `conv-${conversion.id}`,
       kind: "conversion",
-      title: `Conversión ${conversion.event_name}`,
+      title: `Aviso de conversión · ${labelConversionEventName(conversion.event_name)}`,
       description: formatConversionTimelineDescription(conversion),
       occurredAt: conversion.event_time,
     });
@@ -165,7 +220,7 @@ export function buildOrderTimeline(
     items.push({
       id: `wa-${message.id}`,
       kind: "whatsapp",
-      title: `WhatsApp (${message.direction})`,
+      title: `WhatsApp (${labelWhatsappDirection(message.direction)})`,
       description: message.body?.slice(0, 120) ?? message.message_type,
       occurredAt: message.sent_at ?? message.received_at ?? message.created_at,
     });
@@ -192,23 +247,17 @@ export function buildOrderTimeline(
   }
 
   for (const log of bundle.auditLogs) {
+    // Prefer the clearer business items (Cobro registrado, Nota interna, …).
+    if (REDUNDANT_AUDIT_ACTIONS.has(log.action)) continue;
     items.push({
       id: `audit-${log.id}`,
       kind: "audit",
-      title: `Auditoría: ${log.action}`,
+      title: labelAuditAction(log.action),
       occurredAt: log.created_at,
     });
   }
 
-  for (const raw of bundle.rawEvents) {
-    items.push({
-      id: `raw-${raw.id}`,
-      kind: "raw_event",
-      title: `Evento crudo ${raw.provider}/${raw.event_type}`,
-      description: raw.status,
-      occurredAt: raw.occurred_at ?? raw.received_at,
-    });
-  }
+  // Raw webhook events (shopify/envia … processed) are ops noise — omitted from client Historial.
 
   return items.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
 }

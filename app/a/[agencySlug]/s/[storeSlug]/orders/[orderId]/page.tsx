@@ -18,6 +18,7 @@ import {
 import { routes } from "@/config/routes";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDateTime } from "@/lib/formatting/date";
+import { labelTimelineKind } from "@/lib/orders/labels";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -410,7 +411,9 @@ export default async function OrderDetailPage({
                           </time>
                         </div>
                         {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
-                        <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">{item.kind}</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">
+                          {labelTimelineKind(item.kind)}
+                        </p>
                       </li>
                     ))}
                   </ul>
