@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import {
   backfill as backfillIntegration,
+  connectEnviaLive,
   connectMock,
   disconnect as disconnectIntegration,
   reconnect as reconnectIntegration,
@@ -46,6 +47,41 @@ function revalidateIntegrationPaths(agencySlug: string, storeSlug: string, provi
   revalidatePath(routes.store.integrationDetail(agencySlug, storeSlug, provider));
   revalidatePath(routes.store.operations(agencySlug, storeSlug));
   revalidatePath(routes.store.dashboard(agencySlug, storeSlug));
+}
+
+export async function connectEnviaLiveAction(
+  agencySlug: string,
+  storeSlug: string,
+  input: { apiToken: string; externalAccountId?: string },
+): Promise<IntegrationActionResult> {
+  try {
+    const { user, membership, client, storeId } = await loadManagedStore(agencySlug, storeSlug);
+    const row = await connectEnviaLive(client, {
+      agencyId: membership.agencyId,
+      storeId,
+      userId: user.id,
+      apiToken: input.apiToken,
+      externalAccountId: input.externalAccountId,
+    });
+    await writeAuditLog({
+      action: "integration_connected",
+      entityType: "integration",
+      entityId: row.id,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId,
+      newData: {
+        provider: "envia_com",
+        status: row.status,
+        demo: false,
+        external_account_id: row.external_account_id,
+      },
+    });
+    revalidateIntegrationPaths(agencySlug, storeSlug, "envia_com");
+    return actionOk({ id: row.id });
+  } catch (error) {
+    return actionFail(error);
+  }
 }
 
 export async function connectIntegrationAction(

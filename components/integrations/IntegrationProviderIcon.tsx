@@ -18,6 +18,7 @@ const PROVIDER_ICONS: Record<StoreIntegrationProvider, LucideIcon> = {
   tiktok: ChartNoAxesCombined,
   whatsapp: MessageCircle,
   enviame: Truck,
+  envia_com: Truck,
   custom_carrier: Route,
   custom_payment: WalletCards,
 };

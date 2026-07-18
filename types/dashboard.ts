@@ -31,7 +31,7 @@ export type DashboardTimeSeriesPoint = {
   roasCheckout: number;
   /** Estimated from delivery mix — not cash at door. Prefer roasCollected for confirmed ROAS. */
   roasDelivered: number;
-  /** Cash collected ÷ ad spend (confirmed when cobro is registered). */
+  /** Door cash / ad spend (terminal collected COD). */
   roasCollected: number;
 };
 
@@ -69,6 +69,7 @@ export type DashboardKpiBundle = {
   rto: MetricComparison;
   roasCheckout: MetricComparison;
   roasDelivered: MetricComparison;
+  /** ROAS on real door cash (collected_cod_amount). */
   roasCollected: MetricComparison;
 };
 
@@ -82,6 +83,8 @@ export type DashboardFunnel = {
 export type DashboardSummary = {
   currencyCode: string;
   rangeLabel: string;
+  /** Current-period ad spend (ROAS denominator). When 0, ROAS KPIs should show "—". */
+  adSpend: number;
   kpis: DashboardKpiBundle;
   funnel: DashboardFunnel;
   timeSeries: DashboardTimeSeriesPoint[];

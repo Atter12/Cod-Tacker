@@ -8,6 +8,12 @@ import {
   ratio,
   toMetric,
 } from "@/lib/dashboard/metrics";
+import {
+  computeDashboardRevenueTotals,
+  isCashCollectedOrder,
+  orderDeliveredValue,
+  roasRatio,
+} from "@/lib/dashboard/revenue";
 import type {
   DashboardIntegrationHealth,
   DashboardRecentOrder,
@@ -36,21 +42,18 @@ type PeriodTotals = {
   cashCollected: number;
   cashExpected: number;
   checkoutRevenue: number;
+  deliveredRevenue: number;
   spend: number;
   confirmationRate: number;
   deliveryRate: number;
   rto: number;
-  roasCheckout: number;
-  roasDelivered: number;
-  roasCollected: number;
+  roasCheckout: number | null;
+  roasDelivered: number | null;
+  roasCollected: number | null;
 };
 
 const sum = <T>(items: readonly T[], value: (item: T) => number): number =>
   items.reduce((total, item) => total + value(item), 0);
-
-function isCashCollected(order: OrderRow): boolean {
-  return order.payment_status === "cash_collected" || Boolean(order.cash_collected_at);
-}
 
 function computePeriodTotals(
   orders: OrderRow[],
@@ -64,33 +67,36 @@ function computePeriodTotals(
   const returned = shipments.filter(
     (shipment) => shipment.status === "returned" || shipment.is_rto,
   ).length;
-  const cashCollected = sum(
-    orders.filter(isCashCollected),
-    (order) => order.collected_cod_amount ?? 0,
-  );
   const cashExpected = sum(orders, (order) => order.expected_cod_amount ?? 0);
   const checkoutRevenue = sum(attributions, (row) => row.attributed_value);
   const spend = sum(spendRows, (row) => row.spend);
   const confirmationRate = ratio(confirmed, generated);
   const deliveryRate = ratio(delivered, confirmed);
   const rto = ratio(returned, delivered + returned);
-  const deliveredRevenue = cashExpected * ratio(delivered, generated);
+
+  const revenue = computeDashboardRevenueTotals({
+    orders,
+    shipments,
+    checkoutRevenue,
+    spend,
+  });
 
   return {
     generated,
     confirmed,
     delivered,
     returned,
-    cashCollected,
+    cashCollected: revenue.collectedRevenue,
     cashExpected,
-    checkoutRevenue,
+    checkoutRevenue: revenue.checkoutRevenue,
+    deliveredRevenue: revenue.deliveredRevenue,
     spend,
     confirmationRate,
     deliveryRate,
     rto,
-    roasCheckout: ratio(checkoutRevenue, spend),
-    roasDelivered: ratio(deliveredRevenue, spend),
-    roasCollected: ratio(cashCollected, spend),
+    roasCheckout: revenue.roasCheckout,
+    roasDelivered: revenue.roasDelivered,
+    roasCollected: revenue.roasCollected,
   };
 }
 
@@ -104,6 +110,9 @@ function buildTimeSeries(
   timeZone: string,
 ): DashboardTimeSeriesPoint[] {
   const map = new Map(eachDayKey(from, to, timeZone).map((date) => [date, emptySeriesPoint(date)]));
+  const ordersById = new Map(orders.map((order) => [order.id, order]));
+  /** Avoid double-counting COD value when an order has multiple delivered shipment rows. */
+  const deliveredValueCounted = new Set<string>();
 
   const keyFor = (value: string) => {
     const trimmed = value.trim();
@@ -121,7 +130,7 @@ function buildTimeSeries(
   }
 
   for (const order of orders) {
-    if (!isCashCollected(order)) continue;
+    if (!isCashCollectedOrder(order)) continue;
     const cashKey = dayKey(order.cash_collected_at ?? order.created_at_source, timeZone);
     const cashPoint = map.get(cashKey);
     if (cashPoint) cashPoint.cashCollected += order.collected_cod_amount ?? 0;
@@ -131,7 +140,14 @@ function buildTimeSeries(
     if (shipment.status === "delivered") {
       const key = dayKey(shipment.delivered_at ?? shipment.created_at, timeZone);
       const point = map.get(key);
-      if (point) point.ordersDelivered += 1;
+      if (point) {
+        point.ordersDelivered += 1;
+        if (!shipment.is_rto && !deliveredValueCounted.has(shipment.order_id)) {
+          deliveredValueCounted.add(shipment.order_id);
+          const order = ordersById.get(shipment.order_id);
+          if (order) point.deliveredRevenue += orderDeliveredValue(order);
+        }
+      }
     }
     if (shipment.status === "returned" || shipment.is_rto) {
       const key = dayKey(shipment.returned_at ?? shipment.created_at, timeZone);
@@ -154,15 +170,12 @@ function buildTimeSeries(
 
   return [...map.values()].map((point) => {
     const terminal = point.ordersDelivered + point.ordersReturned;
-    const deliveredRevenue =
-      point.checkoutRevenue * ratio(point.ordersDelivered, point.ordersGenerated || 1);
     return {
       ...point,
-      deliveredRevenue,
       rto: ratio(point.ordersReturned, terminal),
-      roasCheckout: ratio(point.checkoutRevenue, point.adSpend),
-      roasDelivered: ratio(deliveredRevenue, point.adSpend),
-      roasCollected: ratio(point.cashCollected, point.adSpend),
+      roasCheckout: roasRatio(point.checkoutRevenue, point.adSpend) ?? 0,
+      roasDelivered: roasRatio(point.deliveredRevenue, point.adSpend) ?? 0,
+      roasCollected: roasRatio(point.cashCollected, point.adSpend) ?? 0,
     };
   });
 }
@@ -298,13 +311,13 @@ export async function getStoreActiveAlertCount(
  * Store dashboard summary with current/previous period KPIs, daily series,
  * integration health and recent orders. RLS via request-scoped client.
  *
- * Formulas (unchanged definitions):
+ * Formulas:
  * - confirmationRate = confirmed / generated
  * - deliveryRate = delivered / confirmed
  * - rto = returned / (delivered + returned)
- * - roasCheckout = attributed checkout revenue / ad spend (provisional)
- * - roasDelivered = (expected COD × delivered/generated) / ad spend (estimated; not cash)
- * - roasCollected = cash collected / ad spend (confirmed cobro)
+ * - roasCheckout = attributed checkout revenue / ad spend
+ * - roasDelivered = sum(expected COD of delivered orders) / ad spend
+ * - roasCollected = sum(collected_cod_amount of cash-collected orders) / ad spend
  * - Confirmed includes confirmed_at, confirmation_status=confirmed, or post-confirmation order_status
  */
 export async function getDashboardSummary(
@@ -398,6 +411,7 @@ export async function getDashboardSummary(
   return {
     currencyCode,
     rangeLabel,
+    adSpend: currentTotals.spend,
     kpis: {
       ordersGenerated: toMetric(currentTotals.generated, previousTotals.generated),
       ordersConfirmed: toMetric(currentTotals.confirmed, previousTotals.confirmed),
@@ -407,9 +421,9 @@ export async function getDashboardSummary(
       confirmationRate: toMetric(currentTotals.confirmationRate, previousTotals.confirmationRate),
       deliveryRate: toMetric(currentTotals.deliveryRate, previousTotals.deliveryRate),
       rto: toMetric(currentTotals.rto, previousTotals.rto),
-      roasCheckout: toMetric(currentTotals.roasCheckout, previousTotals.roasCheckout),
-      roasDelivered: toMetric(currentTotals.roasDelivered, previousTotals.roasDelivered),
-      roasCollected: toMetric(currentTotals.roasCollected, previousTotals.roasCollected),
+      roasCheckout: toMetric(currentTotals.roasCheckout ?? 0, previousTotals.roasCheckout ?? 0),
+      roasDelivered: toMetric(currentTotals.roasDelivered ?? 0, previousTotals.roasDelivered ?? 0),
+      roasCollected: toMetric(currentTotals.roasCollected ?? 0, previousTotals.roasCollected ?? 0),
     },
     funnel: {
       generated: currentTotals.generated,

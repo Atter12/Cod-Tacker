@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { isNewlyDeliveredTerminal } from "@/lib/conversions/delivered-purchase-policy";
+import { ENVIAME_DEFAULT_MAPPINGS } from "@/lib/integrations/enviame/map-status";
+import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import { applyShipmentEvent } from "@/lib/logistics/apply-shipment-event";
 import type { CarrierMappingRule } from "@/lib/logistics/normalize";
@@ -30,8 +33,12 @@ export const carrierShipmentUpdatedPayloadSchema = z.object({
   status: z.enum(SHIPMENT_STATUSES).optional(),
   order_external_id: z.string().min(1).max(200).optional(),
   external_event_id: z.string().min(1).max(200).optional(),
-  occurred_at: z.string().min(1).max(40).optional(),
+  occurred_at: z.string().min(1).max(80).optional(),
   demo_seed: z.string().min(1).max(200).optional(),
+  /** DB carriers.code — enviame / envia_com for live, mock_carrier for demos. */
+  carrier_code: z.enum(["enviame", "envia_com", "mock_carrier", "custom_carrier"]).optional(),
+  mode: z.enum(["live", "mock"]).optional(),
+  source: z.string().min(1).max(80).optional(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {
@@ -41,24 +48,41 @@ function asObject(payload: Json): Record<string, unknown> {
   throw new PermanentJobError("INVALID_PAYLOAD", "El payload de carrier no es un objeto válido.");
 }
 
-async function ensureCarrier(admin: JobsAdminClient): Promise<string> {
-  const existing = await admin.from("carriers").select("id").eq("code", "mock_carrier").maybeSingle();
+async function ensureCarrier(
+  admin: JobsAdminClient,
+  code: "enviame" | "envia_com" | "mock_carrier" | "custom_carrier",
+): Promise<string> {
+  const existing = await admin.from("carriers").select("id").eq("code", code).maybeSingle();
   if (existing.data) return existing.data.id;
+
+  const isEnviame = code === "enviame";
+  const isEnvia = code === "envia_com";
   const created = await admin
     .from("carriers")
     .insert({
-      code: "mock_carrier",
-      name: "Mock Carrier",
-      country_codes: ["PE"],
+      code,
+      name: isEnviame
+        ? "Enviame"
+        : isEnvia
+          ? "Envia.com"
+          : code === "custom_carrier"
+            ? "Custom Carrier"
+            : "Mock Carrier",
+      country_codes: isEnviame || isEnvia ? ["CL", "PE", "MX"] : ["PE"],
       is_active: true,
-      is_aggregator: false,
+      is_aggregator: isEnviame || isEnvia,
       supports_polling: true,
-      metadata: { demo: true } as Json,
+      supports_webhooks: isEnviame || isEnvia,
+      metadata: (isEnviame
+        ? { live: true, docs: "https://docs.enviame.io/docs/webhooks/" }
+        : isEnvia
+          ? { live: true, docs: "https://docs.envia.com/docs/webhooks" }
+          : { demo: true }) as Json,
     })
     .select("id")
     .single();
   if (created.error || !created.data) {
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudo asegurar el carrier mock.");
+    throw new PermanentJobError("DATABASE_ERROR", `No se pudo asegurar el carrier ${code}.`);
   }
   return created.data.id;
 }
@@ -136,7 +160,7 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   if (!parsed.success) {
     throw new PermanentJobError(
       "INVALID_PAYLOAD",
-      "Payload de carrier.shipment.updated.mock inválido.",
+      "Payload de carrier.shipment.updated inválido.",
     );
   }
   if (!job.store_id) {
@@ -144,22 +168,32 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   }
 
   const data = parsed.data;
-  const carrierId = await ensureCarrier(admin);
+  const isLive =
+    data.mode === "live" ||
+    data.carrier_code === "enviame" ||
+    data.carrier_code === "envia_com" ||
+    !job.job_type.endsWith(".mock");
+  const carrierCode =
+    data.carrier_code ?? (isLive ? "enviame" : "mock_carrier");
+  const carrierId = await ensureCarrier(admin, carrierCode);
   const mappings = await loadMappings(admin, carrierId);
 
-  // If no DB mappings yet, synthesize identity mappings from known enum statuses
-  // so mock payloads with `status` continue to work.
+  // Prefer DB mappings; Enviame/Envia fall back to documented status codes; mock uses identity enums.
   const effectiveMappings: CarrierMappingRule[] =
     mappings.length > 0
       ? mappings
-      : SHIPMENT_STATUSES.map((status) => ({
-          external_status_code: status,
-          normalized_status: status,
-          is_rto: status === "returned" || status === "return_in_transit",
-          is_terminal: ["delivered", "returned", "lost", "cancelled"].includes(status),
-          priority: 0,
-          is_active: true,
-        }));
+      : carrierCode === "enviame"
+        ? [...ENVIAME_DEFAULT_MAPPINGS]
+        : carrierCode === "envia_com"
+          ? [...ENVIA_DEFAULT_MAPPINGS]
+          : SHIPMENT_STATUSES.map((status) => ({
+              external_status_code: status,
+              normalized_status: status,
+              is_rto: status === "returned" || status === "return_in_transit",
+              is_terminal: ["delivered", "returned", "lost", "cancelled"].includes(status),
+              priority: 0,
+              is_active: true,
+            }));
 
   const externalCode = data.external_status_code ?? data.status ?? "unknown";
 
@@ -183,7 +217,24 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
       .maybeSingle();
     orderId = anyOrder.data?.id ?? null;
   }
-  if (!orderId) {
+
+  let shipment = (
+    await admin
+      .from("shipments")
+      .select()
+      .eq("store_id", job.store_id)
+      .eq("tracking_number", data.tracking_number)
+      .maybeSingle()
+  ).data;
+
+  if (!shipment && !orderId && isLive) {
+    throw new PermanentJobError(
+      "ORDER_NOT_FOUND",
+      "Carrier live: no hay pedido/shipment para este tracking. Crea el envío en CODTracked o usa order_external_id / imported_id.",
+    );
+  }
+
+  if (!orderId && !isLive) {
     const createdOrder = await admin
       .from("orders")
       .insert({
@@ -213,14 +264,9 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     orderId = createdOrder.data.id;
   }
 
-  let shipment = (
-    await admin
-      .from("shipments")
-      .select()
-      .eq("store_id", job.store_id)
-      .eq("tracking_number", data.tracking_number)
-      .maybeSingle()
-  ).data;
+  if (!orderId) {
+    throw new PermanentJobError("ORDER_NOT_FOUND", "No se encontró pedido para el envío.");
+  }
 
   if (!shipment) {
     const insert = await admin
@@ -236,15 +282,16 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
         is_rto: false,
         is_terminal: false,
         metadata: {
-          demo: true,
+          demo: !isLive,
           demo_seed: data.demo_seed ?? null,
           job_id: job.id,
+          source: data.source ?? (isLive ? "enviame" : "carrier.mock"),
         } as Json,
       })
       .select()
       .single();
     if (insert.error || !insert.data) {
-      throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el envío mock.");
+      throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el envío.");
     }
     shipment = insert.data;
   }
@@ -262,9 +309,11 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     occurredAt,
     rawEventId: job.raw_event_id,
     payload: {
-      demo: true,
+      demo: !isLive,
       demo_seed: data.demo_seed ?? null,
       job_id: job.id,
+      source: data.source ?? null,
+      mode: isLive ? "live" : "mock",
     } as Json,
     mappings: effectiveMappings,
   });
@@ -289,13 +338,41 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     };
   }
 
+  let capiDetail = "";
+  if (
+    isNewlyDeliveredTerminal({
+      skippedDuplicate: false,
+      skipStatusUpdate: applied.plan.skipStatusUpdate,
+      normalizedStatus: applied.plan.normalize.normalizedStatus,
+    })
+  ) {
+    // Dynamic import keeps this handler loadable in unit tests (server-only CAPI module).
+    const { maybeRecordPurchaseOnDelivered } = await import(
+      "@/lib/conversions/delivered-purchase"
+    );
+    const purchase = await maybeRecordPurchaseOnDelivered({
+      admin,
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      orderId,
+      deliveredAt: occurredAt,
+      shipmentId: applied.shipmentId,
+      jobId: job.id,
+    });
+    if (purchase.attempted && purchase.conversion) {
+      capiDetail = `:capi:${purchase.conversion.deliveryStatus}:${purchase.conversion.eventId}`;
+    } else if (purchase.skippedReason) {
+      capiDetail = `:capi_skip:${purchase.skippedReason}`;
+    }
+  }
+
   return {
     ok: true,
     action: "updated",
     entityType: "shipment",
     entityId: applied.shipmentId,
     detail: applied.plan.conflict
-      ? `event:${applied.eventId}:terminal_conflict`
-      : `event:${applied.eventId}`,
+      ? `event:${applied.eventId}:terminal_conflict${capiDetail}`
+      : `event:${applied.eventId}${capiDetail}`,
   };
 };

@@ -1,10 +1,22 @@
 import type { Enums } from "@/types/database.generated";
 
+/**
+ * Role of a provider in the closed COD sales loop:
+ * Ads → Commerce → Messaging → Carrier → Settlement
+ * (conversions / CAPI sit on top of terminal cash events).
+ */
 export type IntegrationProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
 export type StoreIntegrationProvider = Extract<
   Enums<"integration_provider">,
-  "shopify" | "meta" | "tiktok" | "whatsapp" | "enviame" | "custom_carrier" | "custom_payment"
+  | "shopify"
+  | "meta"
+  | "tiktok"
+  | "whatsapp"
+  | "enviame"
+  | "envia_com"
+  | "custom_carrier"
+  | "custom_payment"
 >;
 
 export type IntegrationCatalogEntry = {
@@ -14,48 +26,82 @@ export type IntegrationCatalogEntry = {
   kind: IntegrationProviderKind;
 };
 
-/** Providers offered in the store integrations center (mock catalog). */
+/** Order of kinds along the closed COD sales flow (for UI grouping / docs). */
+export const INTEGRATION_KIND_FLOW_ORDER: readonly IntegrationProviderKind[] = [
+  "ads",
+  "commerce",
+  "messaging",
+  "carrier",
+  "settlement",
+] as const;
+
+export function labelProviderKind(kind: IntegrationProviderKind): string {
+  switch (kind) {
+    case "ads":
+      return "Publicidad";
+    case "commerce":
+      return "E-commerce";
+    case "messaging":
+      return "Mensajería";
+    case "carrier":
+      return "Courier / logística";
+    case "settlement":
+      return "Cobro / conciliación";
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Providers offered in the store integrations center. */
 export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
   {
     provider: "shopify",
     name: "Shopify",
-    description: "Pedidos, catálogo y clientes del comercio.",
+    description: "Fuente de pedidos, clientes, ítems y señal COD vs prepaid.",
     kind: "commerce",
   },
   {
     provider: "meta",
     name: "Meta Ads",
-    description: "Campañas, conjuntos y gasto publicitario.",
+    description: "Gasto, jerarquía de campañas y destino de conversiones CAPI.",
     kind: "ads",
   },
   {
     provider: "tiktok",
     name: "TikTok Ads",
-    description: "Campañas y métricas de publicidad.",
+    description: "Gasto y campañas; Events API Purchase terminal (CompletePayment).",
     kind: "ads",
   },
   {
     provider: "whatsapp",
     name: "WhatsApp Business",
-    description: "Conversaciones y confirmaciones COD.",
+    description: "Confirmación de pedidos COD y conversaciones operativas.",
     kind: "messaging",
   },
   {
     provider: "enviame",
     name: "Enviame",
-    description: "Rastreo y estados de envío.",
+    description: "Estados de envío normalizados: en tránsito, entregado, RTO.",
+    kind: "carrier",
+  },
+  {
+    provider: "envia_com",
+    name: "Envia.com",
+    description: "Multi-carrier: tracking y webhooks onShipmentStatusUpdate.",
     kind: "carrier",
   },
   {
     provider: "custom_carrier",
     name: "Carrier personalizado",
-    description: "Conector genérico de logística.",
+    description: "Conector genérico de logística cuando no hay Enviame/Envia.",
     kind: "carrier",
   },
   {
     provider: "custom_payment",
     name: "Pagos y conciliación",
-    description: "Lotes de cobro y conciliación COD.",
+    description: "Lotes de cobro en puerta y cierre de cash real.",
     kind: "settlement",
   },
 ] as const;

@@ -38,6 +38,7 @@ npm run test:rls   # prueba aislamiento de tenants con usuarios reales
 
 ## Documentación
 
+- [Visión de producto y módulos](docs/PRODUCT_OVERVIEW.md)
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Autenticación y tenancy](docs/AUTH_AND_TENANCY.md)
 - [Variables de entorno](docs/ENVIRONMENT_VARIABLES.md)

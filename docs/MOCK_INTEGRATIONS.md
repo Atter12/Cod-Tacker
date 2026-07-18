@@ -15,13 +15,15 @@ Mocks: `lib/integrations/mock/*`
 
 ## Providers (mock)
 
-| Provider | Contract | Mock behavior |
+Roles in the closed COD sales loop (`commerce` | `ads` | `carrier` | `messaging` | `settlement`): see [PRODUCT_OVERVIEW.md](./PRODUCT_OVERVIEW.md).
+
+| Provider | Contract / kind | Mock behavior |
 | --- | --- | --- |
 | Shopify | commerce | Order create/update → raw_events + jobs |
 | Meta / TikTok | ads | Hierarchy seed + spend sync |
 | WhatsApp | messaging | Send/status/inbound; templates demo-approved |
-| Carriers | carrier-provider | Shipment events + mapping |
-| Settlement | settlement-provider | CSV / batch received |
+| Carriers | carrier | Shipment events + mapping |
+| Settlement | settlement | CSV / batch received |
 
 ## UI signaling
 

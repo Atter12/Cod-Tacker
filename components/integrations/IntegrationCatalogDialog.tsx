@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { Plus } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { routes } from "@/config/routes";
+import { labelProviderKind } from "@/lib/integrations/catalog";
 import { cn } from "@/lib/utils/cn";
 import type { IntegrationOverviewItem } from "@/types/integrations";
 import { IntegrationProviderIcon } from "./IntegrationProviderIcon";
@@ -73,7 +74,7 @@ export function IntegrationCatalogDialog({
                       {item.description}
                     </p>
                     <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                      Disponible
+                      {labelProviderKind(item.kind)} · Disponible
                     </p>
                   </div>
                   <Link

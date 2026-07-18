@@ -21,7 +21,7 @@ export function IntegrationsPageHeader({
   return (
     <PageHeader
       title="Integraciones"
-      description="Conexiones mock de esta tienda y catálogo disponible."
+      description="Conectores del flujo COD: e-commerce, publicidad, mensajería, courier y conciliación."
       actions={
         <>
           {demo ? <DemoModeBadge /> : null}
