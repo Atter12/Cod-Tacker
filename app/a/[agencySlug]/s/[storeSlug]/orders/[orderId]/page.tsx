@@ -5,7 +5,10 @@ import {
   LogisticsLatencyNotice,
 } from "@/components/logistics/LogisticsLatencyNotice";
 import { ShipmentTerminalHint } from "@/components/logistics/ShipmentTerminalHint";
-import { ConversionEventsPanel } from "@/components/orders/ConversionEventsPanel";
+import {
+  ConversionReleasePanel,
+  type ConversionReleaseItem,
+} from "@/components/orders/ConversionReleasePanel";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
@@ -30,6 +33,7 @@ import {
 import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDateTime } from "@/lib/formatting/date";
 import { labelShipmentStatus } from "@/lib/logistics/labels";
+import { labelTimelineKind } from "@/lib/orders/labels";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -111,6 +115,29 @@ export default async function OrderDetailPage({
   const latestConversionOutcome = latestConversion
     ? conversionOutcome(latestConversion)
     : null;
+  const attributedPlatform = primaryAttribution?.platform ?? null;
+  const conversionItems: ConversionReleaseItem[] = detail.conversionEvents
+    .slice()
+    .sort((a, b) => (a.event_time < b.event_time ? 1 : -1))
+    .map((row) => ({
+      id: row.id,
+      eventName: row.event_name,
+      platform: row.platform,
+      value: row.value != null ? Number(row.value) : null,
+      currencyCode: row.currency_code,
+      eventTime: row.event_time,
+      deliveryStatus: row.status,
+      releaseStatus: row.release_status,
+      holdReason: row.hold_reason,
+      sentAt: row.sent_at,
+      releasedAt: row.released_at,
+      lastErrorMessage: row.last_error_message,
+      customData: row.custom_data,
+      attributedPlatform,
+    }));
+  const pendingConversions = conversionItems.filter(
+    (item) => item.releaseStatus === "pending_review",
+  ).length;
 
   return (
     <section className="space-y-5">
@@ -493,36 +520,41 @@ export default async function OrderDetailPage({
           },
           {
             value: "eventos",
-            label: "Eventos",
+            label: pendingConversions
+              ? `Eventos (${pendingConversions} en revisión)`
+              : "Eventos",
             content: (
               <div className="space-y-5">
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Conversión (Meta / TikTok)</h3>
-                  <p className="text-xs text-text-secondary">
-                    Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
-                  </p>
-                  <ConversionEventsPanel events={detail.conversionEvents} />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Actividad del pedido</h3>
+                <section className="space-y-2">
+                  <div>
+                    <h3 className="text-sm font-semibold">Conversión (Meta / TikTok)</h3>
+                    <p className="text-xs text-text-secondary">
+                      Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
+                    </p>
+                  </div>
+                  <ConversionReleasePanel
+                    agencySlug={p.agencySlug}
+                    storeSlug={p.storeSlug}
+                    events={conversionItems}
+                    canManage={canManage}
+                    timeZone={storeTimeZone}
+                  />
+                </section>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold">Historial</h3>
                   {detail.timeline.length ? (
                     <ul className="space-y-3">
                       {detail.timeline.map((item) => (
-                        <li
-                          key={item.id}
-                          className="rounded-md border border-border px-3 py-2 text-sm"
-                        >
+                        <li key={item.id} className="rounded-md border border-border px-3 py-2 text-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">{item.title}</span>
                             <time className="text-xs text-text-secondary">
                               {formatWhen(item.occurredAt)}
                             </time>
                           </div>
-                          {item.description ? (
-                            <p className="mt-1 text-text-secondary">{item.description}</p>
-                          ) : null}
+                          {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
                           <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">
-                            {item.kind}
+                            {labelTimelineKind(item.kind)}
                           </p>
                         </li>
                       ))}
@@ -533,7 +565,7 @@ export default async function OrderDetailPage({
                       description="Todavía no hay actividad registrada en este pedido."
                     />
                   )}
-                </div>
+                </section>
               </div>
             ),
           },

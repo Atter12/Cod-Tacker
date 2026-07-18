@@ -11,6 +11,11 @@ import {
   sendTikTokEventsPurchase,
   type TikTokEventsSendResult,
 } from "@/lib/conversions/tiktok-events";
+import {
+  evaluatePurchaseRelease,
+  type ConversionReleaseStatus,
+} from "@/lib/conversions/release-policy";
+import { computeRetryAt } from "@/lib/jobs/backoff";
 import { logger } from "@/lib/observability/logger";
 import type { DatabaseClient } from "@/services/_shared";
 import type { Database, Json } from "@/types/database.generated";
@@ -45,6 +50,8 @@ export type RecordPurchaseConversionResult = {
   conversionEventRowId: string | null;
   deliveryStatus: string;
   capiMode: "live" | "dry_run";
+  releaseStatus: ConversionReleaseStatus | null;
+  holdReason: string | null;
 };
 
 type IntegrationLite = {
@@ -180,32 +187,76 @@ function aggregateDelivery(input: {
   };
 }
 
-/**
- * Ensure a Purchase conversion_events row exists (deduped by event_id) and
- * attempt Meta CAPI + TikTok Events API (integration settings → Vercel env).
- * TikTok missing secrets → dry_run; Meta missing secrets → failed (S10).
- */
-export async function recordPurchaseConversionEvent(
-  input: RecordPurchaseConversionInput,
-): Promise<RecordPurchaseConversionResult> {
-  const eventId = purchaseConversionEventId(input.orderId);
-  const eventTime = input.eventTime ?? new Date().toISOString();
-  const eventTimeUnix = Math.floor(new Date(eventTime).getTime() / 1000);
+function readCustomDataSource(customData: Json | null | undefined): string {
+  if (customData && typeof customData === "object" && !Array.isArray(customData)) {
+    const raw = (customData as Record<string, unknown>).source;
+    if (typeof raw === "string" && raw.trim()) return raw;
+  }
+  return "cash_collected";
+}
 
-  const existing = await input.admin
+/**
+ * Send an already-released Purchase candidate to Meta CAPI + TikTok Events API
+ * and persist the delivery outcome on its conversion_events row.
+ *
+ * Guards: row must exist, be `release_status = released` and not sent yet.
+ * Used by the auto-release path and by manual release / resend actions.
+ */
+export async function sendQueuedPurchaseConversion(input: {
+  admin: DatabaseClient;
+  agencyId: string;
+  storeId: string;
+  conversionEventRowId: string;
+}): Promise<RecordPurchaseConversionResult> {
+  const row = await input.admin
     .from("conversion_events")
-    .select("id, status, sent_at")
+    .select(
+      "id, event_id, order_id, value, currency_code, event_time, status, attempts, max_attempts, sent_at, release_status, custom_data",
+    )
+    .eq("id", input.conversionEventRowId)
     .eq("store_id", input.storeId)
-    .eq("event_id", eventId)
     .maybeSingle();
 
-  if (existing.data?.id && existing.data.sent_at) {
+  if (!row.data) {
     return {
       created: false,
-      eventId,
-      conversionEventRowId: existing.data.id,
-      deliveryStatus: existing.data.status,
+      eventId: "",
+      conversionEventRowId: null,
+      deliveryStatus: "failed",
       capiMode: "live",
+      releaseStatus: null,
+      holdReason: "conversion_event_not_found",
+    };
+  }
+
+  const event = row.data;
+  const releaseStatus = event.release_status as ConversionReleaseStatus;
+
+  if (event.sent_at) {
+    return {
+      created: false,
+      eventId: event.event_id,
+      conversionEventRowId: event.id,
+      deliveryStatus: event.status,
+      capiMode: "live",
+      releaseStatus,
+      holdReason: null,
+    };
+  }
+  if (releaseStatus !== "released") {
+    logger.warn("conversion.purchase.send_blocked_not_released", {
+      conversion_event_id: event.id,
+      event_id: event.event_id,
+      release_status: releaseStatus,
+    });
+    return {
+      created: false,
+      eventId: event.event_id,
+      conversionEventRowId: event.id,
+      deliveryStatus: event.status,
+      capiMode: "dry_run",
+      releaseStatus,
+      holdReason: "not_released",
     };
   }
 
@@ -213,13 +264,6 @@ export async function recordPurchaseConversionEvent(
     resolveProviderIntegration(input.admin, input.agencyId, input.storeId, "meta"),
     resolveProviderIntegration(input.admin, input.agencyId, input.storeId, "tiktok"),
   ]);
-  const integration = await resolveConversionIntegrationFk(
-    input.admin,
-    input.agencyId,
-    input.storeId,
-    metaIntegration,
-    tiktokIntegration,
-  );
 
   const metaCreds = resolveMetaCapiCredentials(
     metaIntegration?.settings ?? null,
@@ -230,41 +274,41 @@ export async function recordPurchaseConversionEvent(
     tiktokIntegration?.metadata ?? null,
   );
 
-  const platform: AdPlatform = tiktokCreds && !metaCreds ? "tiktok" : "meta";
-
   if (!metaCreds) {
     logger.warn("conversion.purchase.missing_capi_credentials", {
       store_id: input.storeId,
-      order_id: input.orderId,
-      event_id: eventId,
+      order_id: event.order_id,
+      event_id: event.event_id,
       has_meta_integration: Boolean(metaIntegration),
     });
   }
   if (!tiktokCreds) {
     logger.info("conversion.purchase.tiktok_dry_run_credentials", {
       store_id: input.storeId,
-      order_id: input.orderId,
-      event_id: eventId,
+      order_id: event.order_id,
+      event_id: event.event_id,
       has_tiktok_integration: Boolean(tiktokIntegration),
     });
   }
 
-  const contact =
-    input.email || input.phone || input.countryCode || input.city
-      ? {
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          countryCode: input.countryCode ?? null,
-          city: input.city ?? null,
-        }
-      : await resolveOrderCustomerContact(input.admin, input.storeId, input.orderId);
+  const contact = await resolveOrderCustomerContact(
+    input.admin,
+    input.storeId,
+    event.order_id,
+  );
 
-  const currency = input.currencyCode.slice(0, 3).toUpperCase();
+  const eventTime = event.event_time ?? new Date().toISOString();
+  const eventTimeUnix = Math.floor(new Date(eventTime).getTime() / 1000);
+  const value = Number(event.value ?? 0);
+  const currency = (event.currency_code ?? "PEN").slice(0, 3).toUpperCase();
+  const platform: AdPlatform = tiktokCreds && !metaCreds ? "tiktok" : "meta";
+  const source = readCustomDataSource(event.custom_data);
+
   const sharedPayload = {
-    eventId,
-    value: input.value,
+    eventId: event.event_id,
+    value,
     currency,
-    orderId: input.orderId,
+    orderId: event.order_id,
     email: contact.email,
     phone: contact.phone,
   };
@@ -279,16 +323,16 @@ export async function recordPurchaseConversionEvent(
     sendTikTokEventsPurchase(tiktokCreds, {
       ...sharedPayload,
       eventTimeIso: eventTime,
-      externalId: input.orderId,
+      externalId: event.order_id,
     }),
   ]);
 
   const aggregated = aggregateDelivery({ meta, tiktok });
   const customData = {
     dry_run: aggregated.capiMode === "dry_run",
-    source: input.source ?? "cash_collected",
-    order_id: input.orderId,
-    no_integration: !integration,
+    source,
+    order_id: event.order_id,
+    no_integration: !metaIntegration && !tiktokIntegration,
     meta: {
       mode: meta.mode,
       ok: meta.ok,
@@ -309,117 +353,298 @@ export async function recordPurchaseConversionEvent(
     tiktok: tiktok.body ?? { mode: tiktok.mode, ok: tiktok.ok, error: tiktok.error ?? null },
   } as Json;
 
-  if (existing.data?.id) {
-    await input.admin
-      .from("conversion_events")
-      .update({
-        status: aggregated.status,
-        attempts: 1,
-        sent_at: aggregated.status === "sent" ? new Date().toISOString() : null,
-        last_error_message: aggregated.lastError,
-        response_payload: responsePayload,
-        custom_data: customData,
-        value: input.value,
-        currency_code: currency,
-        platform,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existing.data.id)
-      .eq("store_id", input.storeId);
+  const attemptsAfter = (event.attempts ?? 0) + 1;
+  // Not sent → schedule the sweep retry (1 min base, capped at 1 h) until
+  // attempts are exhausted; then next_retry_at clears and only manual retry remains.
+  const nextRetryAt =
+    aggregated.status === "sent" || attemptsAfter >= (event.max_attempts ?? 5)
+      ? null
+      : computeRetryAt(
+          attemptsAfter,
+          60_000,
+          60 * 60_000,
+          `conversion:${event.id}`,
+        ).toISOString();
 
-    logger.info("conversion.purchase.updated", {
-      event_id: eventId,
-      order_id: input.orderId,
+  await input.admin
+    .from("conversion_events")
+    .update({
       status: aggregated.status,
-      capi_mode: aggregated.capiMode,
-      meta_mode: meta.mode,
-      tiktok_mode: tiktok.mode,
-    });
+      attempts: attemptsAfter,
+      next_retry_at: nextRetryAt,
+      sent_at: aggregated.status === "sent" ? new Date().toISOString() : null,
+      last_error_message: aggregated.lastError,
+      response_payload: responsePayload,
+      custom_data: customData,
+      platform,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", event.id)
+    .eq("store_id", input.storeId);
 
+  logger.info("conversion.purchase.recorded", {
+    event_id: event.event_id,
+    order_id: event.order_id,
+    status: aggregated.status,
+    capi_mode: aggregated.capiMode,
+    meta_mode: meta.mode,
+    tiktok_mode: tiktok.mode,
+    conversion_event_id: event.id,
+  });
+
+  return {
+    created: false,
+    eventId: event.event_id,
+    conversionEventRowId: event.id,
+    deliveryStatus: aggregated.status,
+    capiMode: aggregated.capiMode,
+    releaseStatus: "released",
+    holdReason: null,
+  };
+}
+
+/**
+ * Release gate entry point (hold → filter → released → send).
+ *
+ * Ensures a Purchase candidate row exists (deduped by event_id), runs the
+ * release filter against the current order state, and only when the candidate
+ * is labeled `released` performs the live Meta CAPI + TikTok Events send.
+ * Held candidates stay `queued` + `pending_review` for the manual queue;
+ * `rejected` candidates are never resent.
+ */
+export async function recordPurchaseConversionEvent(
+  input: RecordPurchaseConversionInput,
+): Promise<RecordPurchaseConversionResult> {
+  const eventId = purchaseConversionEventId(input.orderId);
+  const eventTime = input.eventTime ?? new Date().toISOString();
+
+  const existing = await input.admin
+    .from("conversion_events")
+    .select("id, status, sent_at, release_status")
+    .eq("store_id", input.storeId)
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (existing.data?.id && existing.data.sent_at) {
     return {
       created: false,
       eventId,
       conversionEventRowId: existing.data.id,
-      deliveryStatus: aggregated.status,
-      capiMode: aggregated.capiMode,
+      deliveryStatus: existing.data.status,
+      capiMode: "live",
+      releaseStatus: (existing.data.release_status as ConversionReleaseStatus) ?? "released",
+      holdReason: null,
     };
   }
 
-  const inserted = await input.admin
-    .from("conversion_events")
-    .insert({
-      agency_id: input.agencyId,
-      store_id: input.storeId,
-      order_id: input.orderId,
-      integration_id: integration?.id ?? null,
-      platform,
+  if (existing.data?.release_status === "rejected") {
+    logger.info("conversion.purchase.skip_rejected", {
       event_id: eventId,
-      event_name: "Purchase",
-      event_time: eventTime,
-      status: aggregated.status,
-      attempts: 1,
-      value: input.value,
-      currency_code: currency,
-      user_data: {
-        email_present: Boolean(contact.email?.trim()),
-        phone_present: Boolean(contact.phone?.trim()),
-        country_present: Boolean(contact.countryCode?.trim()),
-        city_present: Boolean(contact.city?.trim()),
-        external_id_hashed: true,
-      } as Json,
-      custom_data: customData,
-      response_payload: responsePayload,
-      sent_at: aggregated.status === "sent" ? new Date().toISOString() : null,
-      last_error_message: aggregated.lastError,
-    })
-    .select("id")
+      order_id: input.orderId,
+      conversion_event_id: existing.data.id,
+    });
+    return {
+      created: false,
+      eventId,
+      conversionEventRowId: existing.data.id,
+      deliveryStatus: existing.data.status,
+      capiMode: "dry_run",
+      releaseStatus: "rejected",
+      holdReason: "manual_reject",
+    };
+  }
+
+  // Release filter: judged on the live order state, not the trigger.
+  const orderRes = await input.admin
+    .from("orders")
+    .select("order_status, payment_status, confirmation_status")
+    .eq("id", input.orderId)
+    .eq("store_id", input.storeId)
     .maybeSingle();
 
-  if (inserted.error) {
-    const again = await input.admin
+  const decision = evaluatePurchaseRelease({
+    value: input.value,
+    orderStatus: orderRes.data?.order_status ?? null,
+    paymentStatus: orderRes.data?.payment_status ?? null,
+    confirmationStatus: orderRes.data?.confirmation_status ?? null,
+  });
+
+  // A manual release must survive later triggers; holds may be upgraded.
+  const wasReleased = existing.data?.release_status === "released";
+  const releaseStatus: ConversionReleaseStatus =
+    wasReleased || decision.release ? "released" : "pending_review";
+  const holdReason = releaseStatus === "released" ? null : decision.reason;
+
+  const [metaIntegration, tiktokIntegration] = await Promise.all([
+    resolveProviderIntegration(input.admin, input.agencyId, input.storeId, "meta"),
+    resolveProviderIntegration(input.admin, input.agencyId, input.storeId, "tiktok"),
+  ]);
+  const integration = await resolveConversionIntegrationFk(
+    input.admin,
+    input.agencyId,
+    input.storeId,
+    metaIntegration,
+    tiktokIntegration,
+  );
+
+  const contact =
+    input.email || input.phone || input.countryCode || input.city
+      ? {
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          countryCode: input.countryCode ?? null,
+          city: input.city ?? null,
+        }
+      : await resolveOrderCustomerContact(input.admin, input.storeId, input.orderId);
+
+  const currency = input.currencyCode.slice(0, 3).toUpperCase();
+  const platform: AdPlatform =
+    tiktokIntegration && !metaIntegration ? "tiktok" : "meta";
+  const queuedCustomData = {
+    dry_run: false,
+    source: input.source ?? "cash_collected",
+    order_id: input.orderId,
+    no_integration: !integration,
+  } as Json;
+
+  let rowId = existing.data?.id ?? null;
+  let created = false;
+
+  if (rowId) {
+    await input.admin
       .from("conversion_events")
-      .select("id, status")
-      .eq("store_id", input.storeId)
-      .eq("event_id", eventId)
+      .update({
+        status: "queued" satisfies DeliveryStatus,
+        release_status: releaseStatus,
+        hold_reason: holdReason,
+        released_at:
+          releaseStatus === "released" && !wasReleased ? new Date().toISOString() : undefined,
+        value: input.value,
+        currency_code: currency,
+        event_time: eventTime,
+        platform,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rowId)
+      .eq("store_id", input.storeId);
+  } else {
+    const inserted = await input.admin
+      .from("conversion_events")
+      .insert({
+        agency_id: input.agencyId,
+        store_id: input.storeId,
+        order_id: input.orderId,
+        integration_id: integration?.id ?? null,
+        platform,
+        event_id: eventId,
+        event_name: "Purchase",
+        event_time: eventTime,
+        status: "queued" satisfies DeliveryStatus,
+        release_status: releaseStatus,
+        hold_reason: holdReason,
+        released_at: releaseStatus === "released" ? new Date().toISOString() : null,
+        attempts: 0,
+        value: input.value,
+        currency_code: currency,
+        user_data: {
+          email_present: Boolean(contact.email?.trim()),
+          phone_present: Boolean(contact.phone?.trim()),
+          country_present: Boolean(contact.countryCode?.trim()),
+          city_present: Boolean(contact.city?.trim()),
+          external_id_hashed: true,
+        } as Json,
+        custom_data: queuedCustomData,
+      })
+      .select("id")
       .maybeSingle();
-    if (again.data) {
-      return {
-        created: false,
-        eventId,
-        conversionEventRowId: again.data.id,
-        deliveryStatus: again.data.status,
-        capiMode: aggregated.capiMode,
-      };
+
+    if (inserted.error) {
+      // Unique event_id race: another trigger inserted first — reuse its row.
+      const again = await input.admin
+        .from("conversion_events")
+        .select("id, status, sent_at, release_status")
+        .eq("store_id", input.storeId)
+        .eq("event_id", eventId)
+        .maybeSingle();
+      if (again.data?.sent_at) {
+        return {
+          created: false,
+          eventId,
+          conversionEventRowId: again.data.id,
+          deliveryStatus: again.data.status,
+          capiMode: "live",
+          releaseStatus: (again.data.release_status as ConversionReleaseStatus) ?? "released",
+          holdReason: null,
+        };
+      }
+      if (!again.data) {
+        logger.error("conversion.purchase.insert_failed", {
+          event_id: eventId,
+          order_id: input.orderId,
+          error: inserted.error.message,
+        });
+        return {
+          created: false,
+          eventId,
+          conversionEventRowId: null,
+          deliveryStatus: "failed",
+          capiMode: "dry_run",
+          releaseStatus: null,
+          holdReason: "insert_failed",
+        };
+      }
+      rowId = again.data.id;
+    } else {
+      rowId = inserted.data?.id ?? null;
+      created = true;
     }
-    logger.error("conversion.purchase.insert_failed", {
-      event_id: eventId,
-      order_id: input.orderId,
-      error: inserted.error.message,
-    });
+  }
+
+  if (!rowId) {
     return {
       created: false,
       eventId,
       conversionEventRowId: null,
       deliveryStatus: "failed",
-      capiMode: aggregated.capiMode,
+      capiMode: "dry_run",
+      releaseStatus: null,
+      holdReason: "insert_failed",
     };
   }
 
-  logger.info("conversion.purchase.recorded", {
+  if (releaseStatus !== "released") {
+    logger.info("conversion.purchase.held", {
+      event_id: eventId,
+      order_id: input.orderId,
+      conversion_event_id: rowId,
+      hold_reason: holdReason,
+      source: input.source ?? "cash_collected",
+    });
+    return {
+      created,
+      eventId,
+      conversionEventRowId: rowId,
+      deliveryStatus: "queued",
+      capiMode: "dry_run",
+      releaseStatus,
+      holdReason,
+    };
+  }
+
+  logger.info("conversion.purchase.released", {
     event_id: eventId,
     order_id: input.orderId,
-    status: aggregated.status,
-    capi_mode: aggregated.capiMode,
-    meta_mode: meta.mode,
-    tiktok_mode: tiktok.mode,
-    conversion_event_id: inserted.data?.id ?? null,
+    conversion_event_id: rowId,
+    release_reason: decision.release ? decision.reason : "previously_released",
+    released_by: "auto_filter",
   });
 
-  return {
-    created: true,
-    eventId,
-    conversionEventRowId: inserted.data?.id ?? null,
-    deliveryStatus: aggregated.status,
-    capiMode: aggregated.capiMode,
-  };
+  const sendResult = await sendQueuedPurchaseConversion({
+    admin: input.admin,
+    agencyId: input.agencyId,
+    storeId: input.storeId,
+    conversionEventRowId: rowId,
+  });
+
+  return { ...sendResult, created };
 }

@@ -1,4 +1,8 @@
 import { getServerEnv } from "@/config/env";
+import {
+  sweepConversionReleases,
+  type ReleaseSweepResult,
+} from "@/lib/conversions/release-sweep";
 import { processJobBatch, recoverStuckJobs } from "@/lib/jobs/processor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRequestContext } from "@/lib/observability/request-context";
@@ -34,18 +38,20 @@ function authorize(request: Request): boolean {
  * Vercel Cron invokes GET; manual ops can POST with a JSON body.
  */
 export async function GET(request: Request) {
-  return processJobsRequest(request, { recover: true });
+  return processJobsRequest(request, { recover: true, sweepConversions: true });
 }
 
 export async function POST(request: Request) {
   let limit = 10;
   let queue = "default";
   let recover = false;
+  let sweepConversions = false;
   try {
     const body = (await request.json().catch(() => null)) as {
       limit?: number;
       queue?: string;
       recover?: boolean;
+      sweepConversions?: boolean;
     } | null;
     if (body?.limit && Number.isFinite(body.limit)) {
       limit = Math.min(Math.max(Math.floor(body.limit), 1), 50);
@@ -54,15 +60,21 @@ export async function POST(request: Request) {
       queue = body.queue.trim();
     }
     recover = Boolean(body?.recover);
+    sweepConversions = Boolean(body?.sweepConversions);
   } catch {
     // empty body is fine
   }
-  return processJobsRequest(request, { limit, queue, recover });
+  return processJobsRequest(request, { limit, queue, recover, sweepConversions });
 }
 
 async function processJobsRequest(
   request: Request,
-  options: { limit?: number; queue?: string; recover?: boolean },
+  options: {
+    limit?: number;
+    queue?: string;
+    recover?: boolean;
+    sweepConversions?: boolean;
+  },
 ) {
   const ctx = createRequestContext({
     request_id: request.headers.get("x-request-id") ?? undefined,
@@ -104,15 +116,37 @@ async function processJobsRequest(
   }
 
   const result = await processJobBatch(admin, { workerId, limit, queue });
+
+  // Release-gate sweep: re-evaluates held conversions and retries failed
+  // sends to Meta/TikTok. Errors are contained so job processing still reports.
+  let conversionSweep: ReleaseSweepResult | null = null;
+  if (options.sweepConversions) {
+    try {
+      conversionSweep = await sweepConversionReleases(admin);
+    } catch (error) {
+      logger.error("jobs.process.conversion_sweep_failed", {
+        ...ctx,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   logger.info("jobs.process.complete", {
     ...ctx,
     workerId,
     recovered,
     claimed: result.claimed,
     completed: result.completed,
+    conversion_sweep: conversionSweep ? { ...conversionSweep } : null,
   });
   return Response.json(
-    { workerId, recovered, request_id: ctx.request_id, ...result },
+    {
+      workerId,
+      recovered,
+      request_id: ctx.request_id,
+      ...result,
+      conversionSweep,
+    },
     { headers: { "x-request-id": ctx.request_id } },
   );
 }
