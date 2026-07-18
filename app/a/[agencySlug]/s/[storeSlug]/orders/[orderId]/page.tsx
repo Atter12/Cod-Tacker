@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  isLogisticsEventStale,
+  LogisticsLatencyNotice,
+} from "@/components/logistics/LogisticsLatencyNotice";
+import { ShipmentTerminalHint } from "@/components/logistics/ShipmentTerminalHint";
+import { ConversionEventsPanel } from "@/components/orders/ConversionEventsPanel";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
@@ -11,11 +17,19 @@ import {
   OrderStatusBadge,
   PaymentStatusBadge,
   SectionHeader,
+  StatusBadge,
   Tabs,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
+import {
+  conversionLastAttemptAt,
+  conversionOutcome,
+  labelConversionOutcome,
+  labelConversionPlatform,
+} from "@/lib/conversions/labels";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDateTime } from "@/lib/formatting/date";
+import { labelShipmentStatus } from "@/lib/logistics/labels";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -90,6 +104,13 @@ export default async function OrderDetailPage({
   const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
   const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
   const hasLanding = Boolean(order.landing_site?.trim() || order.referring_site?.trim());
+  const latestConversion = [...detail.conversionEvents].sort(
+    (a, b) =>
+      Date.parse(conversionLastAttemptAt(b)) - Date.parse(conversionLastAttemptAt(a)),
+  )[0];
+  const latestConversionOutcome = latestConversion
+    ? conversionOutcome(latestConversion)
+    : null;
 
   return (
     <section className="space-y-5">
@@ -170,13 +191,44 @@ export default async function OrderDetailPage({
                   <dt className="text-text-secondary">Confianza del dato</dt>
                   <dd className="mt-1 flex flex-wrap items-center gap-2">
                     {order.payment_status === "cash_collected" || order.cash_collected_at ? (
-                      <DataConfidenceBadge confidence="confirmed" />
+                      <DataConfidenceBadge confidence="confirmed" label="Cobrado" />
                     ) : (
                       <DataConfidenceBadge confidence="provisional" />
                     )}
                     <span className="text-xs text-text-secondary">
                       Cobro/carrier pueden tardar; no es tiempo real absoluto.
                     </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">Conversión (ads)</dt>
+                  <dd className="mt-1 flex flex-wrap items-center gap-2">
+                    {latestConversion && latestConversionOutcome ? (
+                      <>
+                        <StatusBadge
+                          status={
+                            latestConversionOutcome === "sent"
+                              ? "sent"
+                              : latestConversionOutcome === "failed"
+                                ? "failed"
+                                : latestConversionOutcome === "dry_run"
+                                  ? "partial"
+                                  : "queued"
+                          }
+                          label={labelConversionOutcome(latestConversionOutcome)}
+                        />
+                        <span className="text-xs text-text-secondary">
+                          {labelConversionPlatform(latestConversion.platform)} ·{" "}
+                          {new Date(conversionLastAttemptAt(latestConversion)).toLocaleString(
+                            "es-PE",
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs italic text-text-secondary">
+                        Aún sin avisos a Meta/TikTok
+                      </span>
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -350,21 +402,62 @@ export default async function OrderDetailPage({
           {
             value: "logistica",
             label: "Logística",
-            content: detail.shipments.length ? (
-              <DataTable
-                data={detail.shipments}
-                getRowId={(row) => row.id}
-                columns={[
-                  { id: "trk", header: "Tracking", cell: (row) => row.tracking_number ?? "—" },
-                  { id: "status", header: "Estado", cell: (row) => row.status },
-                  { id: "rto", header: "RTO", cell: (row) => (row.is_rto ? "Sí" : "No") },
-                ]}
-              />
-            ) : (
-              <EmptyState
-                title="Sin envíos"
-                description="Aún no hay logística vinculada. El estado del carrier llegará con latencia; hasta entonces trátalo como provisional."
-              />
+            content: (
+              <div className="space-y-3">
+                {detail.shipments.length === 0 ? (
+                  <LogisticsLatencyNotice mode="empty" />
+                ) : detail.shipments.some((row) => isLogisticsEventStale(row.last_event_at)) ? (
+                  <LogisticsLatencyNotice
+                    mode="stale"
+                    staleCount={
+                      detail.shipments.filter((row) => isLogisticsEventStale(row.last_event_at))
+                        .length
+                    }
+                    totalCount={detail.shipments.length}
+                  />
+                ) : (
+                  <LogisticsLatencyNotice mode="general" />
+                )}
+                {detail.shipments.length ? (
+                  <div className="space-y-3">
+                    {detail.shipments.map((shipment) => (
+                      <ShipmentTerminalHint key={`hint-${shipment.id}`} isTerminal={shipment.is_terminal} />
+                    ))}
+                    <DataTable
+                      data={detail.shipments}
+                      getRowId={(row) => row.id}
+                      columns={[
+                        {
+                          id: "trk",
+                          header: "Tracking",
+                          cell: (row) => row.tracking_number ?? "—",
+                        },
+                        {
+                          id: "status",
+                          header: "Estado",
+                          cell: (row) => (
+                            <StatusBadge
+                              status={row.status}
+                              label={labelShipmentStatus(row.status)}
+                            />
+                          ),
+                        },
+                        {
+                          id: "cierre",
+                          header: "Cierre",
+                          cell: (row) => (row.is_terminal ? "Confirmado" : "En curso"),
+                        },
+                        { id: "rto", header: "RTO", cell: (row) => (row.is_rto ? "Sí" : "No") },
+                      ]}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Sin envíos"
+                    description="Aún no hay logística vinculada a este pedido."
+                  />
+                )}
+              </div>
             ),
           },
           {
@@ -402,20 +495,46 @@ export default async function OrderDetailPage({
             value: "eventos",
             label: "Eventos",
             content: (
-              <ul className="space-y-3">
-                {detail.timeline.map((item) => (
-                  <li key={item.id} className="rounded-md border border-border px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{item.title}</span>
-                      <time className="text-xs text-text-secondary">
-                        {formatWhen(item.occurredAt)}
-                      </time>
-                    </div>
-                    {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
-                    <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">{item.kind}</p>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Conversión (Meta / TikTok)</h3>
+                  <p className="text-xs text-text-secondary">
+                    Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
+                  </p>
+                  <ConversionEventsPanel events={detail.conversionEvents} />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Actividad del pedido</h3>
+                  {detail.timeline.length ? (
+                    <ul className="space-y-3">
+                      {detail.timeline.map((item) => (
+                        <li
+                          key={item.id}
+                          className="rounded-md border border-border px-3 py-2 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">{item.title}</span>
+                            <time className="text-xs text-text-secondary">
+                              {formatWhen(item.occurredAt)}
+                            </time>
+                          </div>
+                          {item.description ? (
+                            <p className="mt-1 text-text-secondary">{item.description}</p>
+                          ) : null}
+                          <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">
+                            {item.kind}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <EmptyState
+                      title="Sin eventos"
+                      description="Todavía no hay actividad registrada en este pedido."
+                    />
+                  )}
+                </div>
+              </div>
             ),
           },
           {

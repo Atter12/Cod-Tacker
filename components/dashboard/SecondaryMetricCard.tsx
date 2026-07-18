@@ -37,6 +37,7 @@ export function SecondaryMetricCard({
   comparisonLabel,
   changeMode = "percent",
   confidence,
+  confidenceLabel,
   hint,
 }: {
   label: string;
@@ -48,6 +49,8 @@ export function SecondaryMetricCard({
   comparisonLabel: string;
   changeMode?: "percent" | "pp" | "absolute";
   confidence?: DataConfidence;
+  /** Override badge text (e.g. Cobrado instead of Confirmado). */
+  confidenceLabel?: string;
   hint?: string;
 }) {
   const delta = metric.value - metric.previousValue;
@@ -74,7 +77,9 @@ export function SecondaryMetricCard({
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <p className="text-[12.5px] font-semibold text-text-secondary">{label}</p>
-        {confidence ? <DataConfidenceBadge confidence={confidence} /> : null}
+        {confidence ? (
+          <DataConfidenceBadge confidence={confidence} label={confidenceLabel} />
+        ) : null}
       </div>
       <p className="mt-0.5 text-[23px] font-bold leading-tight tracking-tight text-text-primary sm:text-[24px]">
         {value}

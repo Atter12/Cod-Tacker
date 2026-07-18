@@ -1,3 +1,10 @@
+import {
+  conversionOutcome,
+  friendlyConversionError,
+  labelConversionEventName,
+  labelConversionOutcome,
+  labelConversionPlatform,
+} from "@/lib/conversions/labels";
 import { labelConfirmationStatus, labelOrderStatus, labelPaymentStatus } from "@/lib/orders/labels";
 import type { OrderDetailBundle, OrderTimelineItem } from "@/types/orders";
 
@@ -86,12 +93,18 @@ export function buildOrderTimeline(
   }
 
   for (const conversion of bundle.conversionEvents) {
+    const outcome = conversionOutcome(conversion);
     items.push({
       id: `conv-${conversion.id}`,
       kind: "conversion",
-      title: `Conversión ${conversion.event_name}`,
-      description: conversion.platform,
-      occurredAt: conversion.event_time,
+      title: `Conversión ${labelConversionEventName(conversion.event_name)} · ${labelConversionOutcome(outcome)}`,
+      description: `${labelConversionPlatform(conversion.platform)}${
+        outcome === "failed"
+          ? ` · ${friendlyConversionError(conversion.last_error_message) ?? "No se pudo enviar"}`
+          : ""
+      }`,
+      occurredAt: conversion.sent_at || conversion.event_time,
+      meta: { outcome, status: conversion.status },
     });
   }
 

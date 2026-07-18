@@ -39,14 +39,15 @@ function formatDeliveryLabel(order: OrderListRow): string {
 }
 
 function compactStatusLabel(status: string): string {
-  const label = labelOrderStatus(status);
+  // Do not collapse mid-funnel logistics into "Confirmado" (B13: only terminal = confirmed).
   if (status === "pending_confirmation") return "Pendiente";
-  if (status === "return_in_transit") return "Devuelto";
-  if (status === "ready_to_ship" || status === "shipped" || status === "in_transit" || status === "out_for_delivery") {
-    return "Confirmado";
-  }
-  if (status === "closed") return "Entregado";
-  return label;
+  if (status === "confirmed") return "Confirmado";
+  if (status === "ready_to_ship") return "Por enviar";
+  if (status === "shipped" || status === "in_transit") return "En tránsito";
+  if (status === "out_for_delivery") return "En reparto";
+  if (status === "return_in_transit") return "Dev. en tránsito";
+  if (status === "closed" || status === "delivered") return "Entregado";
+  return labelOrderStatus(status);
 }
 
 function ContactCell({

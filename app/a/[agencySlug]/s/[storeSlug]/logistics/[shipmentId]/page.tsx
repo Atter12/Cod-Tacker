@@ -5,6 +5,7 @@ import {
   LogisticsLatencyNotice,
 } from "@/components/logistics/LogisticsLatencyNotice";
 import { ShipmentActionsPanel } from "@/components/logistics/ShipmentActionsPanel";
+import { ShipmentTerminalHint } from "@/components/logistics/ShipmentTerminalHint";
 import {
   DataTable,
   EmptyState,
@@ -77,6 +78,8 @@ export default async function ShipmentDetailPage({
         <LogisticsLatencyNotice mode="general" />
       )}
 
+      <ShipmentTerminalHint isTerminal={shipment.is_terminal} />
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4 text-sm lg:col-span-2">
           <dl className="grid gap-2 sm:grid-cols-2">
@@ -95,9 +98,9 @@ export default async function ShipmentDetailPage({
               <dd>{formatDate(shipment.last_event_at)}</dd>
             </div>
             <div>
-              <dt className="text-text-secondary">Terminal / RTO</dt>
+              <dt className="text-text-secondary">Cierre / RTO</dt>
               <dd>
-                {shipment.is_terminal ? "Terminal" : "En curso"}
+                {shipment.is_terminal ? "Confirmado (cerrado)" : "En curso"}
                 {shipment.is_rto ? " · RTO" : ""}
               </dd>
             </div>
