@@ -147,7 +147,7 @@ export default async function StoreDashboard({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
         <div className="md:col-span-2 xl:col-span-2">
           <IntegrationHealthCard
             health={summary.integrationHealth}
