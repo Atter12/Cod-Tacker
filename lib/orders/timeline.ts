@@ -1,5 +1,57 @@
 import { labelConfirmationStatus, labelOrderStatus, labelPaymentStatus } from "@/lib/orders/labels";
 import type { OrderDetailBundle, OrderTimelineItem } from "@/types/orders";
+import type { Json } from "@/types/database.generated";
+
+type ConversionChannelSummary = {
+  name: string;
+  mode?: string;
+  ok?: boolean;
+};
+
+/** Prefer dual Meta+TikTok labels from custom_data (S12); fall back to platform column. */
+export function formatConversionTimelineDescription(conversion: {
+  platform: string;
+  custom_data?: Json;
+  status?: string;
+}): string {
+  const bag =
+    conversion.custom_data &&
+    typeof conversion.custom_data === "object" &&
+    !Array.isArray(conversion.custom_data)
+      ? (conversion.custom_data as Record<string, unknown>)
+      : null;
+
+  const channels: ConversionChannelSummary[] = [];
+  for (const name of ["meta", "tiktok"] as const) {
+    const raw = bag?.[name];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const entry = raw as Record<string, unknown>;
+    if (!("mode" in entry) && !("ok" in entry) && !("missing_credentials" in entry)) continue;
+    channels.push({
+      name,
+      mode: typeof entry.mode === "string" ? entry.mode : undefined,
+      ok: typeof entry.ok === "boolean" ? entry.ok : undefined,
+    });
+  }
+
+  if (channels.length === 0) {
+    return conversion.status ? `${conversion.platform} · ${conversion.status}` : conversion.platform;
+  }
+
+  return channels
+    .map((channel) => {
+      const outcome =
+        channel.mode === "dry_run"
+          ? "dry_run"
+          : channel.ok === true
+            ? "live"
+            : channel.ok === false
+              ? "failed"
+              : (channel.mode ?? "sent");
+      return `${channel.name} ${outcome}`;
+    })
+    .join(" · ");
+}
 
 export function buildOrderTimeline(
   bundle: Omit<OrderDetailBundle, "timeline">,
@@ -90,7 +142,7 @@ export function buildOrderTimeline(
       id: `conv-${conversion.id}`,
       kind: "conversion",
       title: `Conversión ${conversion.event_name}`,
-      description: conversion.platform,
+      description: formatConversionTimelineDescription(conversion),
       occurredAt: conversion.event_time,
     });
   }
