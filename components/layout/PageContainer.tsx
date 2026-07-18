@@ -10,7 +10,12 @@ export function PageContainer({
   className?: string;
 }) {
   return (
-    <div className={cn("mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-6 sm:py-[22px]", className)}>
+    <div
+      className={cn(
+        "mx-auto w-full min-w-0 max-w-[1600px] px-3 py-4 sm:px-6 sm:py-[22px]",
+        className,
+      )}
+    >
       {children}
     </div>
   );

@@ -113,9 +113,9 @@ export default async function OrderDetailPage({
     : null;
 
   return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+    <section className="min-w-0 space-y-5">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
           <Link
             href={routes.store.orders(p.agencySlug, p.storeSlug)}
             className="text-xs text-text-secondary hover:text-text-primary hover:underline"
@@ -133,7 +133,7 @@ export default async function OrderDetailPage({
             <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
           </div>
         </div>
-        <div className="w-full max-w-md">
+        <div className="w-full min-w-0 max-w-md shrink-0 lg:ml-auto">
           <OrderActionsPanel
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
@@ -145,6 +145,7 @@ export default async function OrderDetailPage({
 
       <Tabs
         defaultValue="resumen"
+        className="min-w-0"
         tabs={[
           {
             value: "resumen",
