@@ -2,11 +2,55 @@ import { labelConfirmationStatus, labelOrderStatus, labelPaymentStatus } from "@
 import type { OrderDetailBundle, OrderTimelineItem } from "@/types/orders";
 import type { Json } from "@/types/database.generated";
 
-type ConversionChannelSummary = {
-  name: string;
+export type ConversionChannelOutcome = "live" | "failed" | "dry_run" | "sent";
+
+export type ConversionChannelSummary = {
+  name: "meta" | "tiktok";
   mode?: string;
   ok?: boolean;
+  outcome: ConversionChannelOutcome;
 };
+
+function channelOutcome(channel: {
+  mode?: string;
+  ok?: boolean;
+}): ConversionChannelOutcome {
+  if (channel.mode === "dry_run") return "dry_run";
+  if (channel.ok === true) return "live";
+  if (channel.ok === false) return "failed";
+  return (channel.mode as ConversionChannelOutcome | undefined) ?? "sent";
+}
+
+/**
+ * Read per-channel Meta/TikTok send outcomes from conversion_events.custom_data.
+ * One DB row can (and usually does) cover both platforms.
+ */
+export function parseConversionChannels(
+  customData: Json | null | undefined,
+): ConversionChannelSummary[] {
+  const bag =
+    customData && typeof customData === "object" && !Array.isArray(customData)
+      ? (customData as Record<string, unknown>)
+      : null;
+  if (!bag) return [];
+
+  const channels: ConversionChannelSummary[] = [];
+  for (const name of ["meta", "tiktok"] as const) {
+    const raw = bag[name];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const entry = raw as Record<string, unknown>;
+    if (!("mode" in entry) && !("ok" in entry) && !("missing_credentials" in entry)) continue;
+    const mode = typeof entry.mode === "string" ? entry.mode : undefined;
+    const ok = typeof entry.ok === "boolean" ? entry.ok : undefined;
+    channels.push({
+      name,
+      mode,
+      ok,
+      outcome: channelOutcome({ mode, ok }),
+    });
+  }
+  return channels;
+}
 
 /** Prefer dual Meta+TikTok labels from custom_data (S12); fall back to platform column. */
 export function formatConversionTimelineDescription(conversion: {
@@ -14,43 +58,13 @@ export function formatConversionTimelineDescription(conversion: {
   custom_data?: Json;
   status?: string;
 }): string {
-  const bag =
-    conversion.custom_data &&
-    typeof conversion.custom_data === "object" &&
-    !Array.isArray(conversion.custom_data)
-      ? (conversion.custom_data as Record<string, unknown>)
-      : null;
-
-  const channels: ConversionChannelSummary[] = [];
-  for (const name of ["meta", "tiktok"] as const) {
-    const raw = bag?.[name];
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const entry = raw as Record<string, unknown>;
-    if (!("mode" in entry) && !("ok" in entry) && !("missing_credentials" in entry)) continue;
-    channels.push({
-      name,
-      mode: typeof entry.mode === "string" ? entry.mode : undefined,
-      ok: typeof entry.ok === "boolean" ? entry.ok : undefined,
-    });
-  }
+  const channels = parseConversionChannels(conversion.custom_data);
 
   if (channels.length === 0) {
     return conversion.status ? `${conversion.platform} · ${conversion.status}` : conversion.platform;
   }
 
-  return channels
-    .map((channel) => {
-      const outcome =
-        channel.mode === "dry_run"
-          ? "dry_run"
-          : channel.ok === true
-            ? "live"
-            : channel.ok === false
-              ? "failed"
-              : (channel.mode ?? "sent");
-      return `${channel.name} ${outcome}`;
-    })
-    .join(" · ");
+  return channels.map((channel) => `${channel.name} ${channel.outcome}`).join(" · ");
 }
 
 export function buildOrderTimeline(

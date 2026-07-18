@@ -92,6 +92,7 @@ export default async function OrderDetailPage({
   const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
   const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
   const hasLanding = Boolean(order.landing_site?.trim() || order.referring_site?.trim());
+  const attributedPlatform = primaryAttribution?.platform ?? null;
   const conversionItems: ConversionReleaseItem[] = detail.conversionEvents
     .slice()
     .sort((a, b) => (a.event_time < b.event_time ? 1 : -1))
@@ -108,6 +109,8 @@ export default async function OrderDetailPage({
       sentAt: row.sent_at,
       releasedAt: row.released_at,
       lastErrorMessage: row.last_error_message,
+      customData: row.custom_data,
+      attributedPlatform,
     }));
   const pendingConversions = conversionItems.filter(
     (item) => item.releaseStatus === "pending_review",

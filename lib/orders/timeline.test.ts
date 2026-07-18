@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatConversionTimelineDescription } from "@/lib/orders/timeline";
+import {
+  formatConversionTimelineDescription,
+  parseConversionChannels,
+} from "@/lib/orders/timeline";
 
 describe("order conversion timeline labels", () => {
   it("falls back to platform when custom_data has no channel payloads", () => {
@@ -34,6 +37,20 @@ describe("order conversion timeline labels", () => {
         },
       }),
       "meta failed · tiktok dry_run",
+    );
+  });
+
+  it("parses both channel outcomes for the Conversiones panel", () => {
+    const channels = parseConversionChannels({
+      meta: { mode: "live", ok: true },
+      tiktok: { mode: "live", ok: true },
+    });
+    assert.deepEqual(
+      channels.map((c) => ({ name: c.name, outcome: c.outcome })),
+      [
+        { name: "meta", outcome: "live" },
+        { name: "tiktok", outcome: "live" },
+      ],
     );
   });
 });
