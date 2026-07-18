@@ -9,16 +9,12 @@ import {
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDateTime } from "@/lib/formatting/date";
-import {
-  labelHoldReason,
-  labelReleaseStatus,
-  type ConversionReleaseStatus,
-} from "@/lib/conversions/release-policy";
+import { labelHoldReason } from "@/lib/conversions/release-policy";
 import {
   parseConversionChannels,
   type ConversionChannelOutcome,
+  type ConversionChannelSummary,
 } from "@/lib/orders/timeline";
 import type { Json } from "@/types/database.generated";
 
@@ -41,48 +37,23 @@ export type ConversionReleaseItem = {
   attributedPlatform?: string | null;
 };
 
-function deliveryLabel(status: string): string {
-  switch (status) {
-    case "queued":
-      return "En cola";
-    case "sending":
-      return "Enviando";
-    case "sent":
-      return "Enviada";
-    case "failed":
-      return "Falló el envío";
-    case "cancelled":
-      return "Cancelada";
-    case "rejected":
-      return "Rechazada por la plataforma";
-    default:
-      return status;
-  }
+function eventNameLabel(eventName: string): string {
+  return eventName === "Purchase" ? "Compra" : eventName;
 }
 
-function releaseBadgeClass(status: string): string {
-  switch (status) {
-    case "released":
-      return "bg-emerald-100 text-emerald-800";
-    case "pending_review":
-      return "bg-amber-100 text-amber-800";
-    case "rejected":
-      return "bg-red-100 text-red-700";
-    default:
-      return "";
-  }
+function channelDisplayName(name: ConversionChannelSummary["name"]): string {
+  return name === "meta" ? "Meta" : "TikTok";
 }
 
 function channelOutcomeLabel(outcome: ConversionChannelOutcome): string {
   switch (outcome) {
     case "live":
+    case "sent":
       return "enviado";
     case "failed":
       return "falló";
     case "dry_run":
-      return "dry_run";
-    case "sent":
-      return "enviado";
+      return "prueba";
   }
 }
 
@@ -103,8 +74,57 @@ function labelAttributedPlatform(platform: string): string {
   if (key === "meta" || key === "facebook" || key === "fb") return "Meta";
   if (key === "tiktok" || key === "tt") return "TikTok";
   if (key === "google") return "Google";
-  if (key === "organic" || key === "direct") return platform;
   return platform;
+}
+
+type CardState = {
+  badgeLabel: string;
+  badgeClass: string;
+  explanation: string;
+};
+
+function cardState(event: ConversionReleaseItem): CardState {
+  if (event.releaseStatus === "rejected") {
+    return {
+      badgeLabel: "Rechazada",
+      badgeClass: "bg-red-100 text-red-700",
+      explanation: "Rechazada: no se enviará a las plataformas de anuncios.",
+    };
+  }
+  if (event.releaseStatus === "pending_review") {
+    return {
+      badgeLabel: "En revisión",
+      badgeClass: "bg-amber-100 text-amber-800",
+      explanation: "Retenida por el filtro de liberación; aún no se avisa a las plataformas.",
+    };
+  }
+  switch (event.deliveryStatus) {
+    case "sent":
+    case "acknowledged":
+      return {
+        badgeLabel: "Enviado",
+        badgeClass: "bg-emerald-100 text-emerald-800",
+        explanation: "La plataforma de anuncios recibió el aviso de conversión.",
+      };
+    case "failed":
+      return {
+        badgeLabel: "Falló",
+        badgeClass: "bg-red-100 text-red-700",
+        explanation: "El último intento de aviso falló; se reintentará automáticamente.",
+      };
+    case "cancelled":
+      return {
+        badgeLabel: "Cancelada",
+        badgeClass: "bg-slate-100 text-slate-700",
+        explanation: "Cancelada: no se enviará a las plataformas de anuncios.",
+      };
+    default:
+      return {
+        badgeLabel: "En cola",
+        badgeClass: "bg-slate-100 text-slate-700",
+        explanation: "Liberada y en cola para el envío automático.",
+      };
+  }
 }
 
 export function ConversionReleasePanel({
@@ -128,10 +148,10 @@ export function ConversionReleasePanel({
 
   if (!events.length) {
     return (
-      <EmptyState
-        title="Sin conversiones"
-        description="Aún no hay candidatos de Purchase para este pedido. Se generan al cobrar o entregar un pedido COD."
-      />
+      <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-text-secondary">
+        Aún no hay avisos de conversión para este pedido. Se generan al cobrar o entregar un
+        pedido COD.
+      </p>
     );
   }
 
@@ -169,8 +189,17 @@ export function ConversionReleasePanel({
       ) : null}
       <ul className="space-y-3">
         {events.map((event) => {
-          const holdLabel = labelHoldReason(event.holdReason);
           const channels = parseConversionChannels(event.customData);
+          const state = cardState(event);
+          const holdLabel = labelHoldReason(event.holdReason);
+          const eventLabel = eventNameLabel(event.eventName);
+          const channelNames = channels.map((c) => channelDisplayName(c.name));
+          const title = channelNames.length
+            ? `Último aviso a ${channelNames.join(" y ")} · ${eventLabel}`
+            : `${eventLabel} sin aviso enviado todavía`;
+          const lastAt = event.sentAt ?? event.releasedAt ?? event.eventTime;
+          const attributed = event.attributedPlatform?.trim() || null;
+
           const canRelease =
             canManage && !event.sentAt && event.releaseStatus !== "released";
           const canRetry =
@@ -178,69 +207,53 @@ export function ConversionReleasePanel({
             !event.sentAt &&
             event.releaseStatus === "released" &&
             (event.deliveryStatus === "failed" || event.deliveryStatus === "queued");
-          const canReject = canManage && !event.sentAt && event.releaseStatus !== "rejected";
-          const attributed = event.attributedPlatform?.trim() || null;
+          const canReject =
+            canManage && !event.sentAt && event.releaseStatus !== "rejected";
 
           return (
-            <li key={event.id} className="rounded-md border border-border px-3 py-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{event.eventName}</span>
-                  <Badge className={releaseBadgeClass(event.releaseStatus)}>
-                    {labelReleaseStatus(event.releaseStatus as ConversionReleaseStatus)}
-                  </Badge>
-                  <Badge>{deliveryLabel(event.deliveryStatus)}</Badge>
+            <li key={event.id} className="rounded-md border border-border px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+                    Estado de conversión
+                  </p>
+                  <p className="font-medium">{title}</p>
+                  <p className="text-xs text-text-secondary">
+                    Última vez: {formatWhen(lastAt)}
+                    {event.value != null
+                      ? ` · ${event.value.toFixed(2)} ${event.currencyCode ?? ""}`.trimEnd()
+                      : ""}
+                  </p>
+                </div>
+                <Badge className={state.badgeClass}>{state.badgeLabel}</Badge>
+              </div>
+
+              <p className="mt-2 text-xs text-text-secondary">{state.explanation}</p>
+              {holdLabel && event.releaseStatus === "pending_review" ? (
+                <p className="mt-1 text-xs text-text-secondary">
+                  Motivo: <span className="text-text-primary">{holdLabel}</span>
+                </p>
+              ) : null}
+              {event.lastErrorMessage ? (
+                <p className="mt-1 text-xs text-red-700">
+                  Último error: {event.lastErrorMessage.slice(0, 160)}
+                </p>
+              ) : null}
+
+              {channels.length > 0 || attributed ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {channels.map((channel) => (
+                    <Badge key={channel.name} className={channelBadgeClass(channel.outcome)}>
+                      {channelDisplayName(channel.name)} · {channelOutcomeLabel(channel.outcome)}
+                    </Badge>
+                  ))}
                   {attributed ? (
                     <Badge className="bg-sky-100 text-sky-800">
                       Atribuido: {labelAttributedPlatform(attributed)}
                     </Badge>
                   ) : null}
                 </div>
-                <time className="text-xs text-text-secondary">{formatWhen(event.eventTime)}</time>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-text-secondary">Enviado a:</span>
-                {channels.length > 0 ? (
-                  channels.map((channel) => (
-                    <Badge
-                      key={channel.name}
-                      className={channelBadgeClass(channel.outcome)}
-                    >
-                      {channel.name} · {channelOutcomeLabel(channel.outcome)}
-                    </Badge>
-                  ))
-                ) : (
-                  <Badge>{event.platform}</Badge>
-                )}
-              </div>
-
-              <dl className="mt-2 grid gap-1 text-xs text-text-secondary sm:grid-cols-2">
-                <div>
-                  Valor:{" "}
-                  <span className="text-text-primary">
-                    {event.value != null
-                      ? `${event.value.toFixed(2)} ${event.currencyCode ?? ""}`.trim()
-                      : "—"}
-                  </span>
-                </div>
-                <div>
-                  Enviada:{" "}
-                  <span className="text-text-primary">
-                    {event.sentAt ? formatWhen(event.sentAt) : "—"}
-                  </span>
-                </div>
-                {holdLabel && event.releaseStatus !== "released" ? (
-                  <div className="sm:col-span-2">
-                    Motivo: <span className="text-text-primary">{holdLabel}</span>
-                  </div>
-                ) : null}
-                {event.lastErrorMessage ? (
-                  <div className="sm:col-span-2 text-red-700">
-                    Último error: {event.lastErrorMessage.slice(0, 160)}
-                  </div>
-                ) : null}
-              </dl>
+              ) : null}
 
               {canRelease || canRetry || canReject ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -272,7 +285,9 @@ export function ConversionReleasePanel({
                       size="sm"
                       variant="danger"
                       disabled={pending}
-                      onClick={() => run(() => rejectConversionEvent(agencySlug, storeSlug, event.id))}
+                      onClick={() =>
+                        run(() => rejectConversionEvent(agencySlug, storeSlug, event.id))
+                      }
                     >
                       Rechazar
                     </Button>

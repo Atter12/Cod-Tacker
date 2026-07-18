@@ -377,38 +377,45 @@ export default async function OrderDetailPage({
             ),
           },
           {
-            value: "conversiones",
-            label: pendingConversions
-              ? `Conversiones (${pendingConversions} en revisión)`
-              : "Conversiones",
-            content: (
-              <ConversionReleasePanel
-                agencySlug={p.agencySlug}
-                storeSlug={p.storeSlug}
-                events={conversionItems}
-                canManage={canManage}
-                timeZone={storeTimeZone}
-              />
-            ),
-          },
-          {
             value: "eventos",
-            label: "Eventos",
+            label: pendingConversions
+              ? `Eventos (${pendingConversions} en revisión)`
+              : "Eventos",
             content: (
-              <ul className="space-y-3">
-                {detail.timeline.map((item) => (
-                  <li key={item.id} className="rounded-md border border-border px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{item.title}</span>
-                      <time className="text-xs text-text-secondary">
-                        {formatWhen(item.occurredAt)}
-                      </time>
-                    </div>
-                    {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
-                    <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">{item.kind}</p>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-5">
+                <section className="space-y-2">
+                  <div>
+                    <h3 className="text-sm font-semibold">Conversión (Meta / TikTok)</h3>
+                    <p className="text-xs text-text-secondary">
+                      Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
+                    </p>
+                  </div>
+                  <ConversionReleasePanel
+                    agencySlug={p.agencySlug}
+                    storeSlug={p.storeSlug}
+                    events={conversionItems}
+                    canManage={canManage}
+                    timeZone={storeTimeZone}
+                  />
+                </section>
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold">Historial</h3>
+                  <ul className="space-y-3">
+                    {detail.timeline.map((item) => (
+                      <li key={item.id} className="rounded-md border border-border px-3 py-2 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">{item.title}</span>
+                          <time className="text-xs text-text-secondary">
+                            {formatWhen(item.occurredAt)}
+                          </time>
+                        </div>
+                        {item.description ? <p className="mt-1 text-text-secondary">{item.description}</p> : null}
+                        <p className="mt-1 text-[11px] uppercase tracking-wide text-text-secondary">{item.kind}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
             ),
           },
           {
