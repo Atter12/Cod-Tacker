@@ -42,6 +42,8 @@ export type AuditAction =
   | "settlement_item_manual_match"
   | "settlement_item_discrepancy_resolved"
   | "ads_hierarchy_seed_enqueued"
+  | "conversion_released"
+  | "conversion_rejected"
   | "alert_acknowledged"
   | "alert_assigned"
   | "alert_resolved"

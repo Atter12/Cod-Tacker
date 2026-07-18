@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  ConversionReleasePanel,
+  type ConversionReleaseItem,
+} from "@/components/orders/ConversionReleasePanel";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
 import {
@@ -88,6 +92,26 @@ export default async function OrderDetailPage({
   const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
   const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
   const hasLanding = Boolean(order.landing_site?.trim() || order.referring_site?.trim());
+  const conversionItems: ConversionReleaseItem[] = detail.conversionEvents
+    .slice()
+    .sort((a, b) => (a.event_time < b.event_time ? 1 : -1))
+    .map((row) => ({
+      id: row.id,
+      eventName: row.event_name,
+      platform: row.platform,
+      value: row.value != null ? Number(row.value) : null,
+      currencyCode: row.currency_code,
+      eventTime: row.event_time,
+      deliveryStatus: row.status,
+      releaseStatus: row.release_status,
+      holdReason: row.hold_reason,
+      sentAt: row.sent_at,
+      releasedAt: row.released_at,
+      lastErrorMessage: row.last_error_message,
+    }));
+  const pendingConversions = conversionItems.filter(
+    (item) => item.releaseStatus === "pending_review",
+  ).length;
 
   return (
     <section className="space-y-5">
@@ -347,6 +371,21 @@ export default async function OrderDetailPage({
               />
             ) : (
               <EmptyState title="Sin liquidaciones" description="No hay ítems de conciliación." />
+            ),
+          },
+          {
+            value: "conversiones",
+            label: pendingConversions
+              ? `Conversiones (${pendingConversions} en revisión)`
+              : "Conversiones",
+            content: (
+              <ConversionReleasePanel
+                agencySlug={p.agencySlug}
+                storeSlug={p.storeSlug}
+                events={conversionItems}
+                canManage={canManage}
+                timeZone={storeTimeZone}
+              />
             ),
           },
           {

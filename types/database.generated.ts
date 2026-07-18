@@ -1589,6 +1589,7 @@ export type Database = {
           event_id: string
           event_name: string
           event_time: string
+          hold_reason: string | null
           id: string
           integration_id: string | null
           last_error_message: string | null
@@ -1596,6 +1597,9 @@ export type Database = {
           next_retry_at: string | null
           order_id: string
           platform: Database["public"]["Enums"]["ad_platform"]
+          release_status: string
+          released_at: string | null
+          released_by: string | null
           response_payload: Json | null
           sent_at: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -1614,6 +1618,7 @@ export type Database = {
           event_id: string
           event_name: string
           event_time: string
+          hold_reason?: string | null
           id?: string
           integration_id?: string | null
           last_error_message?: string | null
@@ -1621,6 +1626,9 @@ export type Database = {
           next_retry_at?: string | null
           order_id: string
           platform: Database["public"]["Enums"]["ad_platform"]
+          release_status?: string
+          released_at?: string | null
+          released_by?: string | null
           response_payload?: Json | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
@@ -1639,6 +1647,7 @@ export type Database = {
           event_id?: string
           event_name?: string
           event_time?: string
+          hold_reason?: string | null
           id?: string
           integration_id?: string | null
           last_error_message?: string | null
@@ -1646,6 +1655,9 @@ export type Database = {
           next_retry_at?: string | null
           order_id?: string
           platform?: Database["public"]["Enums"]["ad_platform"]
+          release_status?: string
+          released_at?: string | null
+          released_by?: string | null
           response_payload?: Json | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
