@@ -69,12 +69,19 @@ export async function GET(request: Request) {
   const status = criticalOk ? (deps.every((d) => d.ok) ? "ok" : "degraded") : "down";
   const httpStatus = status === "down" ? 503 : 200;
 
-  logger.info("health.check", {
+  const payload = {
     ...ctx,
     status,
     duration_ms: Date.now() - started,
     deps: deps.map((d) => ({ name: d.name, ok: d.ok, latencyMs: d.latencyMs })),
-  });
+  };
+  if (status === "ok") {
+    logger.debug("health.check", payload);
+  } else if (status === "degraded") {
+    logger.warn("health.check", payload);
+  } else {
+    logger.error("health.check", payload);
+  }
 
   return Response.json(
     {

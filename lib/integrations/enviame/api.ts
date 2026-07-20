@@ -59,7 +59,7 @@ export async function fetchEnviameDeliveryTracking(input: {
     if (!snapshot) {
       return { ok: false, error: "enviame_tracking_unparseable", raw: parsed };
     }
-    logger.info("enviame.tracking.ok", {
+    logger.debug("enviame.tracking.ok", {
       identifier: input.identifier,
       status: snapshot.status,
       endpoint: "GET /api/s2/v2/deliveries/{identifier}/tracking",

@@ -165,7 +165,7 @@ export async function handleShopifyWebhookIngress(input: {
     attribution_enriched: attributionEnriched,
     journey_ready: journeyReady,
   };
-  logger.info("shopify.webhook.attribution_debug", {
+  logger.debug("shopify.webhook.attribution_debug", {
     shop,
     topic,
     ...attributionDebug,
