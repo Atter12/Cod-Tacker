@@ -5,7 +5,11 @@ import { fingerprintEnviaApiToken } from "@/lib/integrations/envia/token-fingerp
 import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { resolveEnviaExternalStatusCode } from "@/lib/integrations/envia/map-status";
 import { mapEnviaWebhookToJobPayload } from "@/lib/integrations/envia/map-webhook";
-import { signEnviaWebhook, verifyEnviaWebhookAuth } from "@/lib/integrations/envia/webhook-auth";
+import {
+  allowEnviaOpenWebhookAuth,
+  signEnviaWebhook,
+  verifyEnviaWebhookAuth,
+} from "@/lib/integrations/envia/webhook-auth";
 
 describe("envia webhook / status mapping", () => {
   it("maps Delivered → DELIVERED", () => {
@@ -81,6 +85,56 @@ describe("envia webhook / status mapping", () => {
       eventHeader: null,
     });
     assert.equal(ok.ok, true);
+  });
+
+  it("S15: Production rejects when secret unset (401)", () => {
+    assert.equal(allowEnviaOpenWebhookAuth({ VERCEL_ENV: "production" }), false);
+    const rejected = verifyEnviaWebhookAuth({
+      rawBody: "{}",
+      webhookSecret: null,
+      apiToken: null,
+      authorizationHeader: null,
+      signatureHeader: null,
+      timestampHeader: null,
+      eventHeader: null,
+      allowOpenWhenSecretUnset: false,
+    });
+    assert.equal(rejected.ok, false);
+    if (rejected.ok) return;
+    assert.equal(rejected.status, 401);
+    assert.match(rejected.error, /ENVIA_WEBHOOK_SECRET/);
+  });
+
+  it("S15: Preview may accept open when secret unset", () => {
+    assert.equal(allowEnviaOpenWebhookAuth({ VERCEL_ENV: "preview" }), true);
+    const open = verifyEnviaWebhookAuth({
+      rawBody: "{}",
+      webhookSecret: null,
+      apiToken: null,
+      authorizationHeader: null,
+      signatureHeader: null,
+      timestampHeader: null,
+      eventHeader: null,
+      allowOpenWhenSecretUnset: true,
+    });
+    assert.equal(open.ok, true);
+    if (!open.ok) return;
+    assert.equal(open.open, true);
+  });
+
+  it("S15: rejects invalid signature with 401 when secret is set", () => {
+    const bad = verifyEnviaWebhookAuth({
+      rawBody: "{}",
+      webhookSecret: "whsec",
+      apiToken: null,
+      authorizationHeader: null,
+      signatureHeader: "v1=deadbeef",
+      timestampHeader: "1700000000000",
+      eventHeader: "tracking.simple",
+    });
+    assert.equal(bad.ok, false);
+    if (bad.ok) return;
+    assert.equal(bad.status, 401);
   });
 
   it("fingerprints API token stably", () => {

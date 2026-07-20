@@ -22,8 +22,8 @@ type ResolvedStore = {
  * Envia.com webhook ingress (hybrid tenant resolve).
  *
  * Order: path slug → tracking → order → Bearer API-token fingerprint → demo store hint.
- * Auth (when ENVIA_WEBHOOK_SECRET is set): Bearer or X-Webhook-Signature.
- * When secret unset: accept (UI Probar) + warn — set secret in production.
+ * Auth: Bearer secret or X-Webhook-Signature HMAC when ENVIA_WEBHOOK_SECRET is set.
+ * S15: Production rejects when secret is unset (401). Preview may accept open for Probar.
  */
 export async function handleEnviaWebhookIngress(input: {
   rawBody: string;
@@ -48,11 +48,19 @@ export async function handleEnviaWebhookIngress(input: {
   });
 
   if (!authOk.ok) {
+    logger.warn("envia.webhook.rejected", {
+      status: authOk.status,
+      error: authOk.error,
+      vercel_env: process.env.VERCEL_ENV ?? null,
+      secret_configured: Boolean(env.webhookSecret),
+    });
     return { status: authOk.status, body: { error: authOk.error } };
   }
   if (authOk.open) {
     logger.warn("envia.webhook.auth_open", {
-      message: "ENVIA_WEBHOOK_SECRET unset — accepting webhook without signature (set for production)",
+      message:
+        "ENVIA_WEBHOOK_SECRET unset — accepting webhook without signature (Preview/dev only; Production requires secret)",
+      vercel_env: process.env.VERCEL_ENV ?? null,
     });
   }
 
