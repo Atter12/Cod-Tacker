@@ -59,9 +59,17 @@ export function normalizeMetaEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** Digits only; include country code when available (Meta recommendation). */
-export function normalizeMetaPhone(phone: string): string {
-  return phone.replace(/\D/g, "");
+/**
+ * Digits only; include country code when available (Meta recommendation).
+ * PE mobiles stored as 9 digits (9xxxxxxxx) are expanded to 51XXXXXXXXX.
+ */
+export function normalizeMetaPhone(phone: string, countryCode?: string | null): string {
+  let digits = phone.replace(/\D/g, "");
+  const cc = countryCode?.trim().toUpperCase();
+  if (cc === "PE" && digits.length === 9 && digits.startsWith("9")) {
+    digits = `51${digits}`;
+  }
+  return digits;
 }
 
 /**
@@ -81,7 +89,7 @@ export function buildMetaCapiUserData(payload: MetaCapiPurchasePayload): Record<
 
   const phone = payload.phone?.trim();
   if (phone) {
-    const digits = normalizeMetaPhone(phone);
+    const digits = normalizeMetaPhone(phone, payload.countryCode);
     if (digits.length >= 7) {
       userData.ph = hashMetaCapiValue(digits);
     }
@@ -254,6 +262,8 @@ export async function sendMetaCapiPurchase(
       status: res.status,
       credentials_source: creds.source,
       user_data_keys: Object.keys(userData),
+      email_present: Boolean(userData.em),
+      phone_present: Boolean(userData.ph),
     });
     return {
       mode: "live",

@@ -8,6 +8,7 @@ import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-it
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import { shouldApplyShopifyPaymentSync } from "@/lib/integrations/shopify/map-payment";
+import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderUpdatedPayloadSchema };
@@ -100,6 +101,7 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       event: live ? "shopify.order.updated" : "shopify.order.updated.mock",
       mode: live ? "live" : "mock",
       ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
+      ...orderContactMetadataPatch(data.customer),
     } as Json,
   };
   if (data.order_status) patch.order_status = data.order_status;

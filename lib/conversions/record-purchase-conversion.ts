@@ -15,6 +15,11 @@ import {
   evaluatePurchaseRelease,
   type ConversionReleaseStatus,
 } from "@/lib/conversions/release-policy";
+import {
+  mergePurchaseContact,
+  purchaseContactFlags,
+  resolveOrderCustomerContact,
+} from "@/lib/conversions/resolve-order-contact";
 import { computeRetryAt } from "@/lib/jobs/backoff";
 import { logger } from "@/lib/observability/logger";
 import type { DatabaseClient } from "@/services/_shared";
@@ -112,44 +117,6 @@ async function resolveConversionIntegrationFk(
     .limit(1)
     .maybeSingle();
   return any.data ?? null;
-}
-
-async function resolveOrderCustomerContact(
-  admin: DatabaseClient,
-  storeId: string,
-  orderId: string,
-): Promise<{
-  email: string | null;
-  phone: string | null;
-  countryCode: string | null;
-  city: string | null;
-}> {
-  const order = await admin
-    .from("orders")
-    .select("customer_id, shipping_country_code, shipping_city")
-    .eq("id", orderId)
-    .eq("store_id", storeId)
-    .maybeSingle();
-
-  let email: string | null = null;
-  let phone: string | null = null;
-  if (order.data?.customer_id) {
-    const customer = await admin
-      .from("customers")
-      .select("email, phone")
-      .eq("id", order.data.customer_id)
-      .eq("store_id", storeId)
-      .maybeSingle();
-    email = customer.data?.email?.trim() || null;
-    phone = customer.data?.phone?.trim() || null;
-  }
-
-  return {
-    email,
-    phone,
-    countryCode: order.data?.shipping_country_code?.trim() || null,
-    city: order.data?.shipping_city?.trim() || null,
-  };
 }
 
 function aggregateDelivery(input: {
@@ -291,11 +258,12 @@ export async function sendQueuedPurchaseConversion(input: {
     });
   }
 
-  const contact = await resolveOrderCustomerContact(
+  const resolved = await resolveOrderCustomerContact(
     input.admin,
     input.storeId,
     event.order_id,
   );
+  const contact = mergePurchaseContact(resolved);
 
   const eventTime = event.event_time ?? new Date().toISOString();
   const eventTimeUnix = Math.floor(new Date(eventTime).getTime() / 1000);
@@ -303,6 +271,7 @@ export async function sendQueuedPurchaseConversion(input: {
   const currency = (event.currency_code ?? "PEN").slice(0, 3).toUpperCase();
   const platform: AdPlatform = tiktokCreds && !metaCreds ? "tiktok" : "meta";
   const source = readCustomDataSource(event.custom_data);
+  const contactFlags = purchaseContactFlags(contact);
 
   const sharedPayload = {
     eventId: event.event_id,
@@ -323,6 +292,7 @@ export async function sendQueuedPurchaseConversion(input: {
     sendTikTokEventsPurchase(tiktokCreds, {
       ...sharedPayload,
       eventTimeIso: eventTime,
+      countryCode: contact.countryCode,
       externalId: event.order_id,
     }),
   ]);
@@ -376,6 +346,7 @@ export async function sendQueuedPurchaseConversion(input: {
       last_error_message: aggregated.lastError,
       response_payload: responsePayload,
       custom_data: customData,
+      user_data: contactFlags as Json,
       platform,
       updated_at: new Date().toISOString(),
     })
@@ -390,6 +361,9 @@ export async function sendQueuedPurchaseConversion(input: {
     meta_mode: meta.mode,
     tiktok_mode: tiktok.mode,
     conversion_event_id: event.id,
+    email_present: contactFlags.email_present,
+    phone_present: contactFlags.phone_present,
+    user_data: contactFlags,
   });
 
   return {
@@ -487,15 +461,18 @@ export async function recordPurchaseConversionEvent(
     tiktokIntegration,
   );
 
-  const contact =
-    input.email || input.phone || input.countryCode || input.city
-      ? {
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          countryCode: input.countryCode ?? null,
-          city: input.city ?? null,
-        }
-      : await resolveOrderCustomerContact(input.admin, input.storeId, input.orderId);
+  const resolved = await resolveOrderCustomerContact(
+    input.admin,
+    input.storeId,
+    input.orderId,
+  );
+  const contact = mergePurchaseContact(resolved, {
+    email: input.email,
+    phone: input.phone,
+    countryCode: input.countryCode,
+    city: input.city,
+  });
+  const contactFlags = purchaseContactFlags(contact);
 
   const currency = input.currencyCode.slice(0, 3).toUpperCase();
   const platform: AdPlatform =
@@ -523,6 +500,7 @@ export async function recordPurchaseConversionEvent(
         currency_code: currency,
         event_time: eventTime,
         platform,
+        user_data: contactFlags as Json,
         updated_at: new Date().toISOString(),
       })
       .eq("id", rowId)
@@ -546,13 +524,7 @@ export async function recordPurchaseConversionEvent(
         attempts: 0,
         value: input.value,
         currency_code: currency,
-        user_data: {
-          email_present: Boolean(contact.email?.trim()),
-          phone_present: Boolean(contact.phone?.trim()),
-          country_present: Boolean(contact.countryCode?.trim()),
-          city_present: Boolean(contact.city?.trim()),
-          external_id_hashed: true,
-        } as Json,
+        user_data: contactFlags as Json,
         custom_data: queuedCustomData,
       })
       .select("id")
@@ -619,6 +591,9 @@ export async function recordPurchaseConversionEvent(
       conversion_event_id: rowId,
       hold_reason: holdReason,
       source: input.source ?? "cash_collected",
+      email_present: contactFlags.email_present,
+      phone_present: contactFlags.phone_present,
+      user_data: contactFlags,
     });
     return {
       created,
@@ -637,6 +612,9 @@ export async function recordPurchaseConversionEvent(
     conversion_event_id: rowId,
     release_reason: decision.release ? decision.reason : "previously_released",
     released_by: "auto_filter",
+    email_present: contactFlags.email_present,
+    phone_present: contactFlags.phone_present,
+    user_data: contactFlags,
   });
 
   const sendResult = await sendQueuedPurchaseConversion({

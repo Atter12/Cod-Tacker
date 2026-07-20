@@ -17,6 +17,8 @@ export type TikTokEventsPurchasePayload = {
   orderId: string;
   email?: string | null;
   phone?: string | null;
+  /** ISO-3166 alpha-2 — used to expand local phones (e.g. PE → 51). */
+  countryCode?: string | null;
   externalId?: string | null;
 };
 
@@ -57,9 +59,17 @@ export function normalizeTikTokEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** Digits only; include country code when available. */
-export function normalizeTikTokPhone(phone: string): string {
-  return phone.replace(/\D/g, "");
+/**
+ * Digits only; include country code when available.
+ * PE mobiles stored as 9 digits (9xxxxxxxx) are expanded to 51XXXXXXXXX.
+ */
+export function normalizeTikTokPhone(phone: string, countryCode?: string | null): string {
+  let digits = phone.replace(/\D/g, "");
+  const cc = countryCode?.trim().toUpperCase();
+  if (cc === "PE" && digits.length === 9 && digits.startsWith("9")) {
+    digits = `51${digits}`;
+  }
+  return digits;
 }
 
 /**
@@ -77,7 +87,7 @@ export function buildTikTokEventsUser(payload: TikTokEventsPurchasePayload): Rec
 
   const phone = payload.phone?.trim();
   if (phone) {
-    const digits = normalizeTikTokPhone(phone);
+    const digits = normalizeTikTokPhone(phone, payload.countryCode);
     if (digits.length >= 7) {
       user.phone_number = hashTikTokEventsValue(digits);
     }
@@ -260,6 +270,8 @@ export async function sendTikTokEventsPurchase(
       status: res.status,
       credentials_source: creds.source,
       user_keys: Object.keys(user),
+      email_present: Boolean(user.email),
+      phone_present: Boolean(user.phone_number),
     });
     return {
       mode: "live",

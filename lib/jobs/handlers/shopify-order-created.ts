@@ -4,6 +4,7 @@ import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-or
 import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
+import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderCreatedPayloadSchema };
@@ -61,10 +62,28 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       if (customerId) amountPatch.customer_id = customerId;
     }
 
-    if (Object.keys(amountPatch).length > 0) {
+    const contactMeta = orderContactMetadataPatch(data.customer);
+    if (Object.keys(amountPatch).length > 0 || Object.keys(contactMeta).length > 0) {
+      const existingMeta = await admin
+        .from("orders")
+        .select("metadata")
+        .eq("id", existing.data.id)
+        .eq("store_id", job.store_id)
+        .maybeSingle();
+      const prev =
+        existingMeta.data?.metadata &&
+        typeof existingMeta.data.metadata === "object" &&
+        !Array.isArray(existingMeta.data.metadata)
+          ? (existingMeta.data.metadata as Record<string, unknown>)
+          : {};
       await admin
         .from("orders")
-        .update(amountPatch)
+        .update({
+          ...amountPatch,
+          ...(Object.keys(contactMeta).length > 0
+            ? { metadata: { ...prev, ...contactMeta } as Json }
+            : {}),
+        })
         .eq("id", existing.data.id)
         .eq("store_id", job.store_id);
     }
@@ -164,6 +183,7 @@ export const handleShopifyOrderCreated: JobHandler = async ({
         event: live ? "shopify.order.created" : "shopify.order.created.mock",
         mode: live ? "live" : "mock",
         ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
+        ...orderContactMetadataPatch(data.customer),
       } as Json,
       tags: live ? ["jobs", "shopify", "live"] : ["jobs", "shopify", "mock"],
     })
