@@ -596,7 +596,86 @@ export async function reconnect(
       "En modo live, actualiza Envia con el formulario de token (Conectar Envia), no con reconnect mock.",
     );
   }
+  if (input.provider === "meta" && getIntegrationRuntimeMode() === "live") {
+    return connectMetaAdsLive(client, {
+      agencyId: input.agencyId,
+      storeId: input.storeId,
+      userId: input.userId,
+    });
+  }
   return connectMock(client, input);
+}
+
+/**
+ * Live Meta Ads connect (S16): creates/updates the integration row using
+ * META_ADS_* env or integration settings. No OAuth UI — token lives in Vercel.
+ */
+export async function connectMetaAdsLive(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    userId: string;
+  },
+): Promise<IntegrationRow> {
+  const scope = assertStoreScope(input.agencyId, input.storeId);
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "meta");
+  const creds = resolveLiveMetaAdsCredentials(
+    existing?.settings ?? null,
+    existing?.metadata ?? null,
+  );
+  if (!creds) {
+    throw new IntegrationError(
+      "Meta Ads live requiere META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID en Vercel (o ads_access_token + ad_account_id en settings).",
+    );
+  }
+
+  const now = new Date().toISOString();
+  const catalog = getCatalogEntry("meta");
+  const payload = {
+    agency_id: scope.agencyId,
+    store_id: scope.storeId,
+    provider: "meta" as const,
+    status: "connected" as const,
+    display_name: catalog?.name || "Meta Ads",
+    external_account_id: creds.adAccountId,
+    external_account_name: creds.adAccountId,
+    secret_reference: `env:meta-ads:${creds.source}`,
+    scopes: ["ads_read"],
+    metadata: {
+      demo: false,
+      mode: "live",
+      credentials_source: creds.source,
+      ad_account_id: creds.adAccountId,
+    } as Json,
+    settings: {
+      ad_account_id: creds.adAccountId,
+      currency: creds.currencyFallback,
+    } as Json,
+    connected_at: now,
+    connected_by: input.userId,
+    last_error_at: null,
+    last_error_message: null,
+  };
+
+  if (existing) {
+    const result = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("store_id", scope.storeId)
+      .eq("agency_id", scope.agencyId)
+      .select()
+      .single();
+    throwQueryError(result.error);
+    if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Meta Ads.");
+    return result.data;
+  }
+
+  const result = await client.from("integrations").insert(payload).select().single();
+  throwQueryError(result.error);
+  if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Meta Ads.");
+  return result.data;
 }
 
 /**

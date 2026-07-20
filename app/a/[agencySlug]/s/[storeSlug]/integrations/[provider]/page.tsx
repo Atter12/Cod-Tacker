@@ -20,6 +20,7 @@ import {
   labelSyncType,
 } from "@/lib/integrations/catalog";
 import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
+import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { getIntegrationRuntimeMode, isDemoIntegrationMode } from "@/lib/integrations/registry";
 import {
@@ -72,6 +73,8 @@ export default async function IntegrationDetailPage({
   const shopifyLive = p.provider === "shopify" && isShopifyConfigured();
   const enviaProvider = p.provider === "envia_com";
   const liveMode = getIntegrationRuntimeMode() === "live";
+  const metaLive = p.provider === "meta" && liveMode;
+  const metaEnvConfigured = metaLive && !!readMetaAdsCredentialsFromEnv();
   const enviaUrls = enviaProvider
     ? buildEnviaWebhookUrls(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
     : null;
@@ -94,7 +97,7 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo && !shopifyLive && !enviaProvider ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive && !enviaProvider && !metaLive ? <DemoModeBadge /> : null}
         />
       </div>
 
@@ -109,7 +112,7 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
-      {demo && !shopifyLive && !enviaProvider ? (
+      {demo && !shopifyLive && !enviaProvider && !metaLive ? (
         <Alert variant="info" title="Modo demostración">
           Esta conexión usa adaptadores mock. No se realizan llamadas a APIs externas.
         </Alert>
@@ -118,6 +121,14 @@ export default async function IntegrationDetailPage({
       {shopifyLive ? (
         <Alert variant="info" title="Shopify live">
           Credenciales de app configuradas. Puedes autorizar una tienda real vía OAuth.
+        </Alert>
+      ) : null}
+
+      {metaLive ? (
+        <Alert variant="info" title="Meta Ads live">
+          {metaEnvConfigured
+            ? "Credenciales META_ADS_* detectadas en el entorno. Conectar registra la cuenta de anuncios sin OAuth."
+            : "Modo live activo. Configura META_ADS_ACCESS_TOKEN y META_AD_ACCOUNT_ID en Vercel (o ads_access_token + ad_account_id en settings) antes de conectar."}
         </Alert>
       ) : null}
 
@@ -224,7 +235,7 @@ export default async function IntegrationDetailPage({
         canManage={canManage}
         connected={connected}
         hideMockConnect={shopifyLive || (enviaProvider && liveMode)}
-        liveProvider={(shopifyLive || enviaProvider) && !isDemoIntegrationMode()}
+        liveProvider={(shopifyLive || enviaProvider || metaLive) && !isDemoIntegrationMode()}
         liveReconnectShop={shopDomain}
       />
 

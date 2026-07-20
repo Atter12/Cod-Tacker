@@ -105,11 +105,19 @@ export function IntegrationActions({
               onClick={() =>
                 run(
                   () => connectIntegrationAction(agencySlug, storeSlug, provider),
-                  "Integración conectada (mock).",
+                  liveProvider
+                    ? provider === "meta"
+                      ? "Meta Ads conectado (live)."
+                      : "Integración conectada."
+                    : "Integración conectada (mock).",
                 )
               }
             >
-              Conectar mock
+              {liveProvider
+                ? provider === "meta"
+                  ? "Conectar Meta Ads"
+                  : "Conectar"
+                : "Conectar mock"}
             </Button>
           )
         ) : (
@@ -173,7 +181,11 @@ export function IntegrationActions({
                 onClick={() =>
                   run(
                     () => reconnectIntegrationAction(agencySlug, storeSlug, provider),
-                    "Integración reconectada (mock).",
+                    liveProvider
+                      ? provider === "meta"
+                        ? "Meta Ads reconectado (live)."
+                        : "Integración reconectada."
+                      : "Integración reconectada (mock).",
                   )
                 }
               >
