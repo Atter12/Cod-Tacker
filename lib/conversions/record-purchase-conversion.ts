@@ -283,7 +283,7 @@ export async function sendQueuedPurchaseConversion(input: {
     });
   }
   if (!tiktokCreds) {
-    logger.info("conversion.purchase.tiktok_dry_run_credentials", {
+    logger.debug("conversion.purchase.tiktok_dry_run_credentials", {
       store_id: input.storeId,
       order_id: event.order_id,
       event_id: event.event_id,

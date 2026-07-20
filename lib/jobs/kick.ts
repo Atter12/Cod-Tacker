@@ -17,12 +17,18 @@ export async function kickJobProcessing(input?: {
   try {
     const admin = createAdminClient();
     const result = await processJobBatch(admin, { workerId, limit, queue: "default" });
-    logger.info("jobs.kick.complete", {
+    const fields = {
       workerId,
       reason: input?.reason ?? null,
       claimed: result.claimed,
       completed: result.completed,
-    });
+    };
+    // Idle kicks are routine; only surface work in production audits.
+    if (result.claimed > 0 || result.completed > 0) {
+      logger.info("jobs.kick.complete", fields);
+    } else {
+      logger.debug("jobs.kick.complete", fields);
+    }
   } catch (error) {
     logger.error("jobs.kick.failed", {
       workerId,

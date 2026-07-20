@@ -70,7 +70,7 @@ export async function handleEnviaWebhookIngress(input: {
   if (!mapped.ok) {
     // Envia UI "Probar" often sends an empty/`{}` ping without tracking.
     if (mapped.error === "missing_tracking_number" || mapped.error === "payload_not_object") {
-      logger.info("envia.webhook.probe_ack", {
+      logger.debug("envia.webhook.probe_ack", {
         error: mapped.error,
         agency_slug: input.agencySlug ?? null,
         store_slug: input.storeSlug ?? null,

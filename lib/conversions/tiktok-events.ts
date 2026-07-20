@@ -167,7 +167,7 @@ export async function sendTikTokEventsPurchase(
   payload: TikTokEventsPurchasePayload,
 ): Promise<TikTokEventsSendResult> {
   if (!creds) {
-    logger.info("tiktok.events.purchase.dry_run", {
+    logger.debug("tiktok.events.purchase.dry_run", {
       event_id: payload.eventId,
       order_id: payload.orderId,
       value: payload.value,
