@@ -30,6 +30,7 @@ import {
   getIntegrationRuntimeMode,
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
+  resolveLiveMetaAdsCredentials,
 } from "@/lib/integrations/registry";
 import {
   fingerprintEnviaApiToken,
@@ -160,7 +161,7 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
   }
 }
 
-/** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify + Enviame). */
+/** Resolve adapter using stored credentials when INTEGRATION_MODE=live (Shopify + Meta Ads + carriers). */
 export async function resolveStoreProviderForIntegration(
   provider: string,
   integration: IntegrationRow,
@@ -207,6 +208,22 @@ export async function resolveStoreProviderForIntegration(
       );
     }
     const adapter = getCarrierProvider("envia_com", { apiToken: token });
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "meta" && getIntegrationRuntimeMode() === "live") {
+    const creds = resolveLiveMetaAdsCredentials(integration.settings, integration.metadata);
+    if (!creds) {
+      throw new IntegrationError(
+        "Meta Ads live requiere META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID en Vercel, o ads_access_token + ad_account_id en settings de la integración.",
+      );
+    }
+    const adapter = getAdsProvider("meta", creds);
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),

@@ -31,6 +31,11 @@ import {
   createLiveCommerceProvider,
   type LiveShopifyCredentials,
 } from "@/lib/integrations/shopify/live-commerce";
+import {
+  createLiveMetaAdsProvider,
+  type LiveMetaAdsCredentials,
+} from "@/lib/integrations/meta/live-ads";
+import { resolveMetaAdsCredentials } from "@/lib/integrations/meta/env";
 
 export type ProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -42,11 +47,11 @@ function assertMockAllowed(mode: IntegrationMode): void {
 
 function assertLiveProviderConfigured(kind: ProviderKind): never {
   throw new Error(
-    `Live ${kind} adapter is not configured. Shopify commerce, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+    `Live ${kind} adapter is not configured. Shopify commerce, Meta Ads, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
   );
 }
 
-/** Factory/registry: mock by default; Shopify + Enviame + Envia.com support live. */
+/** Factory/registry: mock by default; Shopify + Meta Ads + Enviame + Envia.com support live. */
 export function getIntegrationRuntimeMode(): IntegrationMode {
   return resolveIntegrationMode();
 }
@@ -75,9 +80,22 @@ export function getCommerceProvider(
   return createMockCommerceProvider(providerId);
 }
 
-export function getAdsProvider(providerId: AdsProvider["providerId"] = "meta"): AdsProvider {
+export function getAdsProvider(
+  providerId: AdsProvider["providerId"] = "meta",
+  liveCreds?: LiveMetaAdsCredentials,
+): AdsProvider {
   const mode = resolveIntegrationMode();
-  if (mode === "live") assertLiveProviderConfigured("ads");
+  if (mode === "live") {
+    if (providerId !== "meta") {
+      assertLiveProviderConfigured("ads");
+    }
+    if (!liveCreds?.accessToken || !liveCreds?.adAccountId) {
+      throw new Error(
+        "Meta Ads live requiere META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID (Vercel) o ads_access_token + ad_account_id en la integración.",
+      );
+    }
+    return createLiveMetaAdsProvider(providerId, liveCreds);
+  }
   assertMockAllowed(mode);
   return createMockAdsProvider(providerId);
 }
@@ -146,6 +164,14 @@ export function resolveLiveEnviameCredentials(
     }
   }
   return { apiKey, apiBaseUrl: env.apiBaseUrl, companyId };
+}
+
+/** Resolve live Meta Ads creds from integration JSON + env fallback. */
+export function resolveLiveMetaAdsCredentials(
+  settings: unknown,
+  metadata: unknown,
+): LiveMetaAdsCredentials | null {
+  return resolveMetaAdsCredentials(settings, metadata);
 }
 
 export function getMessagingProvider(

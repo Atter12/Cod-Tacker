@@ -12,6 +12,8 @@ export const adsSpendSyncedPayloadSchema = z.object({
   impressions: z.number().int().nonnegative().default(0),
   clicks: z.number().int().nonnegative().default(0),
   demo_seed: z.string().min(1).max(200).optional(),
+  /** live = Meta/TikTok Insights; mock = demo seed path. */
+  mode: z.enum(["live", "mock"]).optional(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {
@@ -28,13 +30,14 @@ export const handleAdsSpendSynced: JobHandler = async ({
 }): Promise<JobHandlerResult> => {
   const parsed = adsSpendSyncedPayloadSchema.safeParse(asObject(payload));
   if (!parsed.success) {
-    throw new PermanentJobError("INVALID_PAYLOAD", "Payload de ads.spend.synced.mock inválido.");
+    throw new PermanentJobError("INVALID_PAYLOAD", "Payload de ads.spend.synced inválido.");
   }
   if (!job.integration_id) {
     throw new PermanentJobError("MISSING_INTEGRATION", "El trabajo de ads requiere integration_id.");
   }
 
   const data = parsed.data;
+  const isLive = data.mode === "live" || (!data.demo_seed && job.job_type === "ads.spend.synced");
 
   let accountQuery = admin
     .from("ad_accounts")
@@ -58,14 +61,20 @@ export const handleAdsSpendSynced: JobHandler = async ({
         integration_id: job.integration_id,
         platform: data.platform,
         external_account_id: data.external_account_id,
-        name: `Mock ${data.platform} ${data.external_account_id}`,
+        name: isLive
+          ? `${data.platform} ${data.external_account_id}`
+          : `Mock ${data.platform} ${data.external_account_id}`,
         currency_code: data.currency_code,
-        metadata: { demo: true, demo_seed: data.demo_seed ?? null } as Json,
+        metadata: {
+          demo: !isLive,
+          mode: isLive ? "live" : "mock",
+          demo_seed: data.demo_seed ?? null,
+        } as Json,
       })
       .select("id")
       .single();
     if (created.error || !created.data) {
-      throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear la cuenta de anuncios mock.");
+      throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear la cuenta de anuncios.");
     }
     adAccountId = created.data.id;
   }
@@ -89,6 +98,14 @@ export const handleAdsSpendSynced: JobHandler = async ({
     }
   }
 
+  const rawMetrics = {
+    demo: !isLive,
+    mode: isLive ? "live" : "mock",
+    demo_seed: data.demo_seed ?? null,
+    job_id: job.id,
+    source: isLive ? "meta_insights" : "mock_sync",
+  } as Json;
+
   const sameDay = await admin
     .from("ad_spend_daily")
     .select("id")
@@ -104,17 +121,13 @@ export const handleAdsSpendSynced: JobHandler = async ({
         impressions: data.impressions,
         clicks: data.clicks,
         currency_code: data.currency_code,
-        raw_metrics: {
-          demo: true,
-          demo_seed: data.demo_seed ?? null,
-          job_id: job.id,
-        } as Json,
+        raw_metrics: rawMetrics,
       })
       .eq("id", sameDay.data.id)
       .select("id")
       .single();
     if (updated.error || !updated.data) {
-      throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el gasto diario mock.");
+      throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el gasto diario.");
     }
     return {
       ok: true,
@@ -136,16 +149,12 @@ export const handleAdsSpendSynced: JobHandler = async ({
       impressions: data.impressions,
       clicks: data.clicks,
       currency_code: data.currency_code,
-      raw_metrics: {
-        demo: true,
-        demo_seed: data.demo_seed ?? null,
-        job_id: job.id,
-      } as Json,
+      raw_metrics: rawMetrics,
     })
     .select("id")
     .single();
   if (insert.error || !insert.data) {
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudo insertar el gasto diario mock.");
+    throw new PermanentJobError("DATABASE_ERROR", "No se pudo insertar el gasto diario.");
   }
 
   return {
