@@ -36,6 +36,11 @@ import {
   type LiveMetaAdsCredentials,
 } from "@/lib/integrations/meta/live-ads";
 import { resolveMetaAdsCredentials } from "@/lib/integrations/meta/env";
+import {
+  createLiveTikTokAdsProvider,
+  type LiveTikTokAdsCredentials,
+} from "@/lib/integrations/tiktok/live-ads";
+import { resolveTikTokAdsCredentials } from "@/lib/integrations/tiktok/env";
 
 export type ProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -47,11 +52,11 @@ function assertMockAllowed(mode: IntegrationMode): void {
 
 function assertLiveProviderConfigured(kind: ProviderKind): never {
   throw new Error(
-    `Live ${kind} adapter is not configured. Shopify commerce, Meta Ads, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+    `Live ${kind} adapter is not configured. Shopify commerce, Meta Ads, TikTok Ads, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
   );
 }
 
-/** Factory/registry: mock by default; Shopify + Meta Ads + Enviame + Envia.com support live. */
+/** Factory/registry: mock by default; Shopify + Meta/TikTok Ads + Enviame + Envia.com support live. */
 export function getIntegrationRuntimeMode(): IntegrationMode {
   return resolveIntegrationMode();
 }
@@ -82,19 +87,29 @@ export function getCommerceProvider(
 
 export function getAdsProvider(
   providerId: AdsProvider["providerId"] = "meta",
-  liveCreds?: LiveMetaAdsCredentials,
+  liveCreds?: LiveMetaAdsCredentials | LiveTikTokAdsCredentials,
 ): AdsProvider {
   const mode = resolveIntegrationMode();
   if (mode === "live") {
-    if (providerId !== "meta") {
-      assertLiveProviderConfigured("ads");
+    if (providerId === "meta") {
+      const meta = liveCreds as LiveMetaAdsCredentials | undefined;
+      if (!meta?.accessToken || !meta?.adAccountId) {
+        throw new Error(
+          "Meta Ads live requiere META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID (Vercel) o ads_access_token + ad_account_id en la integración.",
+        );
+      }
+      return createLiveMetaAdsProvider("meta", meta);
     }
-    if (!liveCreds?.accessToken || !liveCreds?.adAccountId) {
-      throw new Error(
-        "Meta Ads live requiere META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID (Vercel) o ads_access_token + ad_account_id en la integración.",
-      );
+    if (providerId === "tiktok") {
+      const tiktok = liveCreds as LiveTikTokAdsCredentials | undefined;
+      if (!tiktok?.accessToken || !tiktok?.advertiserId) {
+        throw new Error(
+          "TikTok Ads live requiere TIKTOK_ADS_ACCESS_TOKEN + TIKTOK_ADVERTISER_ID (Vercel) o ads_access_token + advertiser_id en la integración.",
+        );
+      }
+      return createLiveTikTokAdsProvider("tiktok", tiktok);
     }
-    return createLiveMetaAdsProvider(providerId, liveCreds);
+    assertLiveProviderConfigured("ads");
   }
   assertMockAllowed(mode);
   return createMockAdsProvider(providerId);
@@ -172,6 +187,14 @@ export function resolveLiveMetaAdsCredentials(
   metadata: unknown,
 ): LiveMetaAdsCredentials | null {
   return resolveMetaAdsCredentials(settings, metadata);
+}
+
+/** Resolve live TikTok Ads creds from integration JSON + env fallback. */
+export function resolveLiveTikTokAdsCredentials(
+  settings: unknown,
+  metadata: unknown,
+): LiveTikTokAdsCredentials | null {
+  return resolveTikTokAdsCredentials(settings, metadata);
 }
 
 export function getMessagingProvider(

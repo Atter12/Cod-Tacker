@@ -108,7 +108,9 @@ export function IntegrationActions({
                   liveProvider
                     ? provider === "meta"
                       ? "Meta Ads conectado (live)."
-                      : "Integración conectada."
+                      : provider === "tiktok"
+                        ? "TikTok Ads conectado (live)."
+                        : "Integración conectada."
                     : "Integración conectada (mock).",
                 )
               }
@@ -116,7 +118,9 @@ export function IntegrationActions({
               {liveProvider
                 ? provider === "meta"
                   ? "Conectar Meta Ads"
-                  : "Conectar"
+                  : provider === "tiktok"
+                    ? "Conectar TikTok Ads"
+                    : "Conectar"
                 : "Conectar mock"}
             </Button>
           )
@@ -184,7 +188,9 @@ export function IntegrationActions({
                     liveProvider
                       ? provider === "meta"
                         ? "Meta Ads reconectado (live)."
-                        : "Integración reconectada."
+                        : provider === "tiktok"
+                          ? "TikTok Ads reconectado (live)."
+                          : "Integración reconectada."
                       : "Integración reconectada (mock).",
                   )
                 }

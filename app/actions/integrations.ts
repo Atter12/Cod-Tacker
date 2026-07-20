@@ -14,6 +14,7 @@ import {
   backfill as backfillIntegration,
   connectEnviaLive,
   connectMetaAdsLive,
+  connectTikTokAdsLive,
   connectMock,
   disconnect as disconnectIntegration,
   reconnect as reconnectIntegration,
@@ -94,20 +95,28 @@ export async function connectIntegrationAction(
   try {
     const { user, membership, client, storeId } = await loadManagedStore(agencySlug, storeSlug);
     const safeProvider = assertProvider(provider);
-    const liveMeta =
-      safeProvider === "meta" && getIntegrationRuntimeMode() === "live";
+    const runtimeLive = getIntegrationRuntimeMode() === "live";
+    const liveMeta = safeProvider === "meta" && runtimeLive;
+    const liveTikTok = safeProvider === "tiktok" && runtimeLive;
+    const liveAds = liveMeta || liveTikTok;
     const row = liveMeta
       ? await connectMetaAdsLive(client, {
           agencyId: membership.agencyId,
           storeId,
           userId: user.id,
         })
-      : await connectMock(client, {
-          agencyId: membership.agencyId,
-          storeId,
-          provider: safeProvider,
-          userId: user.id,
-        });
+      : liveTikTok
+        ? await connectTikTokAdsLive(client, {
+            agencyId: membership.agencyId,
+            storeId,
+            userId: user.id,
+          })
+        : await connectMock(client, {
+            agencyId: membership.agencyId,
+            storeId,
+            provider: safeProvider,
+            userId: user.id,
+          });
     await writeAuditLog({
       action: "integration_connected",
       entityType: "integration",
@@ -118,8 +127,8 @@ export async function connectIntegrationAction(
       newData: {
         provider: safeProvider,
         status: row.status,
-        demo: !liveMeta,
-        mode: liveMeta ? "live" : "mock",
+        demo: !liveAds,
+        mode: liveAds ? "live" : "mock",
       },
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);

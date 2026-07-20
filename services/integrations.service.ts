@@ -31,6 +31,7 @@ import {
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
   resolveLiveMetaAdsCredentials,
+  resolveLiveTikTokAdsCredentials,
 } from "@/lib/integrations/registry";
 import {
   fingerprintEnviaApiToken,
@@ -224,6 +225,22 @@ export async function resolveStoreProviderForIntegration(
       );
     }
     const adapter = getAdsProvider("meta", creds);
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "tiktok" && getIntegrationRuntimeMode() === "live") {
+    const creds = resolveLiveTikTokAdsCredentials(integration.settings, integration.metadata);
+    if (!creds) {
+      throw new IntegrationError(
+        "TikTok Ads live requiere TIKTOK_ADS_ACCESS_TOKEN + TIKTOK_ADVERTISER_ID en Vercel, o ads_access_token + advertiser_id en settings de la integración.",
+      );
+    }
+    const adapter = getAdsProvider("tiktok", creds);
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),
@@ -603,6 +620,13 @@ export async function reconnect(
       userId: input.userId,
     });
   }
+  if (input.provider === "tiktok" && getIntegrationRuntimeMode() === "live") {
+    return connectTikTokAdsLive(client, {
+      agencyId: input.agencyId,
+      storeId: input.storeId,
+      userId: input.userId,
+    });
+  }
   return connectMock(client, input);
 }
 
@@ -675,6 +699,78 @@ export async function connectMetaAdsLive(
   const result = await client.from("integrations").insert(payload).select().single();
   throwQueryError(result.error);
   if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Meta Ads.");
+  return result.data;
+}
+
+/**
+ * Live TikTok Ads connect (S17): creates/updates the integration row using
+ * TIKTOK_ADS_* env or integration settings. No OAuth UI — token lives in Vercel.
+ */
+export async function connectTikTokAdsLive(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    userId: string;
+  },
+): Promise<IntegrationRow> {
+  const scope = assertStoreScope(input.agencyId, input.storeId);
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "tiktok");
+  const creds = resolveLiveTikTokAdsCredentials(
+    existing?.settings ?? null,
+    existing?.metadata ?? null,
+  );
+  if (!creds) {
+    throw new IntegrationError(
+      "TikTok Ads live requiere TIKTOK_ADS_ACCESS_TOKEN + TIKTOK_ADVERTISER_ID en Vercel (o ads_access_token + advertiser_id en settings).",
+    );
+  }
+
+  const now = new Date().toISOString();
+  const catalog = getCatalogEntry("tiktok");
+  const payload = {
+    agency_id: scope.agencyId,
+    store_id: scope.storeId,
+    provider: "tiktok" as const,
+    status: "connected" as const,
+    display_name: catalog?.name || "TikTok Ads",
+    external_account_id: creds.advertiserId,
+    external_account_name: creds.advertiserId,
+    secret_reference: `env:tiktok-ads:${creds.source}`,
+    scopes: ["ads_read"],
+    metadata: {
+      demo: false,
+      mode: "live",
+      credentials_source: creds.source,
+      advertiser_id: creds.advertiserId,
+    } as Json,
+    settings: {
+      advertiser_id: creds.advertiserId,
+      currency: creds.currencyFallback,
+    } as Json,
+    connected_at: now,
+    connected_by: input.userId,
+    last_error_at: null,
+    last_error_message: null,
+  };
+
+  if (existing) {
+    const result = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("store_id", scope.storeId)
+      .eq("agency_id", scope.agencyId)
+      .select()
+      .single();
+    throwQueryError(result.error);
+    if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar TikTok Ads.");
+    return result.data;
+  }
+
+  const result = await client.from("integrations").insert(payload).select().single();
+  throwQueryError(result.error);
+  if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar TikTok Ads.");
   return result.data;
 }
 

@@ -21,6 +21,7 @@ import {
 } from "@/lib/integrations/catalog";
 import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
+import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { getIntegrationRuntimeMode, isDemoIntegrationMode } from "@/lib/integrations/registry";
 import {
@@ -74,7 +75,10 @@ export default async function IntegrationDetailPage({
   const enviaProvider = p.provider === "envia_com";
   const liveMode = getIntegrationRuntimeMode() === "live";
   const metaLive = p.provider === "meta" && liveMode;
+  const tiktokLive = p.provider === "tiktok" && liveMode;
   const metaEnvConfigured = metaLive && !!readMetaAdsCredentialsFromEnv();
+  const tiktokEnvConfigured = tiktokLive && !!readTikTokAdsCredentialsFromEnv();
+  const adsLive = metaLive || tiktokLive;
   const enviaUrls = enviaProvider
     ? buildEnviaWebhookUrls(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
     : null;
@@ -97,7 +101,7 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo && !shopifyLive && !enviaProvider && !metaLive ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive && !enviaProvider && !adsLive ? <DemoModeBadge /> : null}
         />
       </div>
 
@@ -112,7 +116,7 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
-      {demo && !shopifyLive && !enviaProvider && !metaLive ? (
+      {demo && !shopifyLive && !enviaProvider && !adsLive ? (
         <Alert variant="info" title="Modo demostración">
           Esta conexión usa adaptadores mock. No se realizan llamadas a APIs externas.
         </Alert>
@@ -129,6 +133,14 @@ export default async function IntegrationDetailPage({
           {metaEnvConfigured
             ? "Credenciales META_ADS_* detectadas en el entorno. Conectar registra la cuenta de anuncios sin OAuth."
             : "Modo live activo. Configura META_ADS_ACCESS_TOKEN y META_AD_ACCOUNT_ID en Vercel (o ads_access_token + ad_account_id en settings) antes de conectar."}
+        </Alert>
+      ) : null}
+
+      {tiktokLive ? (
+        <Alert variant="info" title="TikTok Ads live">
+          {tiktokEnvConfigured
+            ? "Credenciales TIKTOK_ADS_* detectadas en el entorno. Conectar registra el advertiser sin OAuth."
+            : "Modo live activo. Configura TIKTOK_ADS_ACCESS_TOKEN y TIKTOK_ADVERTISER_ID en Vercel (o ads_access_token + advertiser_id en settings) antes de conectar."}
         </Alert>
       ) : null}
 
@@ -235,7 +247,7 @@ export default async function IntegrationDetailPage({
         canManage={canManage}
         connected={connected}
         hideMockConnect={shopifyLive || (enviaProvider && liveMode)}
-        liveProvider={(shopifyLive || enviaProvider || metaLive) && !isDemoIntegrationMode()}
+        liveProvider={(shopifyLive || enviaProvider || adsLive) && !isDemoIntegrationMode()}
         liveReconnectShop={shopDomain}
       />
 
