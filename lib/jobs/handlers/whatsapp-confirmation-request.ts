@@ -57,7 +57,7 @@ export const handleWhatsappConfirmationRequest: JobHandler = async ({
   const orderId = parsed.data.order_id;
   const order = await admin
     .from("orders")
-    .select("id, order_number, confirmation_status, payment_status, shipping_country_code")
+    .select("id, order_number, confirmation_status, payment_status, shipping_country_code, customer_id")
     .eq("id", orderId)
     .eq("store_id", job.store_id)
     .maybeSingle();
@@ -192,11 +192,30 @@ export const handleWhatsappConfirmationRequest: JobHandler = async ({
     if (!adapter.sendTemplate) {
       throw new PermanentJobError("NOT_SUPPORTED", "Adapter sin sendTemplate.");
     }
+    // Meta sample "order confirmation" templates often expect 3 body vars:
+    // {{1}} customer name, {{2}} order number, {{3}} date.
+    let customerName = "Cliente";
+    if (order.data.customer_id) {
+      const customer = await admin
+        .from("customers")
+        .select("full_name")
+        .eq("id", order.data.customer_id)
+        .eq("store_id", job.store_id)
+        .maybeSingle();
+      const full = customer.data?.full_name?.trim();
+      if (full) customerName = full;
+    }
+    const orderLabel = order.data.order_number ?? orderId.slice(0, 8);
+    const dateLabel = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
     const sent = await adapter.sendTemplate({
       to: phoneDigits,
       templateName,
       languageCode: creds.confirmationTemplateLanguage || "es",
-      bodyParameters: [order.data.order_number ?? orderId.slice(0, 8)],
+      bodyParameters: [customerName, orderLabel, dateLabel],
     });
 
     const now = new Date().toISOString();
