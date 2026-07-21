@@ -13,12 +13,15 @@ import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import {
   backfill as backfillIntegration,
   connectEnviaLive,
+  connectMetaAdsLive,
+  connectTikTokAdsLive,
   connectMock,
   disconnect as disconnectIntegration,
   reconnect as reconnectIntegration,
   syncNow,
   testConnection,
 } from "@/services/integrations.service";
+import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
 import { kickJobProcessing } from "@/lib/jobs/kick";
 import { after } from "next/server";
 
@@ -92,12 +95,28 @@ export async function connectIntegrationAction(
   try {
     const { user, membership, client, storeId } = await loadManagedStore(agencySlug, storeSlug);
     const safeProvider = assertProvider(provider);
-    const row = await connectMock(client, {
-      agencyId: membership.agencyId,
-      storeId,
-      provider: safeProvider,
-      userId: user.id,
-    });
+    const runtimeLive = getIntegrationRuntimeMode() === "live";
+    const liveMeta = safeProvider === "meta" && runtimeLive;
+    const liveTikTok = safeProvider === "tiktok" && runtimeLive;
+    const liveAds = liveMeta || liveTikTok;
+    const row = liveMeta
+      ? await connectMetaAdsLive(client, {
+          agencyId: membership.agencyId,
+          storeId,
+          userId: user.id,
+        })
+      : liveTikTok
+        ? await connectTikTokAdsLive(client, {
+            agencyId: membership.agencyId,
+            storeId,
+            userId: user.id,
+          })
+        : await connectMock(client, {
+            agencyId: membership.agencyId,
+            storeId,
+            provider: safeProvider,
+            userId: user.id,
+          });
     await writeAuditLog({
       action: "integration_connected",
       entityType: "integration",
@@ -105,7 +124,12 @@ export async function connectIntegrationAction(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId,
-      newData: { provider: safeProvider, status: row.status, demo: true },
+      newData: {
+        provider: safeProvider,
+        status: row.status,
+        demo: !liveAds,
+        mode: liveAds ? "live" : "mock",
+      },
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);
     return actionOk({ id: row.id });

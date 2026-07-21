@@ -131,14 +131,28 @@ async function processJobsRequest(
     }
   }
 
-  logger.info("jobs.process.complete", {
+  const sweepDidWork = Boolean(
+    conversionSweep &&
+      (conversionSweep.released > 0 ||
+        conversionSweep.rejected > 0 ||
+        conversionSweep.retried > 0 ||
+        conversionSweep.sent > 0 ||
+        conversionSweep.errors > 0),
+  );
+  const processFields = {
     ...ctx,
     workerId,
     recovered,
     claimed: result.claimed,
     completed: result.completed,
     conversion_sweep: conversionSweep ? { ...conversionSweep } : null,
-  });
+  };
+  // Cron idle ticks flood Vercel; keep info for real work only.
+  if (result.claimed > 0 || result.completed > 0 || recovered > 0 || sweepDidWork) {
+    logger.info("jobs.process.complete", processFields);
+  } else {
+    logger.debug("jobs.process.complete", processFields);
+  }
   return Response.json(
     {
       workerId,

@@ -5,7 +5,10 @@ import "server-only";
  *
  * Vercel (Preview/Production):
  *   ENVIA_API_TOKEN           — optional global fallback (prefer token on integrations row)
- *   ENVIA_WEBHOOK_SECRET      — optional; if set, require Authorization Bearer or valid HMAC signature
+ *   ENVIA_WEBHOOK_SECRET      — required in Production (S15); Preview may omit for Probar
+ *                               Auth: Authorization Bearer <secret> or X-Webhook-Signature HMAC
+ *   ENVIA_WEBHOOK_REQUIRE_SECRET=true — force strict auth outside Production
+ *   ENVIA_WEBHOOK_ALLOW_OPEN=true     — emergency: allow open auth even in Production
  *   ENVIA_API_BASE_URL        — optional; default https://api.envia.com (sandbox: https://api-test.envia.com)
  *   ENVIA_DEFAULT_STORE_ID    — demo only; last-resort store pin when tenant cannot be resolved
  *

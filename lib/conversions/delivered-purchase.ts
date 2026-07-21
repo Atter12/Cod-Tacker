@@ -58,7 +58,7 @@ export async function maybeRecordPurchaseOnDelivered(input: {
 
   const order = orderRes.data;
   if (!shouldFirePurchaseOnDelivered(order.payment_status)) {
-    logger.info("conversion.delivered.skip_non_cod", {
+    logger.debug("conversion.delivered.skip_non_cod", {
       order_id: order.id,
       payment_status: order.payment_status,
       shipment_id: input.shipmentId,

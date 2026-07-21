@@ -12,7 +12,7 @@ export function withActionContext(
   values: Partial<RequestContext> = {},
 ): RequestContext {
   const ctx = createRequestContext(values);
-  logger.info("action.start", { ...ctx, action: actionName });
+  logger.debug("action.start", { ...ctx, action: actionName });
   return ctx;
 }
 
@@ -30,5 +30,5 @@ export function logActionComplete(
     }
     safe[k] = v;
   }
-  logger.info("action.complete", { ...ctx, action: actionName, ...safe });
+  logger.debug("action.complete", { ...ctx, action: actionName, ...safe });
 }

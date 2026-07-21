@@ -35,6 +35,22 @@ function bearerToken(header: string | null): string | null {
   return m?.[1]?.trim() || null;
 }
 
+/**
+ * S15 — Production must require ENVIA_WEBHOOK_SECRET.
+ * Preview/development stay open when secret is unset (Envia UI "Probar").
+ *
+ * Overrides:
+ *   ENVIA_WEBHOOK_REQUIRE_SECRET=true  → always strict
+ *   ENVIA_WEBHOOK_ALLOW_OPEN=true      → allow open even on production (emergency only)
+ */
+export function allowEnviaOpenWebhookAuth(
+  env: NodeJS.Dict<string | undefined> = process.env,
+): boolean {
+  if (env.ENVIA_WEBHOOK_ALLOW_OPEN === "true") return true;
+  if (env.ENVIA_WEBHOOK_REQUIRE_SECRET === "true") return false;
+  return env.VERCEL_ENV !== "production";
+}
+
 export function verifyEnviaWebhookAuth(input: {
   rawBody: string;
   webhookSecret: string | null;
@@ -43,13 +59,23 @@ export function verifyEnviaWebhookAuth(input: {
   signatureHeader: string | null;
   timestampHeader: string | null;
   eventHeader: string | null;
-  /** When true and secret unset, allow (UI Probar). Default true. */
+  /**
+   * When true and secret unset, allow (Preview / UI Probar).
+   * Default: derived from VERCEL_ENV via allowEnviaOpenWebhookAuth().
+   */
   allowOpenWhenSecretUnset?: boolean;
 }): { ok: true; open?: boolean } | { ok: false; status: number; error: string } {
   const secret = input.webhookSecret?.trim() || null;
+  const allowOpen =
+    input.allowOpenWhenSecretUnset ?? allowEnviaOpenWebhookAuth();
+
   if (!secret) {
-    if (input.allowOpenWhenSecretUnset === false) {
-      return { ok: false, status: 503, error: "ENVIA_WEBHOOK_SECRET no configurado" };
+    if (!allowOpen) {
+      return {
+        ok: false,
+        status: 401,
+        error: "ENVIA_WEBHOOK_SECRET requerido en Production (webhook rechazado sin secret)",
+      };
     }
     return { ok: true, open: true };
   }
@@ -71,5 +97,9 @@ export function verifyEnviaWebhookAuth(input: {
     }
   }
 
-  return { status: 401, ok: false, error: "Webhook auth inválido (Bearer o X-Webhook-Signature)" };
+  return {
+    status: 401,
+    ok: false,
+    error: "Webhook auth inválido (Bearer o X-Webhook-Signature)",
+  };
 }

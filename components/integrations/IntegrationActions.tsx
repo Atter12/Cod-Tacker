@@ -105,11 +105,23 @@ export function IntegrationActions({
               onClick={() =>
                 run(
                   () => connectIntegrationAction(agencySlug, storeSlug, provider),
-                  "Integración conectada (mock).",
+                  liveProvider
+                    ? provider === "meta"
+                      ? "Meta Ads conectado (live)."
+                      : provider === "tiktok"
+                        ? "TikTok Ads conectado (live)."
+                        : "Integración conectada."
+                    : "Integración conectada (mock).",
                 )
               }
             >
-              Conectar mock
+              {liveProvider
+                ? provider === "meta"
+                  ? "Conectar Meta Ads"
+                  : provider === "tiktok"
+                    ? "Conectar TikTok Ads"
+                    : "Conectar"
+                : "Conectar mock"}
             </Button>
           )
         ) : (
@@ -173,7 +185,13 @@ export function IntegrationActions({
                 onClick={() =>
                   run(
                     () => reconnectIntegrationAction(agencySlug, storeSlug, provider),
-                    "Integración reconectada (mock).",
+                    liveProvider
+                      ? provider === "meta"
+                        ? "Meta Ads reconectado (live)."
+                        : provider === "tiktok"
+                          ? "TikTok Ads reconectado (live)."
+                          : "Integración reconectada."
+                      : "Integración reconectada (mock).",
                   )
                 }
               >

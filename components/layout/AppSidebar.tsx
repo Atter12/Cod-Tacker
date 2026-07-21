@@ -240,7 +240,7 @@ export function AppSidebar({
     const link = (
       <Link
         href={href}
-        prefetch
+        prefetch={false}
         aria-current={active ? "page" : undefined}
         onClick={() => onNavigate?.()}
         className={cn(
@@ -316,7 +316,7 @@ export function AppSidebar({
         <div className="shrink-0 border-t border-border p-3">
           <Link
             href={returnToStore.href}
-            prefetch
+            prefetch={false}
             onClick={() => onNavigate?.()}
             className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-muted"
           >
