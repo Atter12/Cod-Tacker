@@ -7,7 +7,6 @@ import {
   Route,
   ShoppingBag,
   Truck,
-  WalletCards,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { StoreIntegrationProvider } from "@/lib/integrations/catalog";
@@ -20,7 +19,6 @@ const PROVIDER_ICONS: Record<StoreIntegrationProvider, LucideIcon> = {
   enviame: Truck,
   envia_com: Truck,
   custom_carrier: Route,
-  custom_payment: WalletCards,
 };
 
 export function IntegrationProviderIcon({
