@@ -110,7 +110,9 @@ export function IntegrationActions({
                       ? "Meta Ads conectado (live)."
                       : provider === "tiktok"
                         ? "TikTok Ads conectado (live)."
-                        : "Integración conectada."
+                        : provider === "whatsapp"
+                          ? "WhatsApp conectado (live)."
+                          : "Integración conectada."
                     : "Integración conectada (mock).",
                 )
               }
@@ -120,7 +122,9 @@ export function IntegrationActions({
                   ? "Conectar Meta Ads"
                   : provider === "tiktok"
                     ? "Conectar TikTok Ads"
-                    : "Conectar"
+                    : provider === "whatsapp"
+                      ? "Conectar WhatsApp"
+                      : "Conectar"
                 : "Conectar mock"}
             </Button>
           )
@@ -177,7 +181,7 @@ export function IntegrationActions({
               <Button size="sm" variant="outline" disabled={pending} onClick={startLiveOauthReconnect}>
                 {pending ? "Redirigiendo…" : "Reconectar (OAuth)"}
               </Button>
-            ) : liveProvider && provider === "envia_com" ? null : (
+            ) : liveProvider && (provider === "envia_com" || provider === "whatsapp") ? null : (
               <Button
                 size="sm"
                 variant="outline"

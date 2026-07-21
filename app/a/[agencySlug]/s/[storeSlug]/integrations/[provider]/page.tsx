@@ -270,8 +270,10 @@ export default async function IntegrationDetailPage({
         provider={p.provider}
         canManage={canManage}
         connected={connected}
-        hideMockConnect={shopifyLive || (enviaProvider && liveMode)}
-        liveProvider={(shopifyLive || enviaProvider || adsLive) && !isDemoIntegrationMode()}
+        hideMockConnect={shopifyLive || whatsappLive || (enviaProvider && liveMode)}
+        liveProvider={
+          (shopifyLive || enviaProvider || adsLive || whatsappLive) && !isDemoIntegrationMode()
+        }
         liveReconnectShop={shopDomain}
       />
 
