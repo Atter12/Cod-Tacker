@@ -41,6 +41,11 @@ import {
   type LiveTikTokAdsCredentials,
 } from "@/lib/integrations/tiktok/live-ads";
 import { resolveTikTokAdsCredentials } from "@/lib/integrations/tiktok/env";
+import {
+  createLiveWhatsAppMessagingProvider,
+  type LiveWhatsAppCredentials,
+} from "@/lib/integrations/whatsapp/live-messaging";
+import { resolveWhatsAppCredentialsFromIntegration } from "@/lib/integrations/whatsapp/credentials";
 
 export type ProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -52,7 +57,7 @@ function assertMockAllowed(mode: IntegrationMode): void {
 
 function assertLiveProviderConfigured(kind: ProviderKind): never {
   throw new Error(
-    `Live ${kind} adapter is not configured. Shopify commerce, Meta Ads, TikTok Ads, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+    `Live ${kind} adapter is not configured. Shopify commerce, Meta/TikTok Ads, WhatsApp messaging, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
   );
 }
 
@@ -199,11 +204,34 @@ export function resolveLiveTikTokAdsCredentials(
 
 export function getMessagingProvider(
   providerId: MessagingProvider["providerId"] = "whatsapp",
+  liveCreds?: LiveWhatsAppCredentials,
 ): MessagingProvider {
   const mode = resolveIntegrationMode();
-  if (mode === "live") assertLiveProviderConfigured("messaging");
+  if (mode === "live") {
+    if (providerId !== "whatsapp") {
+      assertLiveProviderConfigured("messaging");
+    }
+    if (!liveCreds?.accessToken || !liveCreds?.phoneNumberId) {
+      throw new Error(
+        "WhatsApp live requiere WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID (Vercel) o access_token + phone_number_id en la integración.",
+      );
+    }
+    return createLiveWhatsAppMessagingProvider(providerId, liveCreds);
+  }
   assertMockAllowed(mode);
   return createMockMessagingProvider(providerId);
+}
+
+/** Resolve live WhatsApp creds from integration JSON + encrypted secret + env fallback. */
+export function resolveLiveWhatsAppCredentials(
+  integration: {
+    secret_reference?: string | null;
+    settings?: unknown;
+    metadata?: unknown;
+    external_account_id?: string | null;
+  },
+): LiveWhatsAppCredentials | null {
+  return resolveWhatsAppCredentialsFromIntegration(integration);
 }
 
 export function getSettlementProvider(

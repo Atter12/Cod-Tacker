@@ -8,6 +8,11 @@ import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import {
+  getIntegrationRuntimeMode,
+  getMessagingProvider,
+  resolveLiveWhatsAppCredentials,
+} from "@/lib/integrations/registry";
+import {
   extractTemplateVariables,
   renderTemplate,
   WHATSAPP_REPLY_SCENARIOS,
@@ -84,8 +89,33 @@ export async function sendMockWhatsappMessage(
       body = rendered.text;
     }
 
-    const externalId = `out-${crypto.randomUUID()}`;
+    const externalIdDefault = `out-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
+    const admin = createAdminClient();
+    const integrationId = await resolveWhatsappIntegration(membership.storeId);
+    const live = getIntegrationRuntimeMode() === "live";
+
+    let externalId = externalIdDefault;
+    let liveSend = false;
+
+    if (live && integrationId) {
+      const integration = await admin
+        .from("integrations")
+        .select("id, settings, metadata, secret_reference, external_account_id")
+        .eq("id", integrationId)
+        .maybeSingle();
+      const creds = integration.data
+        ? resolveLiveWhatsAppCredentials(integration.data)
+        : null;
+      if (creds?.accessToken && creds.phoneNumberId) {
+        const adapter = getMessagingProvider("whatsapp", creds);
+        if (!adapter.sendText) throw new ValidationError("Adapter WhatsApp sin sendText.");
+        const sent = await adapter.sendText(conv.phone, body);
+        externalId = sent.externalId;
+        liveSend = true;
+      }
+    }
+
     const insert = await client
       .from("whatsapp_messages")
       .insert({
@@ -100,11 +130,11 @@ export async function sendMockWhatsappMessage(
         external_message_id: externalId,
         sent_at: now,
         template_id: input.templateId ?? null,
-        payload: { demo: true, mock: true } as Json,
+        payload: { demo: !liveSend, mock: !liveSend, mode: liveSend ? "live" : "mock" } as Json,
       })
       .select("id")
       .single();
-    if (insert.error || !insert.data) throw new ValidationError("No se pudo enviar el mensaje mock.");
+    if (insert.error || !insert.data) throw new ValidationError("No se pudo enviar el mensaje.");
 
     await client
       .from("whatsapp_conversations")
@@ -115,10 +145,9 @@ export async function sendMockWhatsappMessage(
       })
       .eq("id", conversationId);
 
-    // Enqueue delivery callback scenario via jobs
+    // Enqueue delivery callback scenario via jobs (mock path only)
+    if (!liveSend) {
     const scenario = input.deliveryScenario ?? "delivered_read";
-    const admin = createAdminClient();
-    const integrationId = await resolveWhatsappIntegration(membership.storeId);
 
     if (scenario === "delivered_read") {
       await enqueueRawEventAndJob(admin, {
@@ -179,6 +208,7 @@ export async function sendMockWhatsappMessage(
         } as Json,
       });
     }
+    }
 
     await writeAuditLog({
       action: "whatsapp_message_sent",
@@ -187,7 +217,7 @@ export async function sendMockWhatsappMessage(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { conversationId, scenario },
+      newData: { conversationId, live: liveSend },
     });
 
     revalidateWa(agencySlug, storeSlug, conversationId);

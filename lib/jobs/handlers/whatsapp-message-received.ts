@@ -7,7 +7,10 @@ export const whatsappMessageReceivedPayloadSchema = z.object({
   phone: z.string().min(5).max(40),
   external_message_id: z.string().min(1).max(200),
   body: z.string().max(4000).optional(),
+  message_type: z.string().max(40).optional(),
+  order_id: z.string().uuid().optional(),
   demo_seed: z.string().min(1).max(200).optional(),
+  mode: z.enum(["live", "mock"]).optional(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {
@@ -24,15 +27,26 @@ async function ensureConversation(
     storeId: string;
     integrationId: string | null;
     phone: string;
+    orderId?: string | null;
+    live?: boolean;
   },
 ): Promise<string> {
   const existing = await admin
     .from("whatsapp_conversations")
-    .select("id")
+    .select("id, order_id")
     .eq("store_id", input.storeId)
     .eq("phone", input.phone)
     .maybeSingle();
-  if (existing.data) return existing.data.id;
+  if (existing.data) {
+    if (input.orderId && !existing.data.order_id) {
+      await admin
+        .from("whatsapp_conversations")
+        .update({ order_id: input.orderId, updated_at: new Date().toISOString() })
+        .eq("id", existing.data.id)
+        .eq("store_id", input.storeId);
+    }
+    return existing.data.id;
+  }
 
   if (!input.integrationId) {
     throw new PermanentJobError(
@@ -48,8 +62,9 @@ async function ensureConversation(
       store_id: input.storeId,
       integration_id: input.integrationId,
       phone: input.phone,
+      order_id: input.orderId ?? null,
       confirmation_status: "pending",
-      metadata: { demo: true } as Json,
+      metadata: { demo: !input.live, mode: input.live ? "live" : "mock" } as Json,
     })
     .select("id")
     .single();
@@ -68,7 +83,7 @@ export const handleWhatsappMessageReceived: JobHandler = async ({
   if (!parsed.success) {
     throw new PermanentJobError(
       "INVALID_PAYLOAD",
-      "Payload de whatsapp.message.received.mock inválido.",
+      "Payload de whatsapp.message.received inválido.",
     );
   }
   if (!job.store_id) {
@@ -76,6 +91,11 @@ export const handleWhatsappMessageReceived: JobHandler = async ({
   }
 
   const data = parsed.data;
+  const live = data.mode === "live";
+  const phoneNormalized = data.phone.startsWith("+")
+    ? data.phone
+    : `+${data.phone.replace(/\D/g, "")}`;
+
   const existingMsg = await admin
     .from("whatsapp_messages")
     .select("id")
@@ -96,7 +116,9 @@ export const handleWhatsappMessageReceived: JobHandler = async ({
     agencyId: job.agency_id,
     storeId: job.store_id,
     integrationId: job.integration_id,
-    phone: data.phone,
+    phone: phoneNormalized,
+    orderId: data.order_id ?? null,
+    live,
   });
 
   const insert = await admin
@@ -105,16 +127,18 @@ export const handleWhatsappMessageReceived: JobHandler = async ({
       agency_id: job.agency_id,
       store_id: job.store_id,
       conversation_id: conversationId,
+      order_id: data.order_id ?? null,
       direction: "inbound",
-      message_type: "text",
+      message_type: data.message_type ?? "text",
       status: "received",
       body: data.body ?? null,
       external_message_id: data.external_message_id,
       received_at: new Date().toISOString(),
       payload: {
-        demo: true,
+        demo: !live,
         demo_seed: data.demo_seed ?? null,
         job_id: job.id,
+        mode: live ? "live" : "mock",
       } as Json,
     })
     .select("id")

@@ -34,5 +34,13 @@ export function createMockMessagingProvider(
         sentAt: mockNowIso(`wa-${to}`),
       };
     },
+    async sendTemplate(input) {
+      return {
+        externalId: `mock-tpl-${input.to.replace(/\D/g, "").slice(-6) || "000000"}`,
+        to: input.to,
+        status: "sent",
+        sentAt: mockNowIso(`wa-tpl-${input.to}`),
+      };
+    },
   };
 }

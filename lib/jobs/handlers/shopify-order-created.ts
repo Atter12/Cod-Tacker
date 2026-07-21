@@ -232,6 +232,25 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     });
   }
 
+  // COD confirmation request via WhatsApp (live/mock) — links order ↔ conversation.
+  if (paymentStatus === "cash_expected") {
+    const { enqueueRawEventAndJob } = await import("@/lib/jobs/enqueue");
+    await enqueueRawEventAndJob(admin, {
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      integrationId: job.integration_id,
+      provider: "whatsapp",
+      eventType: "whatsapp.confirmation.request",
+      jobType: "whatsapp.confirmation.request",
+      idempotencyKey: `wa-confirm:${insert.data.id}`,
+      correlationId: insert.data.id,
+      payload: {
+        order_id: insert.data.id,
+        demo_seed: data.demo_seed ?? null,
+      } as Json,
+    });
+  }
+
   return {
     ok: true,
     action: "created",
