@@ -198,11 +198,14 @@ export const handleWhatsappConfirmationRequest: JobHandler = async ({
     if (order.data.customer_id) {
       const customer = await admin
         .from("customers")
-        .select("full_name")
+        .select("first_name, last_name")
         .eq("id", order.data.customer_id)
         .eq("store_id", job.store_id)
         .maybeSingle();
-      const full = customer.data?.full_name?.trim();
+      const full = [customer.data?.first_name, customer.data?.last_name]
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter(Boolean)
+        .join(" ");
       if (full) customerName = full;
     }
     const orderLabel = order.data.order_number ?? orderId.slice(0, 8);
