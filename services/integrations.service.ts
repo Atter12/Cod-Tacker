@@ -26,18 +26,21 @@ import {
   getCarrierProvider,
   getCommerceProvider,
   getMessagingProvider,
-  getSettlementProvider,
   getIntegrationRuntimeMode,
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
   resolveLiveMetaAdsCredentials,
   resolveLiveTikTokAdsCredentials,
+  resolveLiveWhatsAppCredentials,
 } from "@/lib/integrations/registry";
 import {
   fingerprintEnviaApiToken,
   packEnviaApiToken,
   resolveEnviaApiTokenFromIntegration,
 } from "@/lib/integrations/envia/credentials";
+import { packWhatsAppAccessToken } from "@/lib/integrations/whatsapp/credentials";
+import { getWhatsAppEnv, readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
+import { createLiveWhatsAppMessagingProvider } from "@/lib/integrations/whatsapp/live-messaging";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
@@ -149,14 +152,6 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
         connectMock: () => adapter.connect({ credentialRef }),
       };
     }
-    case "custom_payment": {
-      const adapter = getSettlementProvider("custom_payment");
-      return {
-        sync: (input) => adapter.sync(input),
-        health: () => adapter.health(),
-        connectMock: () => adapter.connect({ credentialRef }),
-      };
-    }
     default:
       throw new ValidationError("Proveedor de integración no soportado.");
   }
@@ -241,6 +236,22 @@ export async function resolveStoreProviderForIntegration(
       );
     }
     const adapter = getAdsProvider("tiktok", creds);
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "whatsapp" && getIntegrationRuntimeMode() === "live") {
+    const creds = resolveLiveWhatsAppCredentials(integration);
+    if (!creds) {
+      throw new IntegrationError(
+        "WhatsApp live requiere token cifrado + phone_number_id (Conectar WhatsApp) o WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID en Vercel.",
+      );
+    }
+    const adapter = getMessagingProvider("whatsapp", creds);
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),
@@ -872,6 +883,146 @@ export async function connectEnviaLive(
   return result.data;
 }
 
+export async function connectWhatsAppLive(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    userId: string;
+    accessToken: string;
+    phoneNumberId: string;
+    businessAccountId?: string | null;
+    confirmationTemplateName?: string | null;
+    confirmationTemplateLanguage?: string | null;
+  },
+): Promise<IntegrationRow> {
+  const scope = assertStoreScope(input.agencyId, input.storeId);
+  const accessToken = input.accessToken.trim();
+  const phoneNumberId = input.phoneNumberId.trim();
+  if (!accessToken) throw new ValidationError("Access token de WhatsApp requerido.");
+  if (!phoneNumberId) throw new ValidationError("Phone number ID de WhatsApp requerido.");
+
+  let secretRef: string;
+  try {
+    secretRef = packWhatsAppAccessToken(accessToken);
+  } catch {
+    throw new IntegrationError(
+      "ENCRYPTION_KEY no configurada. No se puede guardar el token de WhatsApp de forma segura.",
+    );
+  }
+
+  const envDefaults = getWhatsAppEnv();
+  const probe = createLiveWhatsAppMessagingProvider("whatsapp", {
+    accessToken,
+    phoneNumberId,
+    businessAccountId: input.businessAccountId?.trim() || envDefaults.businessAccountId,
+    apiVersion: envDefaults.apiVersion,
+    confirmationTemplateName: input.confirmationTemplateName?.trim() || null,
+    confirmationTemplateLanguage: input.confirmationTemplateLanguage?.trim() || "es",
+    source: "integration",
+  });
+  const health = await probe.health();
+  if (health.status === "unhealthy") {
+    throw new IntegrationError(
+      health.message || "WhatsApp Cloud API rechazó las credenciales. Revisa token y phone_number_id.",
+    );
+  }
+
+  const now = new Date().toISOString();
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "whatsapp");
+
+  const settings = {
+    ...(existing?.settings &&
+    typeof existing.settings === "object" &&
+    !Array.isArray(existing.settings)
+      ? (existing.settings as Record<string, unknown>)
+      : {}),
+    phone_number_id: phoneNumberId,
+    ...(input.businessAccountId?.trim()
+      ? { business_account_id: input.businessAccountId.trim() }
+      : {}),
+    ...(input.confirmationTemplateName?.trim()
+      ? { confirmation_template_name: input.confirmationTemplateName.trim() }
+      : {}),
+    confirmation_template_language: input.confirmationTemplateLanguage?.trim() || "es",
+  } as Record<string, unknown>;
+  delete settings.access_token;
+  delete settings.whatsapp_access_token;
+  delete settings.WHATSAPP_ACCESS_TOKEN;
+
+  const metadata = {
+    ...(existing?.metadata &&
+    typeof existing.metadata === "object" &&
+    !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {}),
+    mode: "live",
+    demo: false,
+  } as Record<string, unknown>;
+
+  const payload = {
+    agency_id: scope.agencyId,
+    store_id: scope.storeId,
+    provider: "whatsapp" as const,
+    status: "connected" as const,
+    display_name: "WhatsApp Business",
+    external_account_id: phoneNumberId,
+    external_account_name: "WhatsApp Cloud API",
+    secret_reference: secretRef,
+    scopes: ["whatsapp_business_messaging", "whatsapp_business_management"],
+    metadata: metadata as Json,
+    settings: settings as Json,
+    connected_at: now,
+    connected_by: input.userId,
+    last_error_at: null,
+    last_error_message: null,
+    last_success_at: now,
+    updated_at: now,
+  };
+
+  if (existing) {
+    const result = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("agency_id", scope.agencyId)
+      .eq("store_id", scope.storeId)
+      .select()
+      .single();
+    throwQueryError(result.error);
+    if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo actualizar WhatsApp.");
+    return result.data;
+  }
+
+  const result = await client.from("integrations").insert(payload).select().single();
+  throwQueryError(result.error);
+  if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar WhatsApp.");
+  return result.data;
+}
+
+/** Connect WhatsApp using env defaults when token/phone are only in Vercel. */
+export async function connectWhatsAppLiveFromEnv(
+  client: DatabaseClient,
+  input: { agencyId: string; storeId: string; userId: string },
+): Promise<IntegrationRow> {
+  const fromEnv = readWhatsAppCredentialsFromEnv();
+  if (!fromEnv) {
+    throw new IntegrationError(
+      "WhatsApp live requiere WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID en Vercel, o Conectar con token + phone_number_id.",
+    );
+  }
+  return connectWhatsAppLive(client, {
+    agencyId: input.agencyId,
+    storeId: input.storeId,
+    userId: input.userId,
+    accessToken: fromEnv.accessToken,
+    phoneNumberId: fromEnv.phoneNumberId,
+    businessAccountId: fromEnv.businessAccountId,
+    confirmationTemplateName: fromEnv.confirmationTemplateName,
+    confirmationTemplateLanguage: fromEnv.confirmationTemplateLanguage,
+  });
+}
+
 export async function testConnection(
   client: DatabaseClient,
   agencyId: string,
@@ -1075,6 +1226,7 @@ async function runSync(
     }
 
     // Enqueue domain jobs via service role (processor claim/write path).
+    // Live adapters that return empty enqueues must NOT fall back to mock specs.
     const enqueueSpecs = liveEnqueues.length
       ? liveEnqueues.map((e) => ({
           eventType: e.eventType,
@@ -1082,12 +1234,14 @@ async function runSync(
           action: e.action,
           payload: e.payload as Json,
         }))
-      : buildSyncEnqueueSpecs({
-          provider: input.provider,
-          syncRunId: run.id,
-          inserted: syncResult.inserted,
-          updated: syncResult.updated,
-        });
+      : runtimeMode === "live"
+        ? []
+        : buildSyncEnqueueSpecs({
+            provider: input.provider,
+            syncRunId: run.id,
+            inserted: syncResult.inserted,
+            updated: syncResult.updated,
+          });
     if (enqueueSpecs.length) {
       for (let i = 0; i < enqueueSpecs.length; i += 1) {
         const spec = enqueueSpecs[i]!;

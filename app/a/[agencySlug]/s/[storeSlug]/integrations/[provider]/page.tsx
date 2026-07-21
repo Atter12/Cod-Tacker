@@ -2,6 +2,7 @@ import Link from "next/link";
 import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
 import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
+import { WhatsAppConnectForm } from "@/components/integrations/WhatsAppConnectForm";
 import {
   Alert,
   DataTable,
@@ -22,6 +23,7 @@ import {
 import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
 import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
+import { readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { getIntegrationRuntimeMode, isDemoIntegrationMode } from "@/lib/integrations/registry";
 import {
@@ -76,9 +78,13 @@ export default async function IntegrationDetailPage({
   const liveMode = getIntegrationRuntimeMode() === "live";
   const metaLive = p.provider === "meta" && liveMode;
   const tiktokLive = p.provider === "tiktok" && liveMode;
+  const whatsappLive = p.provider === "whatsapp" && liveMode;
   const metaEnvConfigured = metaLive && !!readMetaAdsCredentialsFromEnv();
   const tiktokEnvConfigured = tiktokLive && !!readTikTokAdsCredentialsFromEnv();
+  const whatsappEnvConfigured = whatsappLive && !!readWhatsAppCredentialsFromEnv();
   const adsLive = metaLive || tiktokLive;
+  const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  const whatsappWebhookUrl = `${appUrl}/api/integrations/whatsapp/webhooks`;
   const enviaUrls = enviaProvider
     ? buildEnviaWebhookUrls(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
     : null;
@@ -101,7 +107,7 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo && !shopifyLive && !enviaProvider && !adsLive ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive && !enviaProvider && !adsLive && !whatsappLive ? <DemoModeBadge /> : null}
         />
       </div>
 
@@ -116,7 +122,7 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
-      {demo && !shopifyLive && !enviaProvider && !adsLive ? (
+      {demo && !shopifyLive && !enviaProvider && !adsLive && !whatsappLive ? (
         <Alert variant="info" title="Modo demostración">
           Esta conexión usa adaptadores mock. No se realizan llamadas a APIs externas.
         </Alert>
@@ -141,6 +147,14 @@ export default async function IntegrationDetailPage({
           {tiktokEnvConfigured
             ? "Credenciales TIKTOK_ADS_* detectadas en el entorno. Conectar registra el advertiser sin OAuth."
             : "Modo live activo. Configura TIKTOK_ADS_ACCESS_TOKEN y TIKTOK_ADVERTISER_ID en Vercel (o ads_access_token + advertiser_id en settings) antes de conectar."}
+        </Alert>
+      ) : null}
+
+      {whatsappLive ? (
+        <Alert variant="info" title="WhatsApp Cloud API live">
+          {whatsappEnvConfigured
+            ? "Credenciales WHATSAPP_* detectadas en el entorno. También puedes pegar token + phone_number_id abajo."
+            : "Modo live activo. Conecta con access token + phone_number_id, y configura WHATSAPP_APP_SECRET + WHATSAPP_VERIFY_TOKEN para el webhook."}
         </Alert>
       ) : null}
 
@@ -227,6 +241,16 @@ export default async function IntegrationDetailPage({
         />
       ) : null}
 
+      {whatsappLive && canManage ? (
+        <WhatsAppConnectForm
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          webhookUrl={whatsappWebhookUrl}
+          connected={connected}
+          phoneNumberId={integration?.external_account_id}
+        />
+      ) : null}
+
       {shopifyLive ? (
         <div className="rounded-lg border border-border bg-surface-elevated p-4">
           <h2 className="text-sm font-semibold">Webhooks Shopify</h2>
@@ -272,8 +296,10 @@ export default async function IntegrationDetailPage({
         provider={p.provider}
         canManage={canManage}
         connected={connected}
-        hideMockConnect={shopifyLive || (enviaProvider && liveMode)}
-        liveProvider={(shopifyLive || enviaProvider || adsLive) && !isDemoIntegrationMode()}
+        hideMockConnect={shopifyLive || whatsappLive || (enviaProvider && liveMode)}
+        liveProvider={
+          (shopifyLive || enviaProvider || adsLive || whatsappLive) && !isDemoIntegrationMode()
+        }
         liveReconnectShop={shopDomain}
       />
 

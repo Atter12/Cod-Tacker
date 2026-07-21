@@ -12,13 +12,12 @@ import { createMockAdsProvider } from "./mock/ads.mock";
 import { createMockCarrierProvider } from "./mock/carrier.mock";
 import { createMockCommerceProvider } from "./mock/commerce.mock";
 import { createMockMessagingProvider } from "./mock/messaging.mock";
-import { createMockSettlementProvider } from "./mock/settlement.mock";
 
 describe("integration sync flow shapes", () => {
   it("exposes the store catalog providers used by Sprint 2 UI", () => {
     assert.ok(INTEGRATION_CATALOG.length >= 5);
     assert.equal(isStoreIntegrationProvider("shopify"), true);
-    assert.equal(isStoreIntegrationProvider("custom_payment"), true);
+    assert.equal(isStoreIntegrationProvider("custom_payment"), false);
     assert.equal(isStoreIntegrationProvider("other"), false);
   });
 
@@ -68,7 +67,6 @@ describe("integration sync flow shapes", () => {
       createMockMessagingProvider("whatsapp"),
       createMockCarrierProvider("enviame"),
       createMockCarrierProvider("custom_carrier"),
-      createMockSettlementProvider("custom_payment"),
     ];
 
     for (const provider of providers) {

@@ -7,6 +7,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
+import { isDemoIntegrationMode } from "@/lib/integrations/registry";
 import { labelConfirmationStatus } from "@/lib/orders/labels";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -34,6 +35,7 @@ export default async function WhatsappConversationPage({
     return <ErrorState title="No encontrada" description="Conversación inexistente." />;
   }
 
+  const liveMode = !isDemoIntegrationMode();
   const [messages, templates] = await Promise.all([
     listMessages(client, member.storeId, conv.id),
     listTemplates(client, member.storeId),
@@ -129,6 +131,7 @@ export default async function WhatsappConversationPage({
             storeSlug={p.storeSlug}
             conversationId={conv.id}
             canManage={canManage}
+            liveMode={liveMode}
             templates={templates.map((t) => ({ id: t.id, name: t.name }))}
           />
         </aside>

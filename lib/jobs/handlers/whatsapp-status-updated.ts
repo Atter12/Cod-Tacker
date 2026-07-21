@@ -113,6 +113,10 @@ export async function applyInboundConfirmationEffects(
     .single();
   if (!conv.data) return { confirmation: null };
 
+  if (conv.data.confirmation_status === "confirmed" || conv.data.confirmation_status === "rejected") {
+    return { confirmation: conv.data.confirmation_status };
+  }
+
   await admin
     .from("whatsapp_conversations")
     .update({
@@ -122,6 +126,21 @@ export async function applyInboundConfirmationEffects(
     .eq("id", input.conversationId);
 
   if (conv.data.order_id) {
+    const order = await admin
+      .from("orders")
+      .select("id, confirmation_status")
+      .eq("id", conv.data.order_id)
+      .eq("store_id", input.storeId)
+      .maybeSingle();
+
+    if (
+      order.data &&
+      (order.data.confirmation_status === "confirmed" ||
+        order.data.confirmation_status === "rejected")
+    ) {
+      return { confirmation: inferred };
+    }
+
     await admin
       .from("orders")
       .update({

@@ -8,6 +8,11 @@ import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import {
+  getIntegrationRuntimeMode,
+  getMessagingProvider,
+  resolveLiveWhatsAppCredentials,
+} from "@/lib/integrations/registry";
+import {
   extractTemplateVariables,
   renderTemplate,
   WHATSAPP_REPLY_SCENARIOS,
@@ -55,7 +60,7 @@ async function resolveWhatsappIntegration(storeId: string) {
   return res.data?.[0]?.id ?? null;
 }
 
-export async function sendMockWhatsappMessage(
+export async function sendWhatsappMessage(
   agencySlug: string,
   storeSlug: string,
   conversationId: string,
@@ -72,20 +77,81 @@ export async function sendMockWhatsappMessage(
     if (!conv) throw new ValidationError("Conversación no encontrada.");
 
     let body = input.body.trim();
-    if (!body) throw new ValidationError("Mensaje vacío.");
+    let templateMetaName: string | null = null;
+    let templateLanguage = "es";
+    let bodyParameters: string[] | undefined;
 
     if (input.templateId) {
       const tpl = await getTemplateById(client, membership.storeId, input.templateId);
       if (!tpl) throw new ValidationError("Plantilla no encontrada.");
+      templateMetaName = tpl.name.trim();
+      templateLanguage = tpl.language || "es";
       const rendered = renderTemplate(tpl.body, {
         phone: conv.phone,
         order: conv.order_id?.slice(0, 8) ?? "",
       });
       body = rendered.text;
+      const vars = extractTemplateVariables(tpl.body);
+      if (vars.length) {
+        bodyParameters = vars.map((key) => {
+          if (key === "phone") return conv.phone;
+          if (key === "order") return conv.order_id?.slice(0, 8) ?? "";
+          return "";
+        });
+      }
     }
 
-    const externalId = `out-${crypto.randomUUID()}`;
+    if (!body && !templateMetaName) throw new ValidationError("Mensaje vacío.");
+
+    const externalIdDefault = `out-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
+    const admin = createAdminClient();
+    const integrationId = await resolveWhatsappIntegration(membership.storeId);
+    const live = getIntegrationRuntimeMode() === "live";
+
+    let externalId = externalIdDefault;
+    let liveSend = false;
+
+    if (live) {
+      if (!integrationId) {
+        throw new ValidationError(
+          "WhatsApp no está conectado. Conéctalo en Integraciones antes de enviar.",
+        );
+      }
+      const integration = await admin
+        .from("integrations")
+        .select("id, settings, metadata, secret_reference, external_account_id")
+        .eq("id", integrationId)
+        .maybeSingle();
+      const creds = integration.data
+        ? resolveLiveWhatsAppCredentials(integration.data)
+        : null;
+      if (!creds?.accessToken || !creds.phoneNumberId) {
+        throw new ValidationError(
+          "Faltan credenciales WhatsApp (token / phone_number_id). Reconecta en Integraciones.",
+        );
+      }
+      const adapter = getMessagingProvider("whatsapp", creds);
+      if (templateMetaName) {
+        if (!adapter.sendTemplate) {
+          throw new ValidationError("Adapter WhatsApp sin sendTemplate.");
+        }
+        const sent = await adapter.sendTemplate({
+          to: conv.phone,
+          templateName: templateMetaName,
+          languageCode: templateLanguage,
+          bodyParameters,
+        });
+        externalId = sent.externalId;
+        body = body || `[template:${templateMetaName}]`;
+      } else {
+        if (!adapter.sendText) throw new ValidationError("Adapter WhatsApp sin sendText.");
+        const sent = await adapter.sendText(conv.phone, body);
+        externalId = sent.externalId;
+      }
+      liveSend = true;
+    }
+
     const insert = await client
       .from("whatsapp_messages")
       .insert({
@@ -100,11 +166,16 @@ export async function sendMockWhatsappMessage(
         external_message_id: externalId,
         sent_at: now,
         template_id: input.templateId ?? null,
-        payload: { demo: true, mock: true } as Json,
+        payload: {
+          demo: !liveSend,
+          mock: !liveSend,
+          mode: liveSend ? "live" : "mock",
+          template_name: templateMetaName,
+        } as Json,
       })
       .select("id")
       .single();
-    if (insert.error || !insert.data) throw new ValidationError("No se pudo enviar el mensaje mock.");
+    if (insert.error || !insert.data) throw new ValidationError("No se pudo registrar el mensaje.");
 
     await client
       .from("whatsapp_conversations")
@@ -115,69 +186,77 @@ export async function sendMockWhatsappMessage(
       })
       .eq("id", conversationId);
 
-    // Enqueue delivery callback scenario via jobs
-    const scenario = input.deliveryScenario ?? "delivered_read";
-    const admin = createAdminClient();
-    const integrationId = await resolveWhatsappIntegration(membership.storeId);
+    // Delivery scenarios only in mock mode (live statuses come from Meta webhooks).
+    if (!liveSend) {
+      const scenario = input.deliveryScenario ?? "delivered_read";
 
-    if (scenario === "delivered_read") {
-      await enqueueRawEventAndJob(admin, {
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        integrationId,
-        provider: "whatsapp",
-        eventType: "whatsapp.status.updated.mock",
-        jobType: "whatsapp.status.updated.mock",
-        idempotencyKey: `wa-status:${externalId}:delivered`,
-        correlationId: crypto.randomUUID(),
-        payload: { external_message_id: externalId, status: "delivered", demo_seed: externalId } as Json,
-      });
-      await enqueueRawEventAndJob(admin, {
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        integrationId,
-        provider: "whatsapp",
-        eventType: "whatsapp.status.updated.mock",
-        jobType: "whatsapp.status.updated.mock",
-        idempotencyKey: `wa-status:${externalId}:read`,
-        correlationId: crypto.randomUUID(),
-        payload: { external_message_id: externalId, status: "read", demo_seed: `${externalId}-read` } as Json,
-      });
-    } else if (scenario === "failed_retryable") {
-      await enqueueRawEventAndJob(admin, {
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        integrationId,
-        provider: "whatsapp",
-        eventType: "whatsapp.status.updated.mock",
-        jobType: "whatsapp.status.updated.mock",
-        idempotencyKey: `wa-status:${externalId}:fail-r`,
-        correlationId: crypto.randomUUID(),
-        payload: {
-          external_message_id: externalId,
-          status: "failed",
-          retryable: true,
-          error_message: "Transient mock failure",
-        } as Json,
-      });
-    } else if (scenario === "failed_permanent") {
-      await enqueueRawEventAndJob(admin, {
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        integrationId,
-        provider: "whatsapp",
-        eventType: "whatsapp.status.updated.mock",
-        jobType: "whatsapp.status.updated.mock",
-        idempotencyKey: `wa-status:${externalId}:fail-p`,
-        correlationId: crypto.randomUUID(),
-        payload: {
-          external_message_id: externalId,
-          status: "failed",
-          retryable: false,
-          error_code: "MOCK_PERM",
-          error_message: "Permanent mock failure",
-        } as Json,
-      });
+      if (scenario === "delivered_read") {
+        await enqueueRawEventAndJob(admin, {
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          integrationId,
+          provider: "whatsapp",
+          eventType: "whatsapp.status.updated.mock",
+          jobType: "whatsapp.status.updated.mock",
+          idempotencyKey: `wa-status:${externalId}:delivered`,
+          correlationId: crypto.randomUUID(),
+          payload: {
+            external_message_id: externalId,
+            status: "delivered",
+            demo_seed: externalId,
+          } as Json,
+        });
+        await enqueueRawEventAndJob(admin, {
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          integrationId,
+          provider: "whatsapp",
+          eventType: "whatsapp.status.updated.mock",
+          jobType: "whatsapp.status.updated.mock",
+          idempotencyKey: `wa-status:${externalId}:read`,
+          correlationId: crypto.randomUUID(),
+          payload: {
+            external_message_id: externalId,
+            status: "read",
+            demo_seed: `${externalId}-read`,
+          } as Json,
+        });
+      } else if (scenario === "failed_retryable") {
+        await enqueueRawEventAndJob(admin, {
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          integrationId,
+          provider: "whatsapp",
+          eventType: "whatsapp.status.updated.mock",
+          jobType: "whatsapp.status.updated.mock",
+          idempotencyKey: `wa-status:${externalId}:fail-r`,
+          correlationId: crypto.randomUUID(),
+          payload: {
+            external_message_id: externalId,
+            status: "failed",
+            retryable: true,
+            error_message: "Transient mock failure",
+          } as Json,
+        });
+      } else if (scenario === "failed_permanent") {
+        await enqueueRawEventAndJob(admin, {
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          integrationId,
+          provider: "whatsapp",
+          eventType: "whatsapp.status.updated.mock",
+          jobType: "whatsapp.status.updated.mock",
+          idempotencyKey: `wa-status:${externalId}:fail-p`,
+          correlationId: crypto.randomUUID(),
+          payload: {
+            external_message_id: externalId,
+            status: "failed",
+            retryable: false,
+            error_code: "MOCK_PERM",
+            error_message: "Permanent mock failure",
+          } as Json,
+        });
+      }
     }
 
     await writeAuditLog({
@@ -187,7 +266,7 @@ export async function sendMockWhatsappMessage(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { conversationId, scenario },
+      newData: { conversationId, live: liveSend, template: templateMetaName },
     });
 
     revalidateWa(agencySlug, storeSlug, conversationId);
@@ -196,6 +275,9 @@ export async function sendMockWhatsappMessage(
     return actionFail(error);
   }
 }
+
+/** @deprecated Use sendWhatsappMessage — kept for any leftover imports. */
+export const sendMockWhatsappMessage = sendWhatsappMessage;
 
 export async function simulateWhatsappReply(
   agencySlug: string,
@@ -208,6 +290,12 @@ export async function simulateWhatsappReply(
     const membership = await requireStoreAccess(agencySlug, storeSlug);
     assertWhatsappManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
+
+    if (getIntegrationRuntimeMode() === "live") {
+      throw new ValidationError(
+        "La simulación de respuestas solo está disponible en modo mock. En live usa el webhook de Meta.",
+      );
+    }
 
     const client = await createClient();
     const conv = await getConversationById(client, membership.storeId, conversationId);
@@ -376,6 +464,7 @@ export async function createWhatsappTemplate(
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
     const vars = extractTemplateVariables(input.body);
+    const live = getIntegrationRuntimeMode() === "live";
     const client = await createClient();
     const insert = await client
       .from("whatsapp_templates")
@@ -390,7 +479,12 @@ export async function createWhatsappTemplate(
         status: "draft",
         is_active: false,
         created_by: user.id,
-        metadata: { demo: true, mock_approval: true } as Json,
+        metadata: (live
+          ? {
+              mode: "live",
+              note: "El name debe coincidir con la plantilla aprobada en Meta Business Manager",
+            }
+          : { demo: true, mock_approval: true, mode: "mock" }) as Json,
       })
       .select("id")
       .single();
@@ -437,7 +531,11 @@ export async function updateWhatsappTemplate(
       patch.variables = extractTemplateVariables(input.body) as unknown as Json;
     }
     if (input.name != null) patch.name = input.name;
-    if (input.status != null) patch.status = input.status;
+    if (input.status != null) {
+      // Local catalog only — Meta approval is managed in Business Manager.
+      // "approved" here means "ready to send via Cloud API with matching Meta name".
+      patch.status = input.status;
+    }
     if (input.isActive != null) patch.is_active = input.isActive;
 
     const client = await createClient();
@@ -492,7 +590,11 @@ export async function duplicateWhatsappTemplate(
         status: "draft",
         is_active: false,
         created_by: user.id,
-        metadata: { demo: true, duplicated_from: templateId } as Json,
+        metadata: {
+          demo: getIntegrationRuntimeMode() !== "live",
+          mode: getIntegrationRuntimeMode(),
+          duplicated_from: templateId,
+        } as Json,
       })
       .select("id")
       .single();

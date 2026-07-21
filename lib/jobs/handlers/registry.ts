@@ -7,6 +7,7 @@ import { handleShopifyOrderCreated } from "@/lib/jobs/handlers/shopify-order-cre
 import { handleShopifyOrderUpdated } from "@/lib/jobs/handlers/shopify-order-updated";
 import { handleWhatsappMessageReceived } from "@/lib/jobs/handlers/whatsapp-message-received";
 import { handleWhatsappStatusUpdated } from "@/lib/jobs/handlers/whatsapp-status-updated";
+import { handleWhatsappConfirmationRequest } from "@/lib/jobs/handlers/whatsapp-confirmation-request";
 import { handlePrivacyDataExport } from "@/lib/jobs/handlers/privacy-data-export";
 import type { JobHandler } from "@/lib/jobs/types";
 
@@ -20,8 +21,11 @@ export const JOB_TYPES = [
   "ads.hierarchy.seeded.mock",
   "carrier.shipment.updated",
   "carrier.shipment.updated.mock",
+  "whatsapp.message.received",
   "whatsapp.message.received.mock",
+  "whatsapp.status.updated",
   "whatsapp.status.updated.mock",
+  "whatsapp.confirmation.request",
   "settlement.batch.received.mock",
   "settlement.csv.imported.mock",
   "privacy.data_export.mock",
@@ -39,8 +43,11 @@ const registry: Record<KnownJobType, JobHandler> = {
   "ads.hierarchy.seeded.mock": handleAdsHierarchySeeded,
   "carrier.shipment.updated": handleCarrierShipmentUpdated,
   "carrier.shipment.updated.mock": handleCarrierShipmentUpdated,
+  "whatsapp.message.received": handleWhatsappMessageReceived,
   "whatsapp.message.received.mock": handleWhatsappMessageReceived,
+  "whatsapp.status.updated": handleWhatsappStatusUpdated,
   "whatsapp.status.updated.mock": handleWhatsappStatusUpdated,
+  "whatsapp.confirmation.request": handleWhatsappConfirmationRequest,
   "settlement.batch.received.mock": handleSettlementBatchReceived,
   "settlement.csv.imported.mock": handleSettlementCsvImported,
   "privacy.data_export.mock": handlePrivacyDataExport,

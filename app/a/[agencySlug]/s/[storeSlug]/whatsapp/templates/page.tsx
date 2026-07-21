@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TemplatesManager } from "@/components/whatsapp/TemplatesManager";
 import { ErrorState, SectionHeader, DemoModeBadge } from "@/components/ui";
 import { routes } from "@/config/routes";
+import { isDemoIntegrationMode } from "@/lib/integrations/registry";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -17,14 +18,19 @@ export default async function WhatsappTemplatesPage({
   if (!can(member.roles, "whatsapp.view") || !member.storeId) {
     return <ErrorState title="Sin permiso" description="No puedes ver plantillas." />;
   }
+  const liveMode = !isDemoIntegrationMode();
   const templates = await listTemplates(await createClient(), member.storeId);
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
+      {!liveMode ? <DemoModeBadge /> : null}
       <SectionHeader
         title="Plantillas WhatsApp"
-        description="Estados approved/rejected son mock — no hay aprobación real de Meta."
+        description={
+          liveMode
+            ? "Catálogo local: el nombre debe coincidir con la plantilla aprobada en Meta. La aprobación oficial se gestiona en Business Manager."
+            : "Estados approved/rejected son mock — no hay aprobación real de Meta."
+        }
         action={
           <Link
             className="text-sm underline text-brand-primary"
@@ -39,6 +45,7 @@ export default async function WhatsappTemplatesPage({
         storeSlug={p.storeSlug}
         templates={templates}
         canManage={can(member.roles, "whatsapp.manage")}
+        liveMode={liveMode}
       />
     </section>
   );

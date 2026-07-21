@@ -2,8 +2,9 @@ import type { Enums } from "@/types/database.generated";
 
 /**
  * Role of a provider in the closed COD sales loop:
- * Ads → Commerce → Messaging → Carrier → Settlement
- * (conversions / CAPI sit on top of terminal cash events).
+ * Ads → Commerce → Messaging → Carrier
+ * (cash settlement lives in Conciliación, not as a catalog integration;
+ * conversions / CAPI sit on top of terminal cash events).
  */
 export type IntegrationProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -16,7 +17,6 @@ export type StoreIntegrationProvider = Extract<
   | "enviame"
   | "envia_com"
   | "custom_carrier"
-  | "custom_payment"
 >;
 
 export type IntegrationCatalogEntry = {
@@ -32,7 +32,6 @@ export const INTEGRATION_KIND_FLOW_ORDER: readonly IntegrationProviderKind[] = [
   "commerce",
   "messaging",
   "carrier",
-  "settlement",
 ] as const;
 
 export function labelProviderKind(kind: IntegrationProviderKind): string {
@@ -97,12 +96,6 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
     name: "Carrier personalizado",
     description: "Conector genérico de logística cuando no hay Enviame/Envia.",
     kind: "carrier",
-  },
-  {
-    provider: "custom_payment",
-    name: "Pagos y conciliación",
-    description: "Lotes de cobro en puerta y cierre de cash real.",
-    kind: "settlement",
   },
 ] as const;
 

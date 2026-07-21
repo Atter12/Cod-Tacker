@@ -14,6 +14,13 @@ export type MessagingSendResult = {
   sentAt: string | null;
 };
 
+export type MessagingTemplateSendInput = {
+  to: string;
+  templateName: string;
+  languageCode: string;
+  bodyParameters?: string[];
+};
+
 /** Stable messaging (WhatsApp) provider contract. */
 export interface MessagingProvider {
   readonly providerId: MessagingProviderId;
@@ -22,4 +29,5 @@ export interface MessagingProvider {
   health(): Promise<ProviderHealthResult>;
   sync(input: ProviderSyncInput): Promise<ProviderSyncResult>;
   sendText?(to: string, body: string): Promise<MessagingSendResult>;
+  sendTemplate?(input: MessagingTemplateSendInput): Promise<MessagingSendResult>;
 }

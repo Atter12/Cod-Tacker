@@ -15,6 +15,8 @@ import {
   connectEnviaLive,
   connectMetaAdsLive,
   connectTikTokAdsLive,
+  connectWhatsAppLive,
+  connectWhatsAppLiveFromEnv,
   connectMock,
   disconnect as disconnectIntegration,
   reconnect as reconnectIntegration,
@@ -22,6 +24,7 @@ import {
   testConnection,
 } from "@/services/integrations.service";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
+import { readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
 import { kickJobProcessing } from "@/lib/jobs/kick";
 import { after } from "next/server";
 
@@ -87,6 +90,53 @@ export async function connectEnviaLiveAction(
   }
 }
 
+export async function connectWhatsAppLiveAction(
+  agencySlug: string,
+  storeSlug: string,
+  input: {
+    accessToken: string;
+    phoneNumberId: string;
+    businessAccountId?: string;
+    confirmationTemplateName?: string;
+    confirmationTemplateLanguage?: string;
+  },
+): Promise<IntegrationActionResult> {
+  try {
+    const { user, membership, client, storeId } = await loadManagedStore(agencySlug, storeSlug);
+    if (getIntegrationRuntimeMode() !== "live") {
+      throw new ValidationError("WhatsApp live requiere INTEGRATION_MODE=live.");
+    }
+    const row = await connectWhatsAppLive(client, {
+      agencyId: membership.agencyId,
+      storeId,
+      userId: user.id,
+      accessToken: input.accessToken,
+      phoneNumberId: input.phoneNumberId,
+      businessAccountId: input.businessAccountId,
+      confirmationTemplateName: input.confirmationTemplateName,
+      confirmationTemplateLanguage: input.confirmationTemplateLanguage,
+    });
+    await writeAuditLog({
+      action: "integration_connected",
+      entityType: "integration",
+      entityId: row.id,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId,
+      newData: {
+        provider: "whatsapp",
+        status: row.status,
+        demo: false,
+        external_account_id: row.external_account_id,
+      },
+    });
+    revalidateIntegrationPaths(agencySlug, storeSlug, "whatsapp");
+    return actionOk({ id: row.id });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
 export async function connectIntegrationAction(
   agencySlug: string,
   storeSlug: string,
@@ -98,6 +148,7 @@ export async function connectIntegrationAction(
     const runtimeLive = getIntegrationRuntimeMode() === "live";
     const liveMeta = safeProvider === "meta" && runtimeLive;
     const liveTikTok = safeProvider === "tiktok" && runtimeLive;
+    const liveWhatsApp = safeProvider === "whatsapp" && runtimeLive;
     const liveAds = liveMeta || liveTikTok;
     const row = liveMeta
       ? await connectMetaAdsLive(client, {
@@ -111,6 +162,18 @@ export async function connectIntegrationAction(
             storeId,
             userId: user.id,
           })
+        : liveWhatsApp
+          ? readWhatsAppCredentialsFromEnv()
+            ? await connectWhatsAppLiveFromEnv(client, {
+                agencyId: membership.agencyId,
+                storeId,
+                userId: user.id,
+              })
+            : (() => {
+                throw new ValidationError(
+                  "WhatsApp live: usa el formulario Conectar (token + phone_number_id) o configura WHATSAPP_* en Vercel.",
+                );
+              })()
         : await connectMock(client, {
             agencyId: membership.agencyId,
             storeId,
@@ -127,8 +190,8 @@ export async function connectIntegrationAction(
       newData: {
         provider: safeProvider,
         status: row.status,
-        demo: !liveAds,
-        mode: liveAds ? "live" : "mock",
+        demo: !(liveAds || liveWhatsApp),
+        mode: liveAds || liveWhatsApp ? "live" : "mock",
       },
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);

@@ -12,6 +12,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
+import { isDemoIntegrationMode } from "@/lib/integrations/registry";
 import { labelConfirmationStatus } from "@/lib/orders/labels";
 import {
   parseEnumParam,
@@ -41,6 +42,7 @@ export default async function WhatsappInboxPage({
     return <ErrorState title="Tienda inválida" description="Tienda no resuelta." />;
   }
 
+  const liveMode = !isDemoIntegrationMode();
   const pagination = parsePaginationParams(sp, { pageSize: 25 });
   const q = parseStringParam(sp, "q");
   const confirmation = parseEnumParam(sp, "confirmation", [
@@ -64,10 +66,14 @@ export default async function WhatsappInboxPage({
     <section className="space-y-6">
       <PageHeader
         title="WhatsApp"
-        description="Bandeja mock · sin WhatsApp Cloud API. Estados de plantilla son demostración."
+        description={
+          liveMode
+            ? "Bandeja Cloud API · mensajes y estados vía webhook de Meta."
+            : "Bandeja mock · sin WhatsApp Cloud API. Estados de plantilla son demostración."
+        }
         actions={
           <>
-            <DemoModeBadge />
+            {!liveMode ? <DemoModeBadge /> : null}
             <Link
               href={routes.store.whatsappTemplates(p.agencySlug, p.storeSlug)}
               className="inline-flex h-10 min-w-[108px] items-center justify-center rounded-[10px] border border-brand-primary px-4 text-[12.5px] font-medium text-brand-primary transition-colors hover:bg-brand-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -86,7 +92,11 @@ export default async function WhatsappInboxPage({
             </span>
           }
           title="Sin conversaciones"
-          description="Conecta WhatsApp mock en Integraciones y simula mensajes, o crea conversaciones vía jobs."
+          description={
+            liveMode
+              ? "Conecta WhatsApp en Integraciones y registra el webhook en Meta. Los pedidos COD pueden abrir conversaciones al solicitar confirmación."
+              : "Conecta WhatsApp mock en Integraciones y simula mensajes, o crea conversaciones vía jobs."
+          }
           className="min-h-[280px] border-solid"
         />
       ) : (

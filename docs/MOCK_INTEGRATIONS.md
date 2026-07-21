@@ -31,11 +31,12 @@ Surfaces that use mock data show **Modo demostración** (`DemoModeBadge`). Never
 
 ## Honest “still mock” list
 
-- No real Shopify/Meta/TikTok/WhatsApp/carrier HTTP calls
+- Settlement / reconciliation still demo jobs
 - Billing invoices and plan changes are demo-only (no card storage)
-- WhatsApp template “approved” ≠ Meta approval
+- WhatsApp local template “approved” ≠ Meta Business Manager approval (name must match Meta)
 - Privacy export is a summary artifact, not a CDN dump
 - Deletion requests require approval and do **not** auto-wipe
+- Hierarchy ads seed may still be mock for Attribution demos
 
 ## Job types (mock suffix)
 
