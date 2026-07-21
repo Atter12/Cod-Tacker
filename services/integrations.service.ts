@@ -1224,6 +1224,7 @@ async function runSync(
     }
 
     // Enqueue domain jobs via service role (processor claim/write path).
+    // Live adapters that return empty enqueues must NOT fall back to mock specs.
     const enqueueSpecs = liveEnqueues.length
       ? liveEnqueues.map((e) => ({
           eventType: e.eventType,
@@ -1231,12 +1232,14 @@ async function runSync(
           action: e.action,
           payload: e.payload as Json,
         }))
-      : buildSyncEnqueueSpecs({
-          provider: input.provider,
-          syncRunId: run.id,
-          inserted: syncResult.inserted,
-          updated: syncResult.updated,
-        });
+      : runtimeMode === "live"
+        ? []
+        : buildSyncEnqueueSpecs({
+            provider: input.provider,
+            syncRunId: run.id,
+            inserted: syncResult.inserted,
+            updated: syncResult.updated,
+          });
     if (enqueueSpecs.length) {
       for (let i = 0; i < enqueueSpecs.length; i += 1) {
         const spec = enqueueSpecs[i]!;

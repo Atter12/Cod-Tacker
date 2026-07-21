@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   closeWhatsappConversation,
-  sendMockWhatsappMessage,
+  sendWhatsappMessage,
   setWhatsappConfirmation,
   simulateWhatsappReply,
 } from "@/app/actions/whatsapp";
@@ -17,12 +17,14 @@ export function ConversationActionsPanel({
   conversationId,
   canManage,
   templates,
+  liveMode = false,
 }: {
   agencySlug: string;
   storeSlug: string;
   conversationId: string;
   canManage: boolean;
   templates: Array<{ id: string; name: string }>;
+  liveMode?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -47,59 +49,69 @@ export function ConversationActionsPanel({
 
   return (
     <div className="space-y-4 rounded-lg border border-border p-4">
-      <h3 className="text-sm font-semibold">Acciones mock</h3>
+      <h3 className="text-sm font-semibold">{liveMode ? "Enviar mensaje" : "Acciones mock"}</h3>
+      {liveMode ? (
+        <p className="text-xs text-text-secondary">
+          Cloud API: texto libre (ventana 24h) o plantilla cuyo <strong>nombre</strong> coincida con
+          Meta. Estados delivered/read llegan por webhook.
+        </p>
+      ) : null}
       {error && <p className="text-sm text-danger">{error}</p>}
       <Textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
       <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-        <option value="">Sin plantilla</option>
+        <option value="">Sin plantilla (texto)</option>
         {templates.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
           </option>
         ))}
       </Select>
-      <Select value={delivery} onChange={(e) => setDelivery(e.target.value)}>
-        <option value="delivered_read">Entrega → leído</option>
-        <option value="failed_retryable">Fallo reintentable</option>
-        <option value="failed_permanent">Fallo permanente</option>
-      </Select>
+      {!liveMode ? (
+        <Select value={delivery} onChange={(e) => setDelivery(e.target.value)}>
+          <option value="delivered_read">Entrega → leído</option>
+          <option value="failed_retryable">Fallo reintentable</option>
+          <option value="failed_permanent">Fallo permanente</option>
+        </Select>
+      ) : null}
       <Button
         size="sm"
         disabled={pending}
         onClick={() =>
           run(() =>
-            sendMockWhatsappMessage(agencySlug, storeSlug, conversationId, {
+            sendWhatsappMessage(agencySlug, storeSlug, conversationId, {
               body,
               templateId: templateId || undefined,
-              deliveryScenario: delivery,
+              deliveryScenario: liveMode ? undefined : delivery,
             }),
           )
         }
       >
-        Enviar mock
+        {liveMode ? "Enviar" : "Enviar mock"}
       </Button>
-      <div className="border-t border-border pt-3 space-y-2">
-        <Select value={scenario} onChange={(e) => setScenario(e.target.value)}>
-          {WHATSAPP_REPLY_SCENARIOS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={pending}
-          onClick={() =>
-            run(() => simulateWhatsappReply(agencySlug, storeSlug, conversationId, scenario))
-          }
-        >
-          Simular respuesta (job)
-        </Button>
-        <p className="text-xs text-text-secondary">
-          Tras simular, ejecuta <code>npm run jobs:process</code>.
-        </p>
-      </div>
+      {!liveMode ? (
+        <div className="border-t border-border pt-3 space-y-2">
+          <Select value={scenario} onChange={(e) => setScenario(e.target.value)}>
+            {WHATSAPP_REPLY_SCENARIOS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={pending}
+            onClick={() =>
+              run(() => simulateWhatsappReply(agencySlug, storeSlug, conversationId, scenario))
+            }
+          >
+            Simular respuesta (job)
+          </Button>
+          <p className="text-xs text-text-secondary">
+            Tras simular, ejecuta <code>npm run jobs:process</code>.
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
         <Button
           size="sm"

@@ -15,6 +15,7 @@ export function TemplatesManager({
   storeSlug,
   templates,
   canManage,
+  liveMode = false,
 }: {
   agencySlug: string;
   storeSlug: string;
@@ -27,6 +28,7 @@ export function TemplatesManager({
     language: string;
   }>;
   canManage: boolean;
+  liveMode?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -42,7 +44,15 @@ export function TemplatesManager({
     <div className="space-y-6">
       {canManage && (
         <div className="space-y-3 max-w-xl rounded-lg border border-border p-4">
-          <h3 className="text-sm font-semibold">Nueva plantilla (mock)</h3>
+          <h3 className="text-sm font-semibold">
+            {liveMode ? "Nueva plantilla (catálogo local)" : "Nueva plantilla (mock)"}
+          </h3>
+          {liveMode ? (
+            <p className="text-xs text-text-secondary">
+              El <strong>nombre</strong> debe coincidir exactamente con la plantilla aprobada en Meta
+              Business Manager. Aquí solo guardamos el catálogo local para envío.
+            </p>
+          ) : null}
           {error && <p className="text-sm text-danger">{error}</p>}
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" />
           <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
@@ -72,7 +82,8 @@ export function TemplatesManager({
               <div>
                 <p className="font-medium text-sm">{t.name}</p>
                 <p className="text-xs text-text-secondary">
-                  {t.language} · {t.status} · {t.is_active ? "activa" : "inactiva"} · mock Meta
+                  {t.language} · {t.status} · {t.is_active ? "activa" : "inactiva"}
+                  {liveMode ? " · nombre = Meta template" : " · mock Meta"}
                 </p>
               </div>
               {canManage && (
@@ -91,7 +102,7 @@ export function TemplatesManager({
                       })
                     }
                   >
-                    Aprobar mock
+                    {liveMode ? "Marcar lista" : "Aprobar mock"}
                   </Button>
                   <Button
                     size="sm"
