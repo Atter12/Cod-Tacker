@@ -103,20 +103,20 @@ export function ImportWizard({
               onClick={() => {
                 const csv = generateMockSettlementCsv();
                 const blob = new Blob([csv], { type: "text/csv" });
-                const f = new File([blob], "mock-settlement.csv", { type: "text/csv" });
+                const f = new File([blob], "sample-settlement.csv", { type: "text/csv" });
                 setFile(f);
                 setFileName(f.name);
                 setPresetId("generic_cod");
               }}
             >
-              Cargar CSV de ejemplo
+              Cargar CSV de muestra (pruebas)
             </Button>
           </div>
           {message && <p className="text-sm text-danger">{message}</p>}
           <p className="text-xs text-text-secondary">
-            El archivo completo no se guarda en base de datos. Si no hay Storage configurado
-            (<code className="mx-1">SETTLEMENT_CSV_BUCKET</code>), el procesamiento es solo
-            server-side con filas sanitizadas en el job.
+            Sube el export de liquidación de tu courier. CODTracked no se conecta al portal del
+            courier: el CSV lo exportas tú. Alternativa auto: Ecart Pay en Conciliación (solo COD
+            Envia).
           </p>
         </div>
       )}
@@ -206,8 +206,8 @@ export function ImportWizard({
             Importación encolada. Job: <code>{jobId ?? "—"}</code>
           </p>
           <p className="text-sm text-text-secondary">
-            Ejecuta <code>npm run jobs:process</code> (o Procesar lote en admin) para crear el lote,
-            ítems y matching.
+            El worker se dispara al confirmar. Si el lote no aparece, revisa jobs en admin o{" "}
+            <code>npm run jobs:process</code>.
           </p>
           <Link
             className="text-sm text-brand-primary underline"

@@ -27,7 +27,9 @@ export const JOB_TYPES = [
   "whatsapp.status.updated.mock",
   "whatsapp.confirmation.request",
   "settlement.batch.received.mock",
+  "settlement.csv.imported",
   "settlement.csv.imported.mock",
+  "settlement.ecart.synced",
   "privacy.data_export.mock",
 ] as const;
 
@@ -49,7 +51,9 @@ const registry: Record<KnownJobType, JobHandler> = {
   "whatsapp.status.updated.mock": handleWhatsappStatusUpdated,
   "whatsapp.confirmation.request": handleWhatsappConfirmationRequest,
   "settlement.batch.received.mock": handleSettlementBatchReceived,
+  "settlement.csv.imported": handleSettlementCsvImported,
   "settlement.csv.imported.mock": handleSettlementCsvImported,
+  "settlement.ecart.synced": handleSettlementCsvImported,
   "privacy.data_export.mock": handlePrivacyDataExport,
 };
 

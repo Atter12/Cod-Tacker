@@ -70,13 +70,14 @@ export const handleSettlementCsvImported: JobHandler = async ({
 }): Promise<JobHandlerResult> => {
   const parsed = settlementCsvImportedPayloadSchema.safeParse(asObject(payload));
   if (!parsed.success) {
-    throw new PermanentJobError("INVALID_PAYLOAD", "Payload de settlement.csv.imported.mock inválido.");
+    throw new PermanentJobError("INVALID_PAYLOAD", "Payload de settlement.csv.imported inválido.");
   }
   if (!job.store_id) {
     throw new PermanentJobError("MISSING_STORE", "El trabajo de conciliación CSV requiere store_id.");
   }
 
   const data = parsed.data;
+  const isDemo = job.job_type.endsWith(".mock");
   const existing = await admin
     .from("settlement_batches")
     .select("id")
@@ -116,11 +117,12 @@ export const handleSettlementCsvImported: JobHandler = async ({
       import_row_count: data.rows.length,
       import_error_count: 0,
       metadata: {
-        demo: true,
+        demo: isDemo,
         demo_seed: data.demo_seed ?? null,
         job_id: job.id,
         preset_id: data.preset_id ?? null,
-        import_kind: "csv",
+        import_kind: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv",
+        source: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv_upload",
       } as Json,
     })
     .select("id")
