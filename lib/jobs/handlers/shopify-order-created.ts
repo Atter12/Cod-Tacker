@@ -213,11 +213,28 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     if (insert.error?.code === "23505") {
       const again = await admin
         .from("orders")
-        .select("id")
+        .select("id, payment_status, confirmation_status")
         .eq("store_id", job.store_id)
         .eq("external_order_id", data.external_order_id)
         .maybeSingle();
       if (again.data) {
+        // Race: another create won the insert — still offer WA like the
+        // duplicate_external_order_id path (previously skipped send entirely).
+        const paymentForWa =
+          data.payment_status ?? again.data.payment_status ?? "cash_expected";
+        if (paymentForWa === "cash_expected") {
+          await enqueueWhatsappCodConfirmationRequest({
+            admin,
+            agencyId: job.agency_id,
+            storeId: job.store_id,
+            orderId: again.data.id,
+            source: "shopify_duplicate_repair",
+            integrationId: job.integration_id,
+            demoSeed: data.demo_seed ?? null,
+            allowPendingResend: false,
+            kick: true,
+          });
+        }
         return {
           ok: true,
           action: "skipped",

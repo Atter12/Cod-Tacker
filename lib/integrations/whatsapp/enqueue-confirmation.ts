@@ -87,7 +87,10 @@ export async function enqueueWhatsappCodConfirmationRequest(input: {
   });
 
   if (input.kick !== false) {
-    void kickJobProcessing({
+    // Must await: a fire-and-forget `void kick` is often frozen on serverless
+    // when the parent Shopify webhook `after()` batch ends — WA stays queued
+    // and confirmation_status remains `not_requested` until a manual retry.
+    await kickJobProcessing({
       limit: 8,
       reason: `whatsapp-confirmation:${input.source}`,
     });
