@@ -665,23 +665,28 @@ export async function requestWhatsappCodConfirmation(
     }
 
     const { createAdminClient } = await import("@/lib/supabase/admin");
-    const { kickJobProcessing } = await import("@/lib/jobs/kick");
+    const { enqueueWhatsappCodConfirmationRequest } = await import(
+      "@/lib/integrations/whatsapp/enqueue-confirmation"
+    );
     const admin = createAdminClient();
-    const enqueued = await enqueueRawEventAndJob(admin, {
+    const enqueued = await enqueueWhatsappCodConfirmationRequest({
+      admin,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
+      orderId,
+      source: "manual",
       integrationId: waIntegrationId,
-      provider: "whatsapp",
-      eventType: "whatsapp.confirmation.request",
-      jobType: "whatsapp.confirmation.request",
-      idempotencyKey: `wa-confirm-manual:${orderId}:${Date.now()}`,
-      correlationId: orderId,
-      payload: {
-        order_id: orderId,
-        manual: true,
-        requested_by: user.id,
-      } as Json,
+      allowPendingResend: true,
+      actorId: user.id,
+      kick: true,
     });
+    if (!enqueued || enqueued.skipped) {
+      throw new ValidationError(
+        enqueued?.skipped
+          ? `No se pudo encolar confirmación WhatsApp (${enqueued.skipped}).`
+          : "No se pudo encolar confirmación WhatsApp.",
+      );
+    }
 
     await writeAuditLog({
       action: "whatsapp_confirmation_requested",
@@ -690,10 +695,8 @@ export async function requestWhatsappCodConfirmation(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { jobId: enqueued.jobId, created: enqueued.created },
+      newData: { jobId: enqueued.jobId, created: enqueued.created, source: "manual" },
     });
-
-    void kickJobProcessing({ limit: 8, reason: "whatsapp-confirmation-manual" });
 
     revalidatePath(routes.store.orderDetail(agencySlug, storeSlug, orderId));
     revalidateWa(agencySlug, storeSlug);
