@@ -1,5 +1,6 @@
 import type { DatabaseClient } from "@/services/_shared";
 import { ValidationError } from "@/lib/errors";
+import { assertSubscriptionAllowsAccess as assertAccessPolicy } from "@/lib/billing/access-policy";
 
 /**
  * Soft defaults when an agency has no subscription row yet.
@@ -20,6 +21,8 @@ export type PlanLimits = {
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   gracePeriodEndsAt: string | null;
+  /** ISO when Stripe first reported past_due (metadata.past_due_since). */
+  pastDueSince: string | null;
 };
 
 function asFeatures(raw: unknown): Record<string, unknown> {
@@ -64,6 +67,8 @@ export async function getAgencyPlanLimits(
       : {};
   const grace =
     typeof meta.grace_period_ends_at === "string" ? meta.grace_period_ends_at : null;
+  const pastDueSince =
+    typeof meta.past_due_since === "string" ? meta.past_due_since : null;
 
   return {
     planId: plan.id,
@@ -77,20 +82,13 @@ export async function getAgencyPlanLimits(
     trialEndsAt: sub.trial_ends_at,
     currentPeriodEnd: sub.current_period_end,
     gracePeriodEndsAt: grace,
+    pastDueSince,
   };
 }
 
+/** @see evaluateSubscriptionAccess in access-policy.ts */
 export function assertSubscriptionAllowsAccess(limits: PlanLimits | null): void {
-  if (!limits) return; // no subscription yet — allow with soft defaults elsewhere
-  const blocked = ["cancelled", "expired", "paused"].includes(limits.subscriptionStatus);
-  if (!blocked) return;
-
-  const grace = limits.gracePeriodEndsAt ? new Date(limits.gracePeriodEndsAt).getTime() : 0;
-  if (grace > Date.now()) return;
-
-  throw new ValidationError(
-    "La suscripción de la agencia está suspendida o cancelada. Contacta a facturación o al administrador.",
-  );
+  assertAccessPolicy(limits);
 }
 
 export async function assertCanCreateStore(

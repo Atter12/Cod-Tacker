@@ -40,9 +40,14 @@ UI and `services/*.service.ts` only read persisted rows — they must not call p
 
 ### Billing
 
-1. Replace `changePlanMock` with Stripe/Paddle webhooks updating `subscriptions`.
-2. Keep `assertCanCreateStore` / `assertCanImportCsvRows` — limits stay domain-owned.
-3. Never store PAN/card data in CODTracked tables.
+1. Contract: `lib/integrations/contracts/billing.ts` — `BillingProvider`.
+2. Resolve via `getBillingProvider()` (`BILLING_PROVIDER=demo|stripe`).
+3. Stripe live: Checkout + Customer Portal + `/api/billing/webhooks/stripe` → jobs
+   `billing.subscription.updated` / `billing.invoice.upserted`.
+4. Keep `assertCanCreateStore` / `assertCanImportCsvRows` — limits stay domain-owned.
+5. Access policy: `lib/billing/access-policy.ts` — `past_due` soft-grace 7d then block; cancel/expire grace via metadata.
+6. Never store PAN/card data in CODTracked tables.
+7. Smoke: [BILLING_SMOKE.md](./BILLING_SMOKE.md).
 
 ## Do not
 
