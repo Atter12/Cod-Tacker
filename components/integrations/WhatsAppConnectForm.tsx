@@ -28,6 +28,8 @@ export function WhatsAppConnectForm({
   const [accessToken, setAccessToken] = useState("");
   const [phoneId, setPhoneId] = useState(phoneNumberId ?? "");
   const [templateName, setTemplateName] = useState("");
+  /** Meta sample COD template uses en_US; PE production templates often use es. */
+  const [templateLanguage, setTemplateLanguage] = useState("en_US");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -51,6 +53,7 @@ export function WhatsAppConnectForm({
         accessToken: token,
         phoneNumberId: phone,
         confirmationTemplateName: templateName.trim() || undefined,
+        confirmationTemplateLanguage: templateLanguage.trim() || "en_US",
       });
       if (result.error) {
         setError(result.error);
@@ -121,12 +124,26 @@ export function WhatsAppConnectForm({
         <Input
           id="wa-tpl"
           autoComplete="off"
-          placeholder="nombre_plantilla_aprobada"
+          placeholder="jaspers_market_order_confirmation_v1"
           value={templateName}
           onChange={(e) => setTemplateName(e.target.value)}
           disabled={disabled || pending}
         />
       </FormField>
+      <FormField label="Idioma plantilla (Meta)" htmlFor="wa-tpl-lang">
+        <Input
+          id="wa-tpl-lang"
+          autoComplete="off"
+          placeholder="en_US"
+          value={templateLanguage}
+          onChange={(e) => setTemplateLanguage(e.target.value)}
+          disabled={disabled || pending}
+        />
+      </FormField>
+      <p className="text-[11px] text-text-secondary">
+        La plantilla de prueba de Meta usa <span className="font-mono">en_US</span>. Si guardas{" "}
+        <span className="font-mono">es</span> por error, Graph rechaza el envío.
+      </p>
 
       <Button type="button" disabled={disabled || pending} onClick={connect}>
         {connected ? "Guardar credenciales" : "Conectar WhatsApp"}
