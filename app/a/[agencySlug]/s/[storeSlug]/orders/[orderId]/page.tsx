@@ -12,6 +12,7 @@ import {
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
+import { RequestWhatsappConfirmationButton } from "@/components/orders/RequestWhatsappConfirmationButton";
 import {
   ConfirmationStatusBadge,
   DataConfidenceBadge,
@@ -104,6 +105,7 @@ export default async function OrderDetailPage({
   const { order, customer } = detail;
   const revealPii = can(member.roles, "orders.manage") || can(member.roles, "agency.manage");
   const canManage = can(member.roles, "orders.manage");
+  const canWhatsappManage = can(member.roles, "whatsapp.manage");
   const primaryAttribution = detail.attributions.find((row) => row.is_primary) ?? detail.attributions[0];
   const shopifyAttribution = readShopifyAttributionMeta(order.metadata);
   const hasShopifySignals = Boolean(shopifyAttribution?.has_attribution);
@@ -499,6 +501,14 @@ export default async function OrderDetailPage({
                 <p>Confirmado en: {order.confirmed_at ? formatWhen(order.confirmed_at) : "—"}</p>
                 <p>Conversaciones WhatsApp: {detail.whatsappConversations.length}</p>
                 <p>Mensajes: {detail.whatsappMessages.length}</p>
+                <RequestWhatsappConfirmationButton
+                  agencySlug={p.agencySlug}
+                  storeSlug={p.storeSlug}
+                  orderId={order.id}
+                  paymentStatus={order.payment_status}
+                  confirmationStatus={order.confirmation_status}
+                  canManage={canManage || canWhatsappManage}
+                />
               </div>
             ),
           },

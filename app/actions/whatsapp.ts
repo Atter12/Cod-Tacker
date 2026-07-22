@@ -41,6 +41,12 @@ function assertWhatsappManage(roles: readonly Role[]) {
   }
 }
 
+function assertWhatsappOrOrdersManage(roles: readonly Role[]) {
+  if (!can(roles, "whatsapp.manage") && !can(roles, "orders.manage")) {
+    throw new ValidationError("No tienes permiso para solicitar confirmación WhatsApp.");
+  }
+}
+
 function revalidateWa(agencySlug: string, storeSlug: string, conversationId?: string) {
   revalidatePath(routes.store.whatsapp(agencySlug, storeSlug));
   revalidatePath(routes.store.whatsappTemplates(agencySlug, storeSlug));
@@ -611,6 +617,87 @@ export async function duplicateWhatsappTemplate(
 
     revalidateWa(agencySlug, storeSlug);
     return actionOk({ templateId: insert.data.id });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+/**
+ * Manually enqueue COD WhatsApp confirmation for an order (cash_expected).
+ * Uses a fresh idempotency key so soft-skipped / stuck creates can be retried.
+ */
+export async function requestWhatsappCodConfirmation(
+  agencySlug: string,
+  storeSlug: string,
+  orderId: string,
+): Promise<WhatsappActionResult> {
+  try {
+    const user = await requireUser();
+    const membership = await requireStoreAccess(agencySlug, storeSlug);
+    assertWhatsappOrOrdersManage(membership.roles);
+    if (!membership.storeId || !membership.agencyId) {
+      throw new ValidationError("Tienda inválida.");
+    }
+
+    const client = await createClient();
+    const order = await client
+      .from("orders")
+      .select("id, payment_status, confirmation_status")
+      .eq("id", orderId)
+      .eq("store_id", membership.storeId)
+      .maybeSingle();
+    if (!order.data) throw new ValidationError("Pedido no encontrado.");
+    if (order.data.payment_status !== "cash_expected") {
+      throw new ValidationError(
+        "Solo pedidos COD (cash_expected) pueden solicitar confirmación WhatsApp.",
+      );
+    }
+    if (
+      order.data.confirmation_status === "confirmed" ||
+      order.data.confirmation_status === "rejected"
+    ) {
+      throw new ValidationError("La confirmación del pedido ya está cerrada.");
+    }
+
+    const waIntegrationId = await resolveWhatsappIntegration(membership.storeId);
+    if (!waIntegrationId) {
+      throw new ValidationError("WhatsApp no está conectado en esta tienda.");
+    }
+
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { kickJobProcessing } = await import("@/lib/jobs/kick");
+    const admin = createAdminClient();
+    const enqueued = await enqueueRawEventAndJob(admin, {
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
+      integrationId: waIntegrationId,
+      provider: "whatsapp",
+      eventType: "whatsapp.confirmation.request",
+      jobType: "whatsapp.confirmation.request",
+      idempotencyKey: `wa-confirm-manual:${orderId}:${Date.now()}`,
+      correlationId: orderId,
+      payload: {
+        order_id: orderId,
+        manual: true,
+        requested_by: user.id,
+      } as Json,
+    });
+
+    await writeAuditLog({
+      action: "whatsapp_confirmation_requested",
+      entityType: "order",
+      entityId: orderId,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
+      newData: { jobId: enqueued.jobId, created: enqueued.created },
+    });
+
+    void kickJobProcessing({ limit: 8, reason: "whatsapp-confirmation-manual" });
+
+    revalidatePath(routes.store.orderDetail(agencySlug, storeSlug, orderId));
+    revalidateWa(agencySlug, storeSlug);
+    return actionOk({ jobId: enqueued.jobId });
   } catch (error) {
     return actionFail(error);
   }

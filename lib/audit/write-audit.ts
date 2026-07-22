@@ -62,6 +62,7 @@ export type AuditAction =
   | "whatsapp_order_confirmed"
   | "whatsapp_order_rejected"
   | "whatsapp_conversation_closed"
+  | "whatsapp_confirmation_requested"
   | "whatsapp_template_created"
   | "whatsapp_template_updated"
   | "whatsapp_template_duplicated"
