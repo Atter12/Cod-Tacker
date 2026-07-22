@@ -82,11 +82,13 @@ export default async function StoreDashboard({
     generated: series.map((point) => point.ordersGenerated),
     confirmed: series.map((point) => point.ordersConfirmed),
     delivered: series.map((point) => point.ordersDelivered),
-    cash: series.map((point) => point.cashCollected),
+    cash: series.map((point) => point.cashSettled),
+    cashProvisional: series.map((point) => point.cashCollected),
     returned: series.map((point) => point.ordersReturned),
     rto: series.map((point) => point.rto),
     roasCheckout: series.map((point) => point.roasCheckout),
     roasDelivered: series.map((point) => point.roasDelivered),
+    roasSettled: series.map((point) => point.roasSettled),
     roasCollected: series.map((point) => point.roasCollected),
   };
 
@@ -97,7 +99,8 @@ export default async function StoreDashboard({
           Resumen operativo
         </h1>
         <p className="mt-1 text-[13px] text-text-secondary">
-          Indicadores calculados con los datos disponibles.
+          ROAS de producto = efectivo liquidado (Conciliación CSV / Ecart Pay). Entregado y cobrado
+          en puerta son capas previas, no la verdad de caja.
         </p>
       </header>
 
@@ -127,9 +130,9 @@ export default async function StoreDashboard({
           comparisonLabel={comparisonLabel}
         />
         <PrimaryMetricCard
-          label="Efectivo cobrado"
-          value={formatCurrency(summary.kpis.cashCollected.value, summary.currencyCode)}
-          metric={summary.kpis.cashCollected}
+          label="Efectivo liquidado"
+          value={formatCurrency(summary.kpis.cashSettled.value, summary.currencyCode)}
+          metric={summary.kpis.cashSettled}
           sparkline={spark.cash}
           icon={DollarSign}
           comparisonLabel={comparisonLabel}
@@ -194,11 +197,31 @@ export default async function StoreDashboard({
           changeMode="absolute"
         />
         <SecondaryMetricCard
-          label="ROAS cobrado"
+          label="ROAS liquidado"
+          value={formatRoas(summary.kpis.roasSettled.value, summary.adSpend)}
+          metric={summary.kpis.roasSettled}
+          sparkline={spark.roasSettled}
+          icon={DollarSign}
+          comparisonLabel={comparisonLabel}
+          changeMode="absolute"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SecondaryMetricCard
+          label="Cobrado en puerta (provisional)"
+          value={formatCurrency(summary.kpis.cashCollected.value, summary.currencyCode)}
+          metric={summary.kpis.cashCollected}
+          sparkline={spark.cashProvisional}
+          icon={DollarSign}
+          comparisonLabel={comparisonLabel}
+        />
+        <SecondaryMetricCard
+          label="ROAS cobrado (provisional)"
           value={formatRoas(summary.kpis.roasCollected.value, summary.adSpend)}
           metric={summary.kpis.roasCollected}
           sparkline={spark.roasCollected}
-          icon={DollarSign}
+          icon={TrendingUp}
           comparisonLabel={comparisonLabel}
           changeMode="absolute"
         />

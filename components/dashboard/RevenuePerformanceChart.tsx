@@ -46,19 +46,19 @@ function monthKey(date: string): string {
 function aggregate(
   points: DashboardTimeSeriesPoint[],
   granularity: Granularity,
-): Array<{ key: string; label: string; cashCollected: number; ordersGenerated: number }> {
+): Array<{ key: string; label: string; cashSettled: number; ordersGenerated: number }> {
   if (granularity === "daily") {
     return points.map((point) => ({
       key: point.date,
       label: formatShortDate(point.date),
-      cashCollected: point.cashCollected,
+      cashSettled: point.cashSettled,
       ordersGenerated: point.ordersGenerated,
     }));
   }
 
   const buckets = new Map<
     string,
-    { key: string; label: string; cashCollected: number; ordersGenerated: number }
+    { key: string; label: string; cashSettled: number; ordersGenerated: number }
   >();
 
   for (const point of points) {
@@ -66,13 +66,13 @@ function aggregate(
     const key = granularity === "weekly" ? startOfWeek(date) : monthKey(point.date);
     const existing = buckets.get(key);
     if (existing) {
-      existing.cashCollected += point.cashCollected;
+      existing.cashSettled += point.cashSettled;
       existing.ordersGenerated += point.ordersGenerated;
     } else {
       buckets.set(key, {
         key,
         label: granularity === "weekly" ? formatShortDate(key) : formatMonth(key),
-        cashCollected: point.cashCollected,
+        cashSettled: point.cashSettled,
         ordersGenerated: point.ordersGenerated,
       });
     }
@@ -124,7 +124,7 @@ export function RevenuePerformanceChart({
 }) {
   const [granularity, setGranularity] = useState<Granularity>("daily");
   const data = useMemo(() => aggregate(timeSeries, granularity), [timeSeries, granularity]);
-  const hasData = data.some((point) => point.cashCollected > 0 || point.ordersGenerated > 0);
+  const hasData = data.some((point) => point.cashSettled > 0 || point.ordersGenerated > 0);
   const currencyLabel = currencyCode === "PEN" ? "S/" : currencyCode;
 
   return (
@@ -133,7 +133,7 @@ export function RevenuePerformanceChart({
         <div>
           <div className="flex items-center gap-1.5">
             <h2 className="text-[13px] font-semibold text-text-primary">Ingresos y rendimiento</h2>
-            <UiTooltip content="Efectivo cobrado y pedidos generados en el período.">
+            <UiTooltip content="Efectivo liquidado (Conciliación) y pedidos generados en el período.">
               <Info className="size-3.5 text-text-secondary" aria-hidden />
             </UiTooltip>
           </div>
@@ -202,8 +202,8 @@ export function RevenuePerformanceChart({
               labelStyle={chartTooltipLabelStyle}
               formatter={(value, name) => {
                 const numeric = typeof value === "number" ? value : Number(value ?? 0);
-                if (name === "cashCollected") {
-                  return [formatCurrency(numeric, currencyCode), `Efectivo cobrado (${currencyLabel})`];
+                if (name === "cashSettled") {
+                  return [formatCurrency(numeric, currencyCode), `Efectivo liquidado (${currencyLabel})`];
                 }
                 return [numeric.toLocaleString("es-PE"), "Pedidos generados"];
               }}
@@ -218,8 +218,8 @@ export function RevenuePerformanceChart({
               height={28}
               iconType="plainline"
               formatter={(value) =>
-                value === "cashCollected"
-                  ? `Efectivo cobrado (${currencyLabel})`
+                value === "cashSettled"
+                  ? `Efectivo liquidado (${currencyLabel})`
                   : "Pedidos generados"
               }
               wrapperStyle={{ fontSize: 12, color: "var(--text-secondary)" }}
@@ -227,7 +227,7 @@ export function RevenuePerformanceChart({
             <Area
               yAxisId="cash"
               type="monotone"
-              dataKey="cashCollected"
+              dataKey="cashSettled"
               stroke="var(--brand-primary)"
               fill="var(--brand-soft)"
               strokeWidth={2}

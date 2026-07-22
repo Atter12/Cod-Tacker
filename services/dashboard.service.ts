@@ -11,6 +11,7 @@ import {
 import {
   computeDashboardRevenueTotals,
   isCashCollectedOrder,
+  isSettledOrder,
   orderDeliveredValue,
   roasRatio,
 } from "@/lib/dashboard/revenue";
@@ -40,6 +41,7 @@ type PeriodTotals = {
   delivered: number;
   returned: number;
   cashCollected: number;
+  cashSettled: number;
   cashExpected: number;
   checkoutRevenue: number;
   deliveredRevenue: number;
@@ -50,6 +52,7 @@ type PeriodTotals = {
   roasCheckout: number | null;
   roasDelivered: number | null;
   roasCollected: number | null;
+  roasSettled: number | null;
 };
 
 const sum = <T>(items: readonly T[], value: (item: T) => number): number =>
@@ -87,6 +90,7 @@ function computePeriodTotals(
     delivered,
     returned,
     cashCollected: revenue.collectedRevenue,
+    cashSettled: revenue.settledRevenue,
     cashExpected,
     checkoutRevenue: revenue.checkoutRevenue,
     deliveredRevenue: revenue.deliveredRevenue,
@@ -97,6 +101,7 @@ function computePeriodTotals(
     roasCheckout: revenue.roasCheckout,
     roasDelivered: revenue.roasDelivered,
     roasCollected: revenue.roasCollected,
+    roasSettled: revenue.roasSettled,
   };
 }
 
@@ -134,6 +139,13 @@ function buildTimeSeries(
     const cashKey = dayKey(order.cash_collected_at ?? order.created_at_source, timeZone);
     const cashPoint = map.get(cashKey);
     if (cashPoint) cashPoint.cashCollected += order.collected_cod_amount ?? 0;
+  }
+
+  for (const order of orders) {
+    if (!isSettledOrder(order)) continue;
+    const settledKey = dayKey(order.settled_at ?? order.created_at_source, timeZone);
+    const settledPoint = map.get(settledKey);
+    if (settledPoint) settledPoint.cashSettled += order.settled_cod_amount ?? 0;
   }
 
   for (const shipment of shipments) {
@@ -176,6 +188,7 @@ function buildTimeSeries(
       roasCheckout: roasRatio(point.checkoutRevenue, point.adSpend) ?? 0,
       roasDelivered: roasRatio(point.deliveredRevenue, point.adSpend) ?? 0,
       roasCollected: roasRatio(point.cashCollected, point.adSpend) ?? 0,
+      roasSettled: roasRatio(point.cashSettled, point.adSpend) ?? 0,
     };
   });
 }
@@ -317,7 +330,8 @@ export async function getStoreActiveAlertCount(
  * - rto = returned / (delivered + returned)
  * - roasCheckout = attributed checkout revenue / ad spend
  * - roasDelivered = sum(expected COD of delivered orders) / ad spend
- * - roasCollected = sum(collected_cod_amount of cash-collected orders) / ad spend
+ * - roasCollected = provisional door cash / ad spend
+ * - roasSettled = reconciled settled_cod_amount / ad spend (product ROAS truth)
  * - Confirmed includes confirmed_at, confirmation_status=confirmed, or post-confirmation order_status
  */
 export async function getDashboardSummary(
@@ -418,12 +432,14 @@ export async function getDashboardSummary(
       ordersDelivered: toMetric(currentTotals.delivered, previousTotals.delivered),
       ordersReturned: toMetric(currentTotals.returned, previousTotals.returned),
       cashCollected: toMetric(currentTotals.cashCollected, previousTotals.cashCollected),
+      cashSettled: toMetric(currentTotals.cashSettled, previousTotals.cashSettled),
       confirmationRate: toMetric(currentTotals.confirmationRate, previousTotals.confirmationRate),
       deliveryRate: toMetric(currentTotals.deliveryRate, previousTotals.deliveryRate),
       rto: toMetric(currentTotals.rto, previousTotals.rto),
       roasCheckout: toMetric(currentTotals.roasCheckout ?? 0, previousTotals.roasCheckout ?? 0),
       roasDelivered: toMetric(currentTotals.roasDelivered ?? 0, previousTotals.roasDelivered ?? 0),
       roasCollected: toMetric(currentTotals.roasCollected ?? 0, previousTotals.roasCollected ?? 0),
+      roasSettled: toMetric(currentTotals.roasSettled ?? 0, previousTotals.roasSettled ?? 0),
     },
     funnel: {
       generated: currentTotals.generated,
