@@ -16,6 +16,31 @@ function asObject(payload: Json): Record<string, unknown> {
   throw new PermanentJobError("INVALID_PAYLOAD", "El payload del pedido no es un objeto válido.");
 }
 
+async function enqueueWhatsappCodConfirmation(input: {
+  admin: Parameters<JobHandler>[0]["admin"];
+  agencyId: string;
+  storeId: string;
+  integrationId: string | null;
+  orderId: string;
+  demoSeed?: string | null;
+}) {
+  const { enqueueRawEventAndJob } = await import("@/lib/jobs/enqueue");
+  await enqueueRawEventAndJob(input.admin, {
+    agencyId: input.agencyId,
+    storeId: input.storeId,
+    integrationId: input.integrationId,
+    provider: "whatsapp",
+    eventType: "whatsapp.confirmation.request",
+    jobType: "whatsapp.confirmation.request",
+    idempotencyKey: `wa-confirm:${input.orderId}`,
+    correlationId: input.orderId,
+    payload: {
+      order_id: input.orderId,
+      demo_seed: input.demoSeed ?? null,
+    } as Json,
+  });
+}
+
 export const handleShopifyOrderCreated: JobHandler = async ({
   admin,
   job,
@@ -32,7 +57,7 @@ export const handleShopifyOrderCreated: JobHandler = async ({
   const data = parsed.data;
   const existing = await admin
     .from("orders")
-    .select("id")
+    .select("id, payment_status, confirmation_status")
     .eq("store_id", job.store_id)
     .eq("external_order_id", data.external_order_id)
     .maybeSingle();
@@ -105,6 +130,24 @@ export const handleShopifyOrderCreated: JobHandler = async ({
         attribution: data.attribution,
       });
     }
+
+    // Repair: first create may have inserted then failed before WA enqueue.
+    const paymentForWa =
+      data.payment_status ?? existing.data.payment_status ?? "cash_expected";
+    if (
+      paymentForWa === "cash_expected" &&
+      existing.data.confirmation_status === "not_requested"
+    ) {
+      await enqueueWhatsappCodConfirmation({
+        admin,
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        integrationId: job.integration_id,
+        orderId: existing.data.id,
+        demoSeed: data.demo_seed ?? null,
+      });
+    }
+
     return {
       ok: true,
       action: "updated",
@@ -211,6 +254,18 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el pedido Shopify.");
   }
 
+  // Enqueue WA immediately after insert so line-item/attribution failures still get COD confirm.
+  if (paymentStatus === "cash_expected") {
+    await enqueueWhatsappCodConfirmation({
+      admin,
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      integrationId: job.integration_id,
+      orderId: insert.data.id,
+      demoSeed: data.demo_seed ?? null,
+    });
+  }
+
   if (data.line_items) {
     await syncShopifyOrderItems({
       admin,
@@ -229,25 +284,6 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       customerId,
       attributedValue: total,
       attribution: data.attribution,
-    });
-  }
-
-  // COD confirmation request via WhatsApp (live/mock) — links order ↔ conversation.
-  if (paymentStatus === "cash_expected") {
-    const { enqueueRawEventAndJob } = await import("@/lib/jobs/enqueue");
-    await enqueueRawEventAndJob(admin, {
-      agencyId: job.agency_id,
-      storeId: job.store_id,
-      integrationId: job.integration_id,
-      provider: "whatsapp",
-      eventType: "whatsapp.confirmation.request",
-      jobType: "whatsapp.confirmation.request",
-      idempotencyKey: `wa-confirm:${insert.data.id}`,
-      correlationId: insert.data.id,
-      payload: {
-        order_id: insert.data.id,
-        demo_seed: data.demo_seed ?? null,
-      } as Json,
     });
   }
 
