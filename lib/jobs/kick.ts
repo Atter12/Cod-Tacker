@@ -22,9 +22,13 @@ export async function kickJobProcessing(input?: {
       reason: input?.reason ?? null,
       claimed: result.claimed,
       completed: result.completed,
+      failed: result.failed,
+      retried: result.retried,
+      deadLetter: result.deadLetter,
+      jobIds: result.jobIds,
     };
     // Idle kicks are routine; only surface work in production audits.
-    if (result.claimed > 0 || result.completed > 0) {
+    if (result.claimed > 0 || result.completed > 0 || result.failed > 0) {
       logger.info("jobs.kick.complete", fields);
     } else {
       logger.debug("jobs.kick.complete", fields);

@@ -12,6 +12,7 @@ import type {
 import type { BackgroundJobRow } from "@/types/database";
 import type { Json } from "@/types/database.generated";
 import { AppError } from "@/lib/errors/AppError";
+import { logger } from "@/lib/observability/logger";
 
 const DEFAULT_STUCK_MS = 15 * 60 * 1_000;
 
@@ -113,6 +114,17 @@ async function failJob(
   const permanent = isPermanentJobError(error);
   const exhausted = job.attempts >= job.max_attempts;
   const shouldDeadLetter = permanent || exhausted;
+
+  logger.error("jobs.handler.failed", {
+    jobId: job.id,
+    jobType: job.job_type,
+    code,
+    message,
+    permanent,
+    attempts: job.attempts,
+    maxAttempts: job.max_attempts,
+    willDeadLetter: shouldDeadLetter,
+  });
 
   await admin
     .from("job_attempts")
