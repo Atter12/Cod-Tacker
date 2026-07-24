@@ -108,6 +108,7 @@ describe("plan white-label gate", () => {
       trialEndsAt: null,
       currentPeriodEnd: null,
       gracePeriodEndsAt: null,
+      pastDueSince: null,
     };
     assert.equal(planAllowsWhiteLabel(starter), false);
     assert.equal(

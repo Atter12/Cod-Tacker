@@ -73,6 +73,7 @@ describe("plan access policy", () => {
     trialEndsAt: null,
     currentPeriodEnd: null,
     gracePeriodEndsAt: null,
+    pastDueSince: null,
   };
 
   it("blocks cancelled without grace", () => {
@@ -96,5 +97,26 @@ describe("plan access policy", () => {
   it("gates white-label feature", () => {
     assert.equal(planAllowsWhiteLabel(base), false);
     assert.equal(planAllowsWhiteLabel({ ...base, features: { white_label: true } }), true);
+  });
+
+  it("allows past_due inside grace then blocks after", () => {
+    const recent = new Date(Date.now() - 86400000).toISOString();
+    assert.doesNotThrow(() =>
+      assertSubscriptionAllowsAccess({
+        ...base,
+        subscriptionStatus: "past_due",
+        pastDueSince: recent,
+      }),
+    );
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    assert.throws(
+      () =>
+        assertSubscriptionAllowsAccess({
+          ...base,
+          subscriptionStatus: "past_due",
+          pastDueSince: old,
+        }),
+      ValidationError,
+    );
   });
 });

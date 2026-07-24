@@ -30,6 +30,14 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `ALLOW_DEMO_SEED` | Seed CLI only | Must be `true` to run `npm run seed:demo`. |
 | `DEMO_AGENCY_ID` | Seed CLI only | Target agency UUID for demo seed. |
 | `DEMO_STORE_ID` | Seed CLI only | Target store UUID (must belong to agency). |
+| `BILLING_PROVIDER` | Server only | `demo` (default) or `stripe`. Independent of `INTEGRATION_MODE`. |
+| `STRIPE_SECRET_KEY` | Server only | Stripe secret key (`sk_test_…` / `sk_live_…`). Required when `BILLING_PROVIDER=stripe`. |
+| `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret (`whsec_…`). Required to accept `/api/billing/webhooks/stripe`. |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Public | Optional until client-side Stripe Elements are used. |
+| `STRIPE_API_VERSION` | Server only | Optional; defaults to SDK pin (`2026-06-24.dahlia`). |
+| `STRIPE_PRICE_STARTER_MONTH` / `_YEAR` | Server only | Fallback Stripe Price IDs when `plan_provider_prices` has no row. Same for `GROWTH` and `SCALE`. |
+
+Webhook URL (Stripe Dashboard): `{NEXT_PUBLIC_APP_URL}/api/billing/webhooks/stripe`.
 
 `scripts/test-rls.mjs` uses separate `SUPABASE_URL` and `ANON_KEY` variables so its purpose is explicit. See [RLS_TESTING.md](./RLS_TESTING.md).
 

@@ -3837,6 +3837,95 @@ export type Database = {
         }
         Relationships: []
       }
+      // TEMPORARY FALLBACK — regenerate after 20260722160000_billing_stripe_foundation.sql
+      plan_provider_prices: {
+        Row: {
+          id: string
+          plan_id: string
+          provider: string
+          interval: string
+          provider_price_id: string
+          provider_product_id: string | null
+          is_active: boolean
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          provider: string
+          interval: string
+          provider_price_id: string
+          provider_product_id?: string | null
+          is_active?: boolean
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          provider?: string
+          interval?: string
+          provider_price_id?: string
+          provider_product_id?: string | null
+          is_active?: boolean
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_provider_prices_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_webhook_events: {
+        Row: {
+          id: string
+          provider: string
+          event_id: string
+          event_type: string
+          agency_id: string | null
+          processed_at: string | null
+          payload_summary: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          provider: string
+          event_id: string
+          event_type: string
+          agency_id?: string | null
+          processed_at?: string | null
+          payload_summary?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          provider?: string
+          event_id?: string
+          event_type?: string
+          agency_id?: string | null
+          processed_at?: string | null
+          payload_summary?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_webhook_events_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usage_counters: {
         Row: {
           id: string

@@ -4,16 +4,20 @@ import { revalidatePath } from "next/cache";
 import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
+import { getPublicEnv } from "@/config/env";
 import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
 import type { Role } from "@/config/permissions";
 import { can } from "@/lib/permissions/can";
-import { createClient } from "@/lib/supabase/server";
+import { getBillingProvider, isDemoBilling } from "@/lib/billing/provider";
+import type { BillingInterval } from "@/lib/integrations/contracts/billing";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
-import type { Json } from "@/types/database";
-import type { Enums } from "@/types/database.generated";
 
-export type BillingActionResult = ActionResult<{ planCode?: string }>;
+export type BillingActionResult = ActionResult<{
+  planCode?: string;
+  url?: string;
+  kind?: "redirect" | "applied";
+}>;
 
 function assertBillingManage(roles: readonly Role[]) {
   if (!can(roles, "billing.manage")) {
@@ -21,113 +25,97 @@ function assertBillingManage(roles: readonly Role[]) {
   }
 }
 
-async function ensureMockInvoice(
-  client: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
-  subscriptionId: string,
-  planCode: string,
-  amountCents: number,
-) {
-  const invoiceNumber = `DEMO-${planCode.toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
-  await client.from("invoice_records").insert({
-    agency_id: agencyId,
-    subscription_id: subscriptionId,
-    invoice_number: invoiceNumber,
-    status: "paid",
-    currency_code: "USD",
-    amount_cents: amountCents,
-    period_start: new Date().toISOString(),
-    period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
-    issued_at: new Date().toISOString(),
-    paid_at: new Date().toISOString(),
-    metadata: { demo: true, note: "Facturación de demostración" } as Json,
-  });
+function billingSuccessUrl(agencySlug: string): string {
+  const base = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  return `${base}${routes.agency.billing(agencySlug)}?checkout=success`;
 }
 
+function billingCancelUrl(agencySlug: string): string {
+  const base = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  return `${base}${routes.agency.billing(agencySlug)}?checkout=cancel`;
+}
+
+/**
+ * Start plan selection: demo applies locally; Stripe opens Checkout or swaps price.
+ * @deprecated Prefer selectPlan — kept for BillingPanel compatibility.
+ */
 export async function changePlanMock(
   agencySlug: string,
   planCode: string,
+): Promise<BillingActionResult> {
+  return selectPlan(agencySlug, planCode, "month");
+}
+
+export async function selectPlan(
+  agencySlug: string,
+  planCode: string,
+  interval: BillingInterval = "month",
 ): Promise<BillingActionResult> {
   try {
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const client = await createClient();
-    const { data: plan } = await client
-      .from("plans")
-      .select("id, code, name, monthly_price")
-      .eq("code", planCode)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!plan) throw new ValidationError("Plan no encontrado.");
-
-    const now = new Date();
-    const periodEnd = new Date(now.getTime() + 30 * 86400000);
-    const { data: existing } = await client
-      .from("subscriptions")
-      .select("id, plan_id, status")
-      .eq("agency_id", membership.agencyId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let subscriptionId: string;
-    if (existing) {
-      const { error } = await client
-        .from("subscriptions")
-        .update({
-          plan_id: plan.id,
-          status: "active" as Enums<"subscription_status">,
-          billing_provider: "demo",
-          cancel_at_period_end: false,
-          current_period_start: now.toISOString(),
-          current_period_end: periodEnd.toISOString(),
-          metadata: { demo: true, changed_by: user.id } as Json,
-          updated_at: now.toISOString(),
-        })
-        .eq("id", existing.id);
-      if (error) throw error;
-      subscriptionId = existing.id;
-    } else {
-      const { data: created, error } = await client
-        .from("subscriptions")
-        .insert({
-          agency_id: membership.agencyId,
-          plan_id: plan.id,
-          status: "active" as Enums<"subscription_status">,
-          billing_provider: "demo",
-          current_period_start: now.toISOString(),
-          current_period_end: periodEnd.toISOString(),
-          cancel_at_period_end: false,
-          metadata: { demo: true } as Json,
-        })
-        .select("id")
-        .single();
-      if (error || !created) throw error ?? new ValidationError("No se pudo crear la suscripción.");
-      subscriptionId = created.id;
-    }
-
-    await ensureMockInvoice(
-      client,
-      membership.agencyId,
-      subscriptionId,
-      plan.code,
-      Math.round(Number(plan.monthly_price) * 100),
-    );
+    const provider = getBillingProvider();
+    const result = await provider.createCheckoutSession({
+      agencyId: membership.agencyId,
+      agencySlug,
+      planCode,
+      interval,
+      successUrl: billingSuccessUrl(agencySlug),
+      cancelUrl: billingCancelUrl(agencySlug),
+      customerEmail: user.email,
+      actorUserId: user.id,
+    });
 
     await writeAuditLog({
       action: "billing_plan_changed",
       entityType: "subscription",
-      entityId: subscriptionId,
+      entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
-      newData: { planCode: plan.code, planName: plan.name },
+      newData: {
+        planCode,
+        interval,
+        provider: provider.providerId,
+        kind: result.kind,
+      },
     });
 
     revalidatePath(routes.agency.billing(agencySlug));
     revalidatePath(routes.agency.branding(agencySlug));
-    return actionOk({ planCode: plan.code });
+
+    if (result.kind === "redirect") {
+      return actionOk({ planCode, url: result.url, kind: "redirect" });
+    }
+    return actionOk({ planCode: result.planCode, kind: "applied" });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+export async function openBillingPortal(agencySlug: string): Promise<BillingActionResult> {
+  try {
+    const user = await requireUser();
+    const membership = await requireAgencyAccess(agencySlug);
+    assertBillingManage(membership.roles);
+
+    const provider = getBillingProvider();
+    const { url } = await provider.createPortalSession({
+      agencyId: membership.agencyId,
+      returnUrl: billingSuccessUrl(agencySlug),
+    });
+
+    await writeAuditLog({
+      action: "billing_plan_changed",
+      entityType: "subscription",
+      entityId: membership.agencyId,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      newData: { provider: provider.providerId, portal: true },
+    });
+
+    return actionOk({ url, kind: "redirect" });
   } catch (error) {
     return actionFail(error);
   }
@@ -139,41 +127,19 @@ export async function scheduleCancelAtPeriodEnd(agencySlug: string): Promise<Bil
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const client = await createClient();
-    const { data: sub } = await client
-      .from("subscriptions")
-      .select("id, current_period_end")
-      .eq("agency_id", membership.agencyId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!sub) throw new ValidationError("No hay suscripción activa.");
-
-    const grace = new Date(
-      (sub.current_period_end ? new Date(sub.current_period_end).getTime() : Date.now()) + 7 * 86400000,
-    );
-
-    const { error } = await client
-      .from("subscriptions")
-      .update({
-        cancel_at_period_end: true,
-        metadata: {
-          demo: true,
-          grace_period_ends_at: grace.toISOString(),
-          cancel_requested_at: new Date().toISOString(),
-        } as Json,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sub.id);
-    if (error) throw error;
+    const provider = getBillingProvider();
+    await provider.cancelAtPeriodEnd({
+      agencyId: membership.agencyId,
+      actorUserId: user.id,
+    });
 
     await writeAuditLog({
       action: "billing_cancel_scheduled",
       entityType: "subscription",
-      entityId: sub.id,
+      entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
-      newData: { gracePeriodEndsAt: grace.toISOString() },
+      newData: { provider: provider.providerId },
     });
 
     revalidatePath(routes.agency.billing(agencySlug));
@@ -184,42 +150,44 @@ export async function scheduleCancelAtPeriodEnd(agencySlug: string): Promise<Bil
 }
 
 export async function reactivateSubscriptionMock(agencySlug: string): Promise<BillingActionResult> {
+  return reactivateSubscription(agencySlug);
+}
+
+export async function reactivateSubscription(agencySlug: string): Promise<BillingActionResult> {
   try {
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const client = await createClient();
-    const { data: sub } = await client
-      .from("subscriptions")
-      .select("id")
-      .eq("agency_id", membership.agencyId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!sub) throw new ValidationError("No hay suscripción.");
-
-    const { error } = await client
-      .from("subscriptions")
-      .update({
-        status: "active" as Enums<"subscription_status">,
-        cancel_at_period_end: false,
-        metadata: { demo: true, reactivated_at: new Date().toISOString() } as Json,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sub.id);
-    if (error) throw error;
+    const provider = getBillingProvider();
+    await provider.reactivate({
+      agencyId: membership.agencyId,
+      actorUserId: user.id,
+    });
 
     await writeAuditLog({
       action: "billing_reactivated",
       entityType: "subscription",
-      entityId: sub.id,
+      entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
+      newData: { provider: provider.providerId },
     });
 
     revalidatePath(routes.agency.billing(agencySlug));
     return actionOk();
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+/** Exposed for UI badges — not a secret. */
+export async function getBillingProviderModeAction(): Promise<
+  ActionResult<{ mode: "demo" | "stripe" }>
+> {
+  try {
+    await requireUser();
+    return actionOk({ mode: isDemoBilling() ? "demo" : "stripe" });
   } catch (error) {
     return actionFail(error);
   }

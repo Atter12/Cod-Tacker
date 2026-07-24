@@ -1,5 +1,7 @@
 import { handleAdsHierarchySeeded } from "@/lib/jobs/handlers/ads-hierarchy-seeded";
 import { handleAdsSpendSynced } from "@/lib/jobs/handlers/ads-spend-synced";
+import { handleBillingInvoiceUpserted } from "@/lib/jobs/handlers/billing-invoice-upserted";
+import { handleBillingSubscriptionUpdated } from "@/lib/jobs/handlers/billing-subscription-updated";
 import { handleCarrierShipmentUpdated } from "@/lib/jobs/handlers/carrier-shipment-updated";
 import { handleSettlementBatchReceived } from "@/lib/jobs/handlers/settlement-batch-received";
 import { handleSettlementCsvImported } from "@/lib/jobs/handlers/settlement-csv-imported";
@@ -27,8 +29,12 @@ export const JOB_TYPES = [
   "whatsapp.status.updated.mock",
   "whatsapp.confirmation.request",
   "settlement.batch.received.mock",
+  "settlement.csv.imported",
   "settlement.csv.imported.mock",
+  "settlement.ecart.synced",
   "privacy.data_export.mock",
+  "billing.subscription.updated",
+  "billing.invoice.upserted",
 ] as const;
 
 export type KnownJobType = (typeof JOB_TYPES)[number];
@@ -49,8 +55,12 @@ const registry: Record<KnownJobType, JobHandler> = {
   "whatsapp.status.updated.mock": handleWhatsappStatusUpdated,
   "whatsapp.confirmation.request": handleWhatsappConfirmationRequest,
   "settlement.batch.received.mock": handleSettlementBatchReceived,
+  "settlement.csv.imported": handleSettlementCsvImported,
   "settlement.csv.imported.mock": handleSettlementCsvImported,
+  "settlement.ecart.synced": handleSettlementCsvImported,
   "privacy.data_export.mock": handlePrivacyDataExport,
+  "billing.subscription.updated": handleBillingSubscriptionUpdated,
+  "billing.invoice.upserted": handleBillingInvoiceUpserted,
 };
 
 export function getJobHandler(jobType: string): JobHandler | null {

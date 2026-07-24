@@ -41,8 +41,10 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 - [ ] Cron jobs drenando (`/api/internal/jobs/process`) autenticado
 - [ ] Monitor externo de `/api/health`
 - [x] **WhatsApp Cloud API** live en código (smoke Meta pendiente arriba)
-- [ ] **Billing real** (Paddle primario; Culqi / Mercado Pago según PE) — reemplazar `changePlanMock`
-- [ ] **Settlement / conciliación**: CSV-prod sin mock **o** adapter live (`getSettlementProvider` aún mock)
+- [ ] **Billing real** (Stripe vía `BILLING_PROVIDER=stripe`; Paddle/Culqi/MP adapters futuros) — demo sigue con `BILLING_PROVIDER=demo`
+- [ ] Smoke Billing: seguir [BILLING_SMOKE.md](./BILLING_SMOKE.md) (Checkout → webhook → invoice; past_due grace; replay idempotente)
+- [x] **Settlement / conciliación**: CSV live (`settlement.csv.imported`) + Ecart Pay sync (`settlement.ecart.synced`); sin liquidar ROAS solo por delivered
+- [ ] Smoke Conciliación: CSV real courier **o** token Ecart Pay → lote matched → approve → settled
 - [ ] Sincronizar `docs/ENVIRONMENT_VARIABLES.md` con `.env.example`
 
 ---

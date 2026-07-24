@@ -5,9 +5,11 @@ export type DashboardRevenueOrder = {
   id: string;
   expected_cod_amount: number | null;
   collected_cod_amount: number | null;
+  settled_cod_amount: number | null;
   total_amount: number;
   payment_status: string;
   cash_collected_at: string | null;
+  settled_at: string | null;
 };
 
 /** Minimal shipment shape for delivered value. */
@@ -21,13 +23,22 @@ export type DashboardRevenueTotals = {
   checkoutRevenue: number;
   /** Expected COD (or total) for orders with a delivered shipment — not a delivery-rate proxy. */
   deliveredRevenue: number;
-  /** Door cash: sum of collected_cod_amount on terminal collected orders. */
+  /**
+   * Provisional door cash (`cash_collected` / collected_cod_amount).
+   * May include assumed collection on delivered — not the product ROAS truth.
+   */
   collectedRevenue: number;
+  /**
+   * Reconciled cash after Conciliación approve (CSV / Ecart Pay).
+   * Primary denominator for CODTracked ROAS effectiveness.
+   */
+  settledRevenue: number;
   spend: number;
   /** null when spend <= 0 (no fake 0.00 ROAS). */
   roasCheckout: number | null;
   roasDelivered: number | null;
   roasCollected: number | null;
+  roasSettled: number | null;
 };
 
 /** Revenue ÷ spend; null when there is no ad spend (same rule as attribution KPIs). */
@@ -40,7 +51,23 @@ export function isCashCollectedOrder(order: {
   payment_status: string;
   cash_collected_at: string | null;
 }): boolean {
-  return order.payment_status === "cash_collected" || Boolean(order.cash_collected_at);
+  return (
+    order.payment_status === "cash_collected" ||
+    order.payment_status === "partially_collected" ||
+    order.payment_status === "settlement_pending" ||
+    order.payment_status === "settled" ||
+    Boolean(order.cash_collected_at)
+  );
+}
+
+export function isSettledOrder(order: {
+  payment_status: string;
+  settled_at: string | null;
+  settled_cod_amount: number | null;
+}): boolean {
+  if (order.payment_status === "settled") return true;
+  if (order.settled_at) return true;
+  return order.settled_cod_amount != null && order.settled_cod_amount > 0;
 }
 
 /** COD expected at door; falls back to order total when expected COD is unset. */
@@ -69,7 +96,8 @@ export function legacyDeliveredRevenueProxy(input: {
  * Honest revenue layers for dashboard ROAS:
  * - checkout: attributed checkout value
  * - delivered: sum of expected COD for uniquely delivered orders (excludes RTO shipments)
- * - collected: sum of collected_cod_amount for cash-collected orders
+ * - collected: provisional door cash (may be assumed on delivered)
+ * - settled: reconciled cash after Conciliación (CSV / Ecart Pay) — product ROAS truth
  */
 export function computeDashboardRevenueTotals(input: {
   orders: readonly DashboardRevenueOrder[];
@@ -96,14 +124,20 @@ export function computeDashboardRevenueTotals(input: {
     .filter(isCashCollectedOrder)
     .reduce((total, order) => total + (order.collected_cod_amount ?? 0), 0);
 
+  const settledRevenue = input.orders
+    .filter(isSettledOrder)
+    .reduce((total, order) => total + (order.settled_cod_amount ?? 0), 0);
+
   const { checkoutRevenue, spend } = input;
   return {
     checkoutRevenue,
     deliveredRevenue,
     collectedRevenue,
+    settledRevenue,
     spend,
     roasCheckout: roasRatio(checkoutRevenue, spend),
     roasDelivered: roasRatio(deliveredRevenue, spend),
     roasCollected: roasRatio(collectedRevenue, spend),
+    roasSettled: roasRatio(settledRevenue, spend),
   };
 }

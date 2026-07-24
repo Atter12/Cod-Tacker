@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { EcartPayPanel } from "@/components/reconciliation/EcartPayPanel";
 import { ReconciliationFiltersForm } from "@/components/reconciliation/ReconciliationFiltersForm";
 import {
   DataTable,
@@ -8,7 +9,6 @@ import {
   SectionHeader,
   Skeleton,
   StatusBadge,
-  DemoModeBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/lib/http/search-params";
 import { BATCH_STATUS_OPTIONS, labelBatchStatus } from "@/lib/reconciliation/labels";
 import { can } from "@/lib/permissions/can";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { listSettlementBatchesPaginated } from "@/services/reconciliation.service";
@@ -26,6 +27,25 @@ import type { Enums } from "@/types/database.generated";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("es-PE", { style: "currency", currency }).format(amount);
+}
+
+async function storeHasEcartPay(storeId: string, agencyId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const result = await admin
+    .from("integrations")
+    .select("id, settings, status")
+    .eq("store_id", storeId)
+    .eq("agency_id", agencyId)
+    .eq("provider", "custom_payment")
+    .eq("status", "connected")
+    .limit(20);
+  return (result.data ?? []).some((row) => {
+    const settings =
+      row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
+        ? (row.settings as Record<string, unknown>)
+        : {};
+    return settings.gateway === "ecart_pay";
+  });
 }
 
 export default async function ReconciliationPage({
@@ -43,7 +63,7 @@ export default async function ReconciliationPage({
       <ErrorState title="Sin permiso" description="No puedes ver conciliación en esta tienda." />
     );
   }
-  if (!member.storeId) {
+  if (!member.storeId || !member.agencyId) {
     return <ErrorState title="Tienda inválida" description="No se pudo resolver la tienda activa." />;
   }
 
@@ -68,13 +88,13 @@ export default async function ReconciliationPage({
   }
 
   const canManage = can(member.roles, "reconciliation.manage");
+  const ecartConnected = await storeHasEcartPay(member.storeId, member.agencyId);
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
       <SectionHeader
         title="Conciliación"
-        description="Importa CSV, empareja cobros y liquida sin mezclar entregado / cobrado / liquidado."
+        description="Verdad de caja para ROAS: CSV del courier o sync Ecart Pay (COD Envia). Entregado ≠ liquidado."
         action={
           <div className="flex flex-wrap gap-2 text-sm">
             {canManage && (
@@ -94,13 +114,19 @@ export default async function ReconciliationPage({
           </div>
         }
       />
+      <EcartPayPanel
+        agencySlug={p.agencySlug}
+        storeSlug={p.storeSlug}
+        connected={ecartConnected}
+        canManage={canManage}
+      />
       <Suspense fallback={<Skeleton className="h-10 w-full" />}>
         <ReconciliationFiltersForm mode="batches" />
       </Suspense>
       {result.rows.length === 0 ? (
         <EmptyState
-          title="Sin lotes"
-          description="Importa un CSV de liquidación del carrier para comenzar."
+          title="Sin lotes de liquidación"
+          description="Importa un CSV de liquidación del courier o sincroniza Ecart Pay (si usas COD de Envia)."
         />
       ) : (
         <DataTable

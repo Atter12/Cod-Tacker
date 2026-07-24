@@ -120,6 +120,7 @@ export function emptySeriesPoint(date: string) {
     ordersDelivered: 0,
     ordersReturned: 0,
     cashCollected: 0,
+    cashSettled: 0,
     adSpend: 0,
     checkoutRevenue: 0,
     deliveredRevenue: 0,
@@ -127,5 +128,6 @@ export function emptySeriesPoint(date: string) {
     roasCheckout: 0,
     roasDelivered: 0,
     roasCollected: 0,
+    roasSettled: 0,
   };
 }

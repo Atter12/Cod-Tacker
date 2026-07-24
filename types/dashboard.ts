@@ -23,7 +23,10 @@ export type DashboardTimeSeriesPoint = {
   ordersConfirmed: number;
   ordersDelivered: number;
   ordersReturned: number;
+  /** Provisional door cash (cash_collected). */
   cashCollected: number;
+  /** Reconciled cash after Conciliación (settled). Primary product cash. */
+  cashSettled: number;
   adSpend: number;
   checkoutRevenue: number;
   deliveredRevenue: number;
@@ -31,8 +34,10 @@ export type DashboardTimeSeriesPoint = {
   roasCheckout: number;
   /** Estimated from delivery mix — not cash at door. Prefer roasCollected for confirmed ROAS. */
   roasDelivered: number;
-  /** Door cash / ad spend (terminal collected COD). */
+  /** Provisional door cash / ad spend. */
   roasCollected: number;
+  /** Reconciled settled cash / ad spend — CODTracked ROAS truth. */
+  roasSettled: number;
 };
 
 export type DashboardIntegrationHealth = {
@@ -63,14 +68,19 @@ export type DashboardKpiBundle = {
   ordersConfirmed: MetricComparison;
   ordersDelivered: MetricComparison;
   ordersReturned: MetricComparison;
+  /** Provisional door cash. */
   cashCollected: MetricComparison;
+  /** Reconciled cash (Conciliación approved). Primary cash KPI. */
+  cashSettled: MetricComparison;
   confirmationRate: MetricComparison;
   deliveryRate: MetricComparison;
   rto: MetricComparison;
   roasCheckout: MetricComparison;
   roasDelivered: MetricComparison;
-  /** ROAS on real door cash (collected_cod_amount). */
+  /** Provisional ROAS on door cash. */
   roasCollected: MetricComparison;
+  /** ROAS on reconciled settled cash — product effectiveness metric. */
+  roasSettled: MetricComparison;
 };
 
 export type DashboardFunnel = {

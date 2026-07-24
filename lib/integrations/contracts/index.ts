@@ -20,6 +20,18 @@ export type {
   SettlementProvider,
   SettlementProviderId,
 } from "./settlement-provider";
+export type {
+  BillingCancelInput,
+  BillingCheckoutInput,
+  BillingCheckoutResult,
+  BillingInterval,
+  BillingPortalInput,
+  BillingProvider,
+  BillingProviderId,
+  BillingReactivateInput,
+  BillingSelfServePlanCode,
+} from "./billing";
+export { BILLING_SELF_SERVE_PLAN_CODES, isSelfServePlanCode } from "./billing";
 
 /** @deprecated Prefer CommerceProvider — kept for existing imports. */
 export type { ShopifyAdapter, ShopifyConnection, ShopifyOrderWebhook, ShopifyProductWebhook } from "./shopify";

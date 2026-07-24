@@ -13,22 +13,26 @@ function order(
   return {
     expected_cod_amount: 100,
     collected_cod_amount: null,
+    settled_cod_amount: null,
     total_amount: 100,
     payment_status: "cash_expected",
     cash_collected_at: null,
+    settled_at: null,
     ...partial,
   };
 }
 
 describe("dashboard revenue (S13)", () => {
-  it("separates checkout / delivered / collected without delivery-rate proxy", () => {
+  it("separates checkout / delivered / collected / settled without delivery-rate proxy", () => {
     const orders = [
       order({
         id: "a",
         expected_cod_amount: 100,
         collected_cod_amount: 100,
-        payment_status: "cash_collected",
+        settled_cod_amount: 92,
+        payment_status: "settled",
         cash_collected_at: "2026-07-01T12:00:00.000Z",
+        settled_at: "2026-07-03T12:00:00.000Z",
       }),
       order({
         id: "b",
@@ -46,18 +50,18 @@ describe("dashboard revenue (S13)", () => {
         id: "d",
         expected_cod_amount: 100,
         collected_cod_amount: 80,
+        settled_cod_amount: null,
         payment_status: "cash_collected",
         cash_collected_at: "2026-07-02T12:00:00.000Z",
       }),
     ];
-    // 4 generated, 2 delivered (a,d), 1 RTO (c) — legacy proxy would lie
     const shipments = [
       { order_id: "a", status: "delivered", is_rto: false },
       { order_id: "d", status: "delivered", is_rto: false },
       { order_id: "c", status: "returned", is_rto: true },
     ];
 
-    const checkoutRevenue = 400; // attributed at checkout for all 4
+    const checkoutRevenue = 400;
     const spend = 100;
     const cashExpected = 400;
 
@@ -66,7 +70,6 @@ describe("dashboard revenue (S13)", () => {
       deliveredCount: 2,
       generatedCount: 4,
     });
-    // BEFORE: expected COD × delivered/generated = 400 × 0.5 = 200
     assert.equal(beforeProxy, 200);
 
     const after = computeDashboardRevenueTotals({
@@ -76,19 +79,20 @@ describe("dashboard revenue (S13)", () => {
       spend,
     });
 
-    // AFTER: delivered = sum expected COD of delivered orders only (a+d = 200)
     assert.equal(after.deliveredRevenue, 200);
-    // Collected = door cash only (100 + 80), not expected COD and not proxy
+    // Provisional door cash (a+d)
     assert.equal(after.collectedRevenue, 180);
+    // Reconciled cash only (a settled 92; d not liquidated)
+    assert.equal(after.settledRevenue, 92);
     assert.equal(after.checkoutRevenue, 400);
 
     assert.equal(after.roasCheckout, 4);
     assert.equal(after.roasDelivered, 2);
     assert.equal(after.roasCollected, 1.8);
+    assert.equal(after.roasSettled, 0.92);
 
-    assert.notEqual(after.checkoutRevenue, after.deliveredRevenue);
-    assert.notEqual(after.deliveredRevenue, after.collectedRevenue);
-    assert.notEqual(after.roasCheckout, after.roasCollected);
+    assert.notEqual(after.collectedRevenue, after.settledRevenue);
+    assert.notEqual(after.roasCollected, after.roasSettled);
   });
 
   it("returns null ROAS when ad spend is missing (no fake 0.00)", () => {
@@ -97,8 +101,10 @@ describe("dashboard revenue (S13)", () => {
         order({
           id: "a",
           collected_cod_amount: 372.35,
-          payment_status: "cash_collected",
+          settled_cod_amount: 350,
+          payment_status: "settled",
           cash_collected_at: "2026-07-17T12:00:00.000Z",
+          settled_at: "2026-07-18T12:00:00.000Z",
         }),
       ],
       shipments: [{ order_id: "a", status: "delivered", is_rto: false }],
@@ -106,13 +112,14 @@ describe("dashboard revenue (S13)", () => {
       spend: 0,
     });
     assert.equal(totals.collectedRevenue, 372.35);
+    assert.equal(totals.settledRevenue, 350);
     assert.equal(totals.roasCheckout, null);
     assert.equal(totals.roasDelivered, null);
     assert.equal(totals.roasCollected, null);
+    assert.equal(totals.roasSettled, null);
   });
 
   it("shows before/after gap when proxy inflated delivered revenue", () => {
-    // High expected COD on undelivered orders → proxy pulls them into "delivered revenue"
     const orders = [
       order({ id: "delivered", expected_cod_amount: 50, total_amount: 50 }),
       order({ id: "pending-big", expected_cod_amount: 950, total_amount: 950 }),
@@ -132,9 +139,7 @@ describe("dashboard revenue (S13)", () => {
       spend: 100,
     });
 
-    // BEFORE lied: 1000 × 0.5 = 500 (includes half of the undelivered 950)
     assert.equal(before, 500);
-    // AFTER honest: only the delivered order's 50
     assert.equal(after.deliveredRevenue, 50);
     assert.ok(before > after.deliveredRevenue);
   });
@@ -149,6 +154,7 @@ describe("dashboard revenue (S13)", () => {
     });
     assert.equal(totals.deliveredRevenue, 0);
     assert.equal(totals.collectedRevenue, 0);
+    assert.equal(totals.settledRevenue, 0);
   });
 
   it("falls back to total_amount when expected COD is null", () => {

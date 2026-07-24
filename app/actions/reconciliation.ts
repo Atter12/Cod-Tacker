@@ -216,7 +216,6 @@ export async function confirmSettlementCsvImport(
       currency_code: input.currencyCode ?? "PEN",
       source_file_path: sourceFilePath,
       preset_id: input.presetId ?? "generic_cod",
-      demo_seed: idempotencyKey,
       rows: input.rows.map((r) => {
         const withDup = r as ValidatedSettlementRow & { duplicateInFile?: boolean };
         return {
@@ -240,12 +239,18 @@ export async function confirmSettlementCsvImport(
       agencyId: membership.agencyId,
       storeId: membership.storeId,
       provider: "custom_payment",
-      eventType: "settlement.csv.imported.mock",
-      jobType: "settlement.csv.imported.mock",
+      eventType: "settlement.csv.imported",
+      jobType: "settlement.csv.imported",
       idempotencyKey,
       correlationId: crypto.randomUUID(),
       externalEventId: externalBatchId,
       payload,
+    });
+
+    const { kickJobProcessing } = await import("@/lib/jobs/kick");
+    await kickJobProcessing({
+      limit: 8,
+      reason: "settlement-csv-import",
     });
 
     await writeAuditLog({
@@ -261,6 +266,242 @@ export async function confirmSettlementCsvImport(
         rowCount: input.rows.length,
         sourceFilePath,
         storageConfigured: Boolean(bucket),
+      },
+    });
+
+    revalidateRecon(agencySlug, storeSlug);
+    return actionOk({
+      jobId: enqueued.jobId,
+      rawEventId: enqueued.rawEventId,
+    });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+const ECART_GATEWAY = "ecart_pay";
+
+async function findEcartPayIntegration(storeId: string, agencyId: string) {
+  const admin = createAdminClient();
+  const result = await admin
+    .from("integrations")
+    .select("id, secret_reference, settings, metadata, status, display_name, external_account_id")
+    .eq("store_id", storeId)
+    .eq("agency_id", agencyId)
+    .eq("provider", "custom_payment")
+    .in("status", ["connected", "pending", "degraded", "error"])
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  const rows = result.data ?? [];
+  return (
+    rows.find((row) => {
+      const settings =
+        row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
+          ? (row.settings as Record<string, unknown>)
+          : {};
+      return settings.gateway === ECART_GATEWAY;
+    }) ?? null
+  );
+}
+
+/** Connect / rotate Ecart Pay API token (COD liquidación via Envia COD → Ecart Pay). */
+export async function connectEcartPay(
+  agencySlug: string,
+  storeSlug: string,
+  input: { apiToken: string },
+): Promise<ReconciliationActionResult> {
+  try {
+    const user = await requireUser();
+    const membership = await requireStoreAccess(agencySlug, storeSlug);
+    assertReconciliationManage(membership.roles);
+    if (!membership.storeId || !membership.agencyId) {
+      throw new ValidationError("Tienda inválida.");
+    }
+
+    const token = input.apiToken.trim();
+    if (!token) throw new ValidationError("Token de Ecart Pay requerido.");
+
+    const { packEcartPayApiToken, fingerprintEcartPayToken } = await import(
+      "@/lib/integrations/ecart-pay/credentials"
+    );
+    const { probeEcartPayToken } = await import("@/lib/integrations/ecart-pay/api");
+    const probe = await probeEcartPayToken(token);
+    if (!probe.ok) {
+      throw new ValidationError(
+        `No se pudo validar el token de Ecart Pay${probe.detail ? `: ${probe.detail}` : "."}`,
+      );
+    }
+
+    let secretRef: string;
+    try {
+      secretRef = packEcartPayApiToken(token);
+    } catch {
+      throw new ValidationError(
+        "ENCRYPTION_KEY no configurada. No se puede guardar el token de forma segura.",
+      );
+    }
+
+    const fingerprint = fingerprintEcartPayToken(token);
+    const now = new Date().toISOString();
+    const admin = createAdminClient();
+    const existing = await findEcartPayIntegration(membership.storeId, membership.agencyId);
+
+    const payload = {
+      agency_id: membership.agencyId,
+      store_id: membership.storeId,
+      provider: "custom_payment" as const,
+      status: "connected" as const,
+      display_name: "Ecart Pay (COD)",
+      external_account_id: `ecart:${fingerprint.slice(0, 16)}`,
+      external_account_name: "Ecart Pay",
+      secret_reference: secretRef,
+      scopes: ["ecart_pay:transactions"],
+      settings: {
+        gateway: ECART_GATEWAY,
+        token_fingerprint: fingerprint,
+      } as Json,
+      metadata: {
+        mode: "live",
+        demo: false,
+        gateway: ECART_GATEWAY,
+      } as Json,
+      connected_at: now,
+      connected_by: user.id,
+      last_error_at: null,
+      last_error_message: null,
+      last_success_at: now,
+      updated_at: now,
+    };
+
+    if (existing) {
+      const upd = await admin
+        .from("integrations")
+        .update(payload)
+        .eq("id", existing.id)
+        .eq("store_id", membership.storeId);
+      if (upd.error) throw new ValidationError("No se pudo actualizar Ecart Pay.");
+    } else {
+      const ins = await admin.from("integrations").insert(payload);
+      if (ins.error) throw new ValidationError("No se pudo conectar Ecart Pay.");
+    }
+
+    await writeAuditLog({
+      action: "settlement_ecart_connected",
+      entityType: "integration",
+      entityId: existing?.id ?? membership.storeId,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
+      newData: { gateway: ECART_GATEWAY },
+    });
+
+    revalidateRecon(agencySlug, storeSlug);
+    return actionOk({});
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+/**
+ * Pull paid transactions from Ecart Pay and enqueue the shared settlement import matcher.
+ */
+export async function syncEcartPaySettlements(
+  agencySlug: string,
+  storeSlug: string,
+  input?: { days?: number },
+): Promise<ReconciliationActionResult> {
+  try {
+    const user = await requireUser();
+    const membership = await requireStoreAccess(agencySlug, storeSlug);
+    assertReconciliationManage(membership.roles);
+    if (!membership.storeId || !membership.agencyId) {
+      throw new ValidationError("Tienda inválida.");
+    }
+
+    const integration = await findEcartPayIntegration(membership.storeId, membership.agencyId);
+    if (!integration || integration.status === "disconnected" || integration.status === "revoked") {
+      throw new ValidationError("Conecta Ecart Pay antes de sincronizar liquidaciones.");
+    }
+
+    const { resolveEcartPayTokenFromIntegration } = await import(
+      "@/lib/integrations/ecart-pay/credentials"
+    );
+    const { fetchEcartPayTransactions } = await import("@/lib/integrations/ecart-pay/api");
+    const { mapEcartTransactionsToSettlementRows } = await import(
+      "@/lib/integrations/ecart-pay/map-transactions"
+    );
+
+    const token = resolveEcartPayTokenFromIntegration(integration);
+    if (!token) throw new ValidationError("Falta token cifrado de Ecart Pay.");
+
+    const days = Math.min(Math.max(input?.days ?? 30, 1), 90);
+    const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const transactions = await fetchEcartPayTransactions({
+      token,
+      fromIso,
+      status: "paid",
+      limit: 250,
+    });
+    const rows = mapEcartTransactionsToSettlementRows(transactions);
+    if (rows.length === 0) {
+      throw new ValidationError(
+        "Ecart Pay no devolvió pagos conciliables en el rango. Verifica COD vía Envia → Ecart Pay.",
+      );
+    }
+
+    await assertCanImportCsvRows(await createClient(), membership.agencyId, rows.length);
+
+    const externalBatchId = `ecart-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const idempotencyKey = `settlement-ecart:${membership.storeId}:${externalBatchId}`;
+    const currencyCode = rows[0]?.currencyCode ?? "PEN";
+
+    const admin = createAdminClient();
+    const payload: Json = {
+      external_batch_id: externalBatchId,
+      reference: `Ecart Pay ${fromIso.slice(0, 10)} → sync`,
+      currency_code: currencyCode,
+      source_file_path: null,
+      preset_id: "ecart_pay",
+      rows,
+    };
+
+    const enqueued = await enqueueRawEventAndJob(admin, {
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
+      provider: "custom_payment",
+      integrationId: integration.id,
+      eventType: "settlement.ecart.synced",
+      jobType: "settlement.ecart.synced",
+      idempotencyKey,
+      correlationId: crypto.randomUUID(),
+      externalEventId: externalBatchId,
+      payload,
+    });
+
+    const { kickJobProcessing } = await import("@/lib/jobs/kick");
+    await kickJobProcessing({ limit: 8, reason: "settlement-ecart-sync" });
+
+    await admin
+      .from("integrations")
+      .update({
+        last_success_at: new Date().toISOString(),
+        last_error_at: null,
+        last_error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", integration.id);
+
+    await writeAuditLog({
+      action: "settlement_ecart_sync_enqueued",
+      entityType: "settlement_batch",
+      entityId: externalBatchId,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
+      newData: {
+        jobId: enqueued.jobId,
+        rowCount: rows.length,
+        days,
       },
     });
 
