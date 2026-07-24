@@ -16,16 +16,19 @@ type Props = {
 
 /**
  * Conciliación auto: Ecart Pay (COD liquidado vía producto COD de Envia).
- * No sustituye CSV manual del courier.
+ * Guarda public/private key cifradas; el Bearer (~1h) se renueva en cada sync.
  */
 export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: Props) {
   const router = useRouter();
-  const [apiToken, setApiToken] = useState("");
+  const [publicKey, setPublicKey] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   if (!canManage) return null;
+
+  const canConnect = publicKey.trim().length > 0 && privateKey.trim().length > 0;
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
@@ -37,39 +40,60 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
       </div>
       <p className="text-[12.5px] text-text-secondary">
         Solo aplica si el COD se cobra con el servicio COD de Envia → depósitos en Ecart Pay.
-        Si el courier te liquida aparte, usa Importar CSV.
+        Guarda la <strong>public</strong> y <strong>private key</strong> (no el Bearer de 1 h):
+        CODTracked renueva el token al sincronizar. Si el courier te liquida aparte, usa Importar
+        CSV.
       </p>
-      <FormField label="API token Ecart Pay" htmlFor="ecart-token">
+      <FormField label="Public key Ecart Pay" htmlFor="ecart-public-key">
         <Input
-          id="ecart-token"
+          id="ecart-public-key"
+          type="text"
+          autoComplete="off"
+          placeholder={connected ? "(pegar nueva public key para rotar)" : "pub…"}
+          value={publicKey}
+          onChange={(e) => setPublicKey(e.target.value)}
+          disabled={pending}
+        />
+      </FormField>
+      <FormField label="Private key Ecart Pay" htmlFor="ecart-private-key">
+        <Input
+          id="ecart-private-key"
           type="password"
           autoComplete="off"
-          placeholder={connected ? "(pegar nuevo token para rotar)" : "Bearer token"}
-          value={apiToken}
-          onChange={(e) => setApiToken(e.target.value)}
+          placeholder={connected ? "(pegar nueva private key para rotar)" : "priv…"}
+          value={privateKey}
+          onChange={(e) => setPrivateKey(e.target.value)}
           disabled={pending}
         />
       </FormField>
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
-          disabled={pending || !apiToken.trim()}
+          disabled={pending || !canConnect}
           onClick={() => {
             setError(null);
             setSuccess(null);
             start(async () => {
-              const r = await connectEcartPay(agencySlug, storeSlug, { apiToken });
+              const r = await connectEcartPay(agencySlug, storeSlug, {
+                publicKey,
+                privateKey,
+              });
               if (r.error) {
                 setError(r.error);
                 return;
               }
-              setSuccess(connected ? "Token Ecart Pay actualizado." : "Ecart Pay conectado.");
-              setApiToken("");
+              setSuccess(
+                connected
+                  ? "Claves Ecart Pay actualizadas."
+                  : "Ecart Pay conectado (claves guardadas).",
+              );
+              setPublicKey("");
+              setPrivateKey("");
               router.refresh();
             });
           }}
         >
-          {connected ? "Actualizar token" : "Conectar Ecart Pay"}
+          {connected ? "Actualizar claves" : "Conectar Ecart Pay"}
         </Button>
         <Button
           type="button"

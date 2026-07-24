@@ -305,11 +305,11 @@ async function findEcartPayIntegration(storeId: string, agencyId: string) {
   );
 }
 
-/** Connect / rotate Ecart Pay API token (COD liquidación via Envia COD → Ecart Pay). */
+/** Connect / rotate Ecart Pay API keys (mint Bearer on demand; ~1h tokens). */
 export async function connectEcartPay(
   agencySlug: string,
   storeSlug: string,
-  input: { apiToken: string },
+  input: { publicKey: string; privateKey: string },
 ): Promise<ReconciliationActionResult> {
   try {
     const user = await requireUser();
@@ -319,30 +319,33 @@ export async function connectEcartPay(
       throw new ValidationError("Tienda inválida.");
     }
 
-    const token = input.apiToken.trim();
-    if (!token) throw new ValidationError("Token de Ecart Pay requerido.");
+    const publicKey = input.publicKey.trim();
+    const privateKey = input.privateKey.trim();
+    if (!publicKey || !privateKey) {
+      throw new ValidationError("Clave pública y privada de Ecart Pay son requeridas.");
+    }
 
-    const { packEcartPayApiToken, fingerprintEcartPayToken } = await import(
+    const { packEcartPayApiKeys, fingerprintEcartPayPublicKey } = await import(
       "@/lib/integrations/ecart-pay/credentials"
     );
-    const { probeEcartPayToken } = await import("@/lib/integrations/ecart-pay/api");
-    const probe = await probeEcartPayToken(token);
+    const { probeEcartPayApiKeys } = await import("@/lib/integrations/ecart-pay/api");
+    const probe = await probeEcartPayApiKeys({ publicKey, privateKey });
     if (!probe.ok) {
       throw new ValidationError(
-        `No se pudo validar el token de Ecart Pay${probe.detail ? `: ${probe.detail}` : "."}`,
+        `No se pudo validar las claves de Ecart Pay${probe.detail ? `: ${probe.detail}` : "."}`,
       );
     }
 
     let secretRef: string;
     try {
-      secretRef = packEcartPayApiToken(token);
+      secretRef = packEcartPayApiKeys({ publicKey, privateKey });
     } catch {
       throw new ValidationError(
-        "ENCRYPTION_KEY no configurada. No se puede guardar el token de forma segura.",
+        "ENCRYPTION_KEY no configurada. No se pueden guardar las claves de forma segura.",
       );
     }
 
-    const fingerprint = fingerprintEcartPayToken(token);
+    const fingerprint = fingerprintEcartPayPublicKey(publicKey);
     const now = new Date().toISOString();
     const admin = createAdminClient();
     const existing = await findEcartPayIntegration(membership.storeId, membership.agencyId);
@@ -359,12 +362,14 @@ export async function connectEcartPay(
       scopes: ["ecart_pay:transactions"],
       settings: {
         gateway: ECART_GATEWAY,
-        token_fingerprint: fingerprint,
+        auth_mode: "api_keys_v2",
+        public_key_fingerprint: fingerprint,
       } as Json,
       metadata: {
         mode: "live",
         demo: false,
         gateway: ECART_GATEWAY,
+        auth_mode: "api_keys_v2",
       } as Json,
       connected_at: now,
       connected_by: user.id,
@@ -393,7 +398,7 @@ export async function connectEcartPay(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { gateway: ECART_GATEWAY },
+      newData: { gateway: ECART_GATEWAY, auth_mode: "api_keys_v2" },
     });
 
     revalidateRecon(agencySlug, storeSlug);
@@ -424,7 +429,7 @@ export async function syncEcartPaySettlements(
       throw new ValidationError("Conecta Ecart Pay antes de sincronizar liquidaciones.");
     }
 
-    const { resolveEcartPayTokenFromIntegration } = await import(
+    const { resolveEcartPayAccessTokenFromIntegration } = await import(
       "@/lib/integrations/ecart-pay/credentials"
     );
     const { fetchEcartPayTransactions } = await import("@/lib/integrations/ecart-pay/api");
@@ -432,13 +437,34 @@ export async function syncEcartPaySettlements(
       "@/lib/integrations/ecart-pay/map-transactions"
     );
 
-    const token = resolveEcartPayTokenFromIntegration(integration);
-    if (!token) throw new ValidationError("Falta token cifrado de Ecart Pay.");
+    let access: { token: string; source: "api_keys" | "legacy_bearer" };
+    try {
+      const resolved = await resolveEcartPayAccessTokenFromIntegration(integration);
+      if (!resolved) {
+        throw new ValidationError(
+          "Faltan claves Ecart Pay cifradas. Vuelve a conectar con public + private key.",
+        );
+      }
+      access = resolved;
+    } catch (error) {
+      if (error instanceof ValidationError) throw error;
+      throw new ValidationError(
+        `No se pudo obtener Bearer de Ecart Pay${
+          error instanceof Error && error.message ? `: ${error.message.slice(0, 180)}` : "."
+        }`,
+      );
+    }
+
+    if (access.source === "legacy_bearer") {
+      throw new ValidationError(
+        "Esta conexión usa un Bearer antiguo (~1h). Actualiza con clave pública y privada de Ecart Pay.",
+      );
+    }
 
     const days = Math.min(Math.max(input?.days ?? 30, 1), 90);
     const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const transactions = await fetchEcartPayTransactions({
-      token,
+      token: access.token,
       fromIso,
       status: "paid",
       limit: 250,

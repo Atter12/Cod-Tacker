@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  buildEcartPayBasicAuthHeader,
+  extractEcartPayTokenFromAuthResponse,
+} from "@/lib/integrations/ecart-pay/auth-helpers";
 import { getEcartPayApiBaseUrl } from "@/lib/integrations/ecart-pay/env";
 
 export type EcartPayTransaction = {
@@ -32,6 +36,46 @@ export type EcartPayTransactionsResponse = {
   next?: string | null;
   count?: number;
 };
+
+/**
+ * Mint a short-lived Bearer token (~1h) from API keys.
+ * @see https://docs.ecartpay.com/docs/authorization-token
+ */
+export async function createEcartPayAuthorizationToken(input: {
+  publicKey: string;
+  privateKey: string;
+}): Promise<string> {
+  const base = getEcartPayApiBaseUrl();
+  const url = `${base}/api/authorizations/token`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: buildEcartPayBasicAuthHeader(input.publicKey, input.privateKey),
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const bodyText = await res.text().catch(() => "");
+  if (!res.ok) {
+    throw new Error(
+      `Ecart Pay token mint failed (${res.status}): ${bodyText.slice(0, 300) || res.statusText}`,
+    );
+  }
+
+  let json: unknown = null;
+  try {
+    json = bodyText ? JSON.parse(bodyText) : null;
+  } catch {
+    throw new Error("Ecart Pay token mint returned invalid JSON.");
+  }
+
+  const token = extractEcartPayTokenFromAuthResponse(json);
+  if (!token) {
+    throw new Error("Ecart Pay token mint response missing token.");
+  }
+  return token;
+}
 
 export async function fetchEcartPayTransactions(input: {
   token: string;
@@ -69,6 +113,28 @@ export async function fetchEcartPayTransactions(input: {
   return json.data ?? json.items ?? json.transactions ?? [];
 }
 
+/** Validate keys by minting a Bearer and probing transactions. */
+export async function probeEcartPayApiKeys(input: {
+  publicKey: string;
+  privateKey: string;
+}): Promise<{ ok: boolean; detail?: string }> {
+  try {
+    const token = await createEcartPayAuthorizationToken(input);
+    await fetchEcartPayTransactions({
+      token,
+      limit: 1,
+      fromIso: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: error instanceof Error ? error.message.slice(0, 240) : "probe_failed",
+    };
+  }
+}
+
+/** @deprecated Prefer probeEcartPayApiKeys — Bearer tokens expire ~1h. */
 export async function probeEcartPayToken(token: string): Promise<{ ok: boolean; detail?: string }> {
   try {
     await fetchEcartPayTransactions({
