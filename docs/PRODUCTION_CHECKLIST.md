@@ -1,9 +1,9 @@
 # Checklist de producción — CODTracked
 
-Última actualización: 2026-07-21  
+Última actualización: 2026-07-24  
 Criterio: verificado en código + cierre explícito de integraciones por producto.
 
-**Estado global:** loop commerce / ads / courier (Envia) **cerrado**. WhatsApp Cloud API **cerrado en código** (connect, send, webhooks, UI live); falta smoke con Meta + Embedded Signup (fase 2). Pendiente para 100%: billing, settlement, hardening y cumplimiento.
+**Estado global:** loop commerce / ads / courier (Envia) **cerrado**. WhatsApp Cloud API **cerrado en código** (connect, send, webhooks, UI live); falta smoke con Meta + Embedded Signup (fase 2). Infra prod (live mode, secrets, cron, health) **confirmada ops/envs**. Pendiente para 100%: billing, settlement smoke, hardening y cumplimiento.
 
 ---
 
@@ -36,10 +36,10 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 
 ## P0 — Pendiente para producción cobrable / ops
 
-- [ ] `INTEGRATION_MODE=live` + `MOCK_INTEGRATIONS_ENABLED=false` en Vercel Prod
-- [ ] Secrets: `ENCRYPTION_KEY`, `CRON_SECRET`, `INTERNAL_JOB_SECRET`, providers
-- [ ] Cron jobs drenando (`/api/internal/jobs/process`) autenticado
-- [ ] Monitor externo de `/api/health`
+- [x] `INTEGRATION_MODE=live` + `MOCK_INTEGRATIONS_ENABLED=false` en Vercel Prod *(confirmado ops/envs 2026-07-24)*
+- [x] Secrets: `ENCRYPTION_KEY`, `CRON_SECRET`, `INTERNAL_JOB_SECRET`, providers *(confirmado ops/envs 2026-07-24)*
+- [x] Cron jobs drenando (`/api/internal/jobs/process`) autenticado *(confirmado ops/envs 2026-07-24)*
+- [x] Monitor externo de `/api/health` *(confirmado ops/envs 2026-07-24)*
 - [x] **WhatsApp Cloud API** live en código (smoke Meta pendiente arriba)
 - [ ] **Billing real** (Stripe vía `BILLING_PROVIDER=stripe`; Paddle/Culqi/MP adapters futuros) — demo sigue con `BILLING_PROVIDER=demo`
 - [ ] Smoke Billing: seguir [BILLING_SMOKE.md](./BILLING_SMOKE.md) (Checkout → webhook → invoice; past_due grace; replay idempotente)
@@ -108,10 +108,10 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 
 ## Orden de cutover restante
 
-1. Infra (`live` + secrets + cron + health)  
+1. ~~Infra (`live` + secrets + cron + health)~~ ✅ confirmado ops/envs  
 2. Smoke de las 5 integraciones cerradas (incl. WhatsApp)  
 3. Settlement (CSV limpio o live)  
-4. Billing (Paddle / Culqi / Mercado Pago)  
+4. Billing (Stripe / Paddle / Culqi / Mercado Pago)  
 5. WhatsApp Embedded Signup (fase 2)  
 6. GDPR + Sentry + Redis + CI + docs  
 
