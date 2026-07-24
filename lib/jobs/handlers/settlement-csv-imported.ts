@@ -132,112 +132,127 @@ export const handleSettlementCsvImported: JobHandler = async ({
     if (batchInsert.error?.code === "23505") {
       return { ok: true, action: "skipped", entityType: "settlement_batch", detail: "race_duplicate" };
     }
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el lote de conciliación CSV.");
+    throw new PermanentJobError(
+      "DATABASE_ERROR",
+      `No se pudo crear el lote de conciliación CSV: ${batchInsert.error?.message ?? "unknown"}`,
+    );
   }
 
   const batchId = batchInsert.data.id;
 
-  const [ordersRes, shipmentsRes] = await Promise.all([
-    admin
-      .from("orders")
-      .select(
-        "id, order_number, external_order_id, expected_cod_amount, collected_cod_amount, currency_code, created_at, delivered_at",
-      )
-      .eq("store_id", job.store_id),
-    admin
-      .from("shipments")
-      .select("id, order_id, tracking_number, external_shipment_id")
-      .eq("store_id", job.store_id),
-  ]);
+  try {
+    const [ordersRes, shipmentsRes] = await Promise.all([
+      admin
+        .from("orders")
+        .select(
+          "id, order_number, external_order_id, expected_cod_amount, collected_cod_amount, currency_code, created_at, delivered_at",
+        )
+        .eq("store_id", job.store_id),
+      admin
+        .from("shipments")
+        .select("id, order_id, tracking_number, external_shipment_id")
+        .eq("store_id", job.store_id),
+    ]);
 
-  if (ordersRes.error || shipmentsRes.error) {
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudieron cargar pedidos/envíos para matching.");
-  }
+    if (ordersRes.error || shipmentsRes.error) {
+      throw new PermanentJobError(
+        "DATABASE_ERROR",
+        `No se pudieron cargar pedidos/envíos: ${ordersRes.error?.message ?? shipmentsRes.error?.message ?? "unknown"}`,
+      );
+    }
 
-  const orders: MatchCandidateOrder[] = (ordersRes.data ?? []).map((o) => ({
-    id: o.id,
-    orderNumber: o.order_number,
-    externalOrderId: o.external_order_id,
-    expectedCodAmount: o.expected_cod_amount,
-    collectedCodAmount: o.collected_cod_amount,
-    currencyCode: o.currency_code,
-    createdAt: o.created_at,
-    deliveredAt: o.delivered_at,
-  }));
+    const orders: MatchCandidateOrder[] = (ordersRes.data ?? []).map((o) => ({
+      id: o.id,
+      orderNumber: o.order_number,
+      externalOrderId: o.external_order_id,
+      expectedCodAmount: o.expected_cod_amount,
+      collectedCodAmount: o.collected_cod_amount,
+      currencyCode: o.currency_code,
+      createdAt: o.created_at,
+      deliveredAt: o.delivered_at,
+    }));
 
-  const shipments: MatchCandidateShipment[] = (shipmentsRes.data ?? []).map((s) => ({
-    id: s.id,
-    orderId: s.order_id,
-    trackingNumber: s.tracking_number,
-    externalShipmentId: s.external_shipment_id,
-  }));
+    const shipments: MatchCandidateShipment[] = (shipmentsRes.data ?? []).map((s) => ({
+      id: s.id,
+      orderId: s.order_id,
+      trackingNumber: s.tracking_number,
+      externalShipmentId: s.external_shipment_id,
+    }));
 
-  const matchInputs: MatchInputRow[] = data.rows.map((r) => ({
-    sourceRowNumber: r.sourceRowNumber,
-    trackingNumber: r.trackingNumber,
-    externalShipmentId: r.externalShipmentId,
-    externalOrderId: r.externalOrderId,
-    orderNumber: r.orderNumber,
-    grossAmount: r.grossAmount,
-    feeAmount: r.feeAmount,
-    currencyCode: r.currencyCode,
-    occurredAt: r.occurredAt,
-    duplicateInFile: r.duplicateInFile,
-  }));
+    const matchInputs: MatchInputRow[] = data.rows.map((r) => ({
+      sourceRowNumber: r.sourceRowNumber,
+      trackingNumber: r.trackingNumber,
+      externalShipmentId: r.externalShipmentId,
+      externalOrderId: r.externalOrderId,
+      orderNumber: r.orderNumber,
+      grossAmount: r.grossAmount,
+      feeAmount: r.feeAmount,
+      currencyCode: r.currencyCode,
+      occurredAt: r.occurredAt,
+      duplicateInFile: r.duplicateInFile,
+    }));
 
-  const matches = matchSettlementRows(matchInputs, orders, shipments);
-  const matchByRow = new Map(matches.map((m) => [m.sourceRowNumber, m]));
+    const matches = matchSettlementRows(matchInputs, orders, shipments);
+    const matchByRow = new Map(matches.map((m) => [m.sourceRowNumber, m]));
 
-  const itemRows = data.rows.map((r) => {
-    const m = matchByRow.get(r.sourceRowNumber)!;
+    const itemRows = data.rows.map((r) => {
+      const m = matchByRow.get(r.sourceRowNumber)!;
+      return {
+        agency_id: job.agency_id,
+        store_id: job.store_id!,
+        batch_id: batchId,
+        source_row_number: r.sourceRowNumber,
+        raw_row: r.rawRow as Json,
+        tracking_number: r.trackingNumber,
+        external_shipment_id: r.externalShipmentId,
+        external_order_id: r.externalOrderId,
+        order_number: r.orderNumber,
+        currency_code: r.currencyCode,
+        row_occurred_at: r.occurredAt,
+        settled_amount: r.netAmount,
+        fee_amount: r.feeAmount,
+        expected_amount: m.expectedAmount,
+        difference_amount: m.differenceAmount,
+        order_id: m.orderId,
+        shipment_id: m.shipmentId,
+        match_method: m.matchMethod,
+        match_confidence: m.matchConfidence,
+        match_status: m.matchStatus,
+        discrepancy_reason: m.discrepancyReason,
+        matched_at: m.matchStatus === "matched" || m.matchStatus === "difference" ? now : null,
+        status: toBatchReconciliationStatus(m.matchStatus),
+        notes: r.reference,
+        metadata: { import_kind: "csv" } as Json,
+      };
+    });
+
+    const itemsInsert = await admin.from("settlement_items").insert(itemRows);
+    if (itemsInsert.error) {
+      throw new PermanentJobError(
+        "DATABASE_ERROR",
+        `No se pudieron insertar ítems de conciliación: ${itemsInsert.error.message}`,
+      );
+    }
+
+    const batchStatus = rollupBatchStatus(matches.map((m) => m.matchStatus));
+    await admin
+      .from("settlement_batches")
+      .update({
+        status: batchStatus,
+        processing_finished_at: new Date().toISOString(),
+      })
+      .eq("id", batchId);
+
     return {
-      agency_id: job.agency_id,
-      store_id: job.store_id!,
-      batch_id: batchId,
-      source_row_number: r.sourceRowNumber,
-      raw_row: r.rawRow as Json,
-      tracking_number: r.trackingNumber,
-      external_shipment_id: r.externalShipmentId,
-      external_order_id: r.externalOrderId,
-      order_number: r.orderNumber,
-      currency_code: r.currencyCode,
-      row_occurred_at: r.occurredAt,
-      settled_amount: r.netAmount,
-      fee_amount: r.feeAmount,
-      expected_amount: m.expectedAmount,
-      difference_amount: m.differenceAmount,
-      order_id: m.orderId,
-      shipment_id: m.shipmentId,
-      match_method: m.matchMethod,
-      match_confidence: m.matchConfidence,
-      match_status: m.matchStatus,
-      discrepancy_reason: m.discrepancyReason,
-      matched_at: m.matchStatus === "matched" || m.matchStatus === "difference" ? now : null,
-      status: toBatchReconciliationStatus(m.matchStatus),
-      notes: r.reference,
-      metadata: { import_kind: "csv" } as Json,
+      ok: true,
+      action: "created",
+      entityType: "settlement_batch",
+      entityId: batchId,
+      detail: `items=${itemRows.length};status=${batchStatus}`,
     };
-  });
-
-  const itemsInsert = await admin.from("settlement_items").insert(itemRows);
-  if (itemsInsert.error) {
-    throw new PermanentJobError("DATABASE_ERROR", "No se pudieron insertar ítems de conciliación.");
+  } catch (error) {
+    // Avoid orphan batches (totals without items) that block retries on the same external_batch_id.
+    await admin.from("settlement_batches").delete().eq("id", batchId);
+    throw error;
   }
-
-  const batchStatus = rollupBatchStatus(matches.map((m) => m.matchStatus));
-  await admin
-    .from("settlement_batches")
-    .update({
-      status: batchStatus,
-      processing_finished_at: new Date().toISOString(),
-    })
-    .eq("id", batchId);
-
-  return {
-    ok: true,
-    action: "created",
-    entityType: "settlement_batch",
-    entityId: batchId,
-    detail: `items=${itemRows.length};status=${batchStatus}`,
-  };
 };

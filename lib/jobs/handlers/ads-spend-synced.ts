@@ -16,6 +16,15 @@ export const adsSpendSyncedPayloadSchema = z.object({
   mode: z.enum(["live", "mock"]).optional(),
 });
 
+/** Persist which Insights/report API produced the row (not the ad platform column alone). */
+export function adsSpendRawMetricsSource(
+  platform: "meta" | "tiktok",
+  isLive: boolean,
+): "meta_insights" | "tiktok_insights" | "mock_sync" {
+  if (!isLive) return "mock_sync";
+  return platform === "tiktok" ? "tiktok_insights" : "meta_insights";
+}
+
 function asObject(payload: Json): Record<string, unknown> {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     return payload as Record<string, unknown>;
@@ -103,7 +112,7 @@ export const handleAdsSpendSynced: JobHandler = async ({
     mode: isLive ? "live" : "mock",
     demo_seed: data.demo_seed ?? null,
     job_id: job.id,
-    source: isLive ? "meta_insights" : "mock_sync",
+    source: adsSpendRawMetricsSource(data.platform, isLive),
   } as Json;
 
   const sameDay = await admin

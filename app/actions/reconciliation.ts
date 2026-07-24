@@ -255,14 +255,15 @@ export async function confirmSettlementCsvImport(
 
     await writeAuditLog({
       action: "settlement_csv_import_enqueued",
-      entityType: "settlement_batch",
-      entityId: externalBatchId,
+      entityType: "background_job",
+      entityId: enqueued.jobId,
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
       newData: {
         jobId: enqueued.jobId,
         rawEventId: enqueued.rawEventId,
+        externalBatchId,
         rowCount: input.rows.length,
         sourceFilePath,
         storageConfigured: Boolean(bucket),
@@ -493,13 +494,14 @@ export async function syncEcartPaySettlements(
 
     await writeAuditLog({
       action: "settlement_ecart_sync_enqueued",
-      entityType: "settlement_batch",
-      entityId: externalBatchId,
+      entityType: "background_job",
+      entityId: enqueued.jobId,
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
       newData: {
         jobId: enqueued.jobId,
+        externalBatchId,
         rowCount: rows.length,
         days,
       },
