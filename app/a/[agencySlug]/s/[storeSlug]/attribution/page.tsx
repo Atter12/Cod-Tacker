@@ -10,7 +10,6 @@ import {
   SectionHeader,
   Skeleton,
   Tooltip,
-  DemoModeBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import { formatRate, formatRoas } from "@/lib/attribution/metrics";
@@ -76,12 +75,11 @@ export default async function AttributionPage({
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
       <SectionHeader
         title="Atribución"
-        description="Modelo last_click (mock). Unattributed es categoría explícita. ROAS generado usa revenue atribuido ÷ spend."
+        description="Modelo last_click. Unattributed es categoría explícita. Spend desde Meta/TikTok; ROAS usa revenue atribuido ÷ spend."
         action={
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap items-center gap-2">
             {canManage && (
               <AttributionSeedButton agencySlug={p.agencySlug} storeSlug={p.storeSlug} />
             )}

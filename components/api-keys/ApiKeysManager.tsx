@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { AlertTriangle, Copy, Gauge, Trash2 } from "lucide-react";
 import { createApiKey, revokeApiKey, rotateApiKey } from "@/app/actions/api-keys";
 import { AgencyStatusPill } from "@/components/agency/AgencyStatusPill";
-import { Button, Card, CardContent, Checkbox, DemoModeBadge, FormField, Input } from "@/components/ui";
+import { Button, Card, CardContent, Checkbox, FormField, Input } from "@/components/ui";
 import { API_KEY_SCOPES } from "@/lib/api-keys/crypto";
 import type { ApiKeyListItem } from "@/services/api-keys.service";
 
@@ -98,7 +98,6 @@ export function ApiKeysManager({
 
   return (
     <div className="min-w-0 space-y-6">
-      <DemoModeBadge />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {plaintext ? (
         <div className="rounded-[12px] border border-amber-300 bg-amber-50 p-4 text-sm">

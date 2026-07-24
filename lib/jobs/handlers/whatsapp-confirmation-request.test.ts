@@ -51,6 +51,15 @@ describe("whatsapp.confirmation.request job", () => {
     assert.equal(parsed.success, true);
   });
 
+  it("accepts demo_seed null from enqueue JSON", () => {
+    const parsed = whatsappConfirmationRequestPayloadSchema.safeParse({
+      order_id: "00000000-0000-4000-8000-000000000099",
+      demo_seed: null,
+      source: "manual",
+    });
+    assert.equal(parsed.success, true);
+  });
+
   it("rejects invalid order_id payload", () => {
     const parsed = whatsappConfirmationRequestPayloadSchema.safeParse({
       order_id: "not-a-uuid",
