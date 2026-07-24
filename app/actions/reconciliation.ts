@@ -772,7 +772,7 @@ export async function manualMatchSettlementItem(
         match_confidence: 1,
         match_status: matchStatus,
         expected_amount: expected,
-        difference_amount: diff,
+        // difference_amount is GENERATED in DB — do not update
         discrepancy_reason: matchStatus === "difference" ? "manual_amount_difference" : null,
         matched_at: new Date().toISOString(),
         matched_by: user.id,
