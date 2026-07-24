@@ -1,0 +1,11 @@
+tracking,order_number,external_order_id,external_shipment_id,gross_amount,fee_amount,net_amount,currency,date,reference
+TRK-FLIPY-1066,1066,,,887.95,26.64,861.31,USD,2026-07-24,match_exact
+TRK-FLIPY-1065,1065,,,1036.00,31.08,1004.92,USD,2026-07-24,match_exact
+TRK-FLIPY-1060,1060,,,2637.95,79.14,2558.81,USD,2026-07-24,match_exact
+TRK-FLIPY-1059,1059,,,600.00,18.00,582.00,USD,2026-07-24,match_exact
+TRK-FLIPY-1052,1052,,,500.00,15.00,485.00,USD,2026-07-22,match_or_diff_amount
+TRK-FLIPY-1062,1062,,,800.00,24.00,776.00,USD,2026-07-24,likely_diff_amount
+TRK-FLIPY-1057,1057,,,450.00,90.00,360.00,USD,2026-07-24,diff_high_fee
+,9999,,,120.00,5.00,115.00,USD,2026-07-24,unmatched_unknown_order
+TRK-GHOST-000,,,,75.00,3.00,72.00,USD,2026-07-24,unmatched_no_keys
+TRK-FLIPY-1066,1066,,,887.95,26.64,861.31,USD,2026-07-24,duplicate_of_1066
