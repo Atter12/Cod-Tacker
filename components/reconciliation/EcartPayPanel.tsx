@@ -6,24 +6,42 @@ import { connectEcartPay, syncEcartPaySettlements } from "@/app/actions/reconcil
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
+import type { EcartSyncOutcome } from "@/lib/integrations/ecart-pay/sync-outcome";
+
+type LastSyncSummary = {
+  outcome: EcartSyncOutcome;
+  message: string;
+  finishedAt: string | null;
+  triggerSource: string | null;
+  rowCount: number | null;
+};
 
 type Props = {
   agencySlug: string;
   storeSlug: string;
   connected: boolean;
   canManage: boolean;
+  lastSync?: LastSyncSummary | null;
 };
 
 /**
  * Conciliación auto: Ecart Pay (COD liquidado vía producto COD de Envia).
  * Guarda public/private key cifradas; el Bearer (~1h) se renueva en cada sync.
+ * Sync periódico (~cada 8h) vía cron; el botón es opcional.
  */
-export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: Props) {
+export function EcartPayPanel({
+  agencySlug,
+  storeSlug,
+  connected,
+  canManage,
+  lastSync = null,
+}: Props) {
   const router = useRouter();
   const [publicKey, setPublicKey] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   if (!canManage) return null;
@@ -35,7 +53,7 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">Ecart Pay (auto)</h2>
         <span className="text-[11px] text-text-secondary">
-          {connected ? "Conectado" : "No conectado"}
+          {connected ? "Conectado · sync cada ~8h" : "No conectado"}
         </span>
       </div>
       <p className="text-[12.5px] text-text-secondary">
@@ -44,6 +62,20 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
         CODTracked renueva el token al sincronizar. Si el courier te liquida aparte, usa Importar
         CSV.
       </p>
+      {connected && lastSync ? (
+        <p className="text-[12px] text-text-secondary">
+          Último sync ({lastSync.triggerSource === "scheduled" ? "automático" : "manual"}
+          {lastSync.finishedAt
+            ? ` · ${new Date(lastSync.finishedAt).toLocaleString("es-PE")}`
+            : ""}
+          ):{" "}
+          {lastSync.outcome === "empty"
+            ? "0 transacciones (no es error)"
+            : lastSync.outcome === "ok"
+              ? `${lastSync.rowCount ?? 0} fila(s)`
+              : "error"}
+        </p>
+      ) : null}
       <FormField label="Public key Ecart Pay" htmlFor="ecart-public-key">
         <Input
           id="ecart-public-key"
@@ -73,6 +105,7 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
           onClick={() => {
             setError(null);
             setSuccess(null);
+            setInfo(null);
             start(async () => {
               const r = await connectEcartPay(agencySlug, storeSlug, {
                 publicKey,
@@ -85,7 +118,7 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
               setSuccess(
                 connected
                   ? "Claves Ecart Pay actualizadas."
-                  : "Ecart Pay conectado (claves guardadas).",
+                  : "Ecart Pay conectado (claves guardadas). Sync automático cada ~8h.",
               );
               setPublicKey("");
               setPrivateKey("");
@@ -102,21 +135,27 @@ export function EcartPayPanel({ agencySlug, storeSlug, connected, canManage }: P
           onClick={() => {
             setError(null);
             setSuccess(null);
+            setInfo(null);
             start(async () => {
               const r = await syncEcartPaySettlements(agencySlug, storeSlug, { days: 30 });
               if (r.error) {
                 setError(r.error);
                 return;
               }
-              setSuccess(`Sync encolado${r.jobId ? ` (job ${r.jobId.slice(0, 8)}…)` : ""}.`);
+              if (r.outcome === "empty") {
+                setInfo(r.message ?? "0 transacciones, no es error.");
+              } else {
+                setSuccess(r.message ?? `Sync encolado${r.jobId ? ` (job ${r.jobId.slice(0, 8)}…)` : ""}.`);
+              }
               router.refresh();
             });
           }}
         >
-          Sincronizar liquidaciones (30d)
+          Sincronizar ahora (30d)
         </Button>
       </div>
       {error ? <Alert variant="danger">{error}</Alert> : null}
+      {info ? <Alert variant="info">{info}</Alert> : null}
       {success ? <Alert variant="success">{success}</Alert> : null}
     </div>
   );

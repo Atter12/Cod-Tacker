@@ -3,6 +3,10 @@ import {
   sweepConversionReleases,
   type ReleaseSweepResult,
 } from "@/lib/conversions/release-sweep";
+import {
+  sweepEcartPayScheduledSyncs,
+  type EcartScheduledSyncResult,
+} from "@/lib/integrations/ecart-pay/scheduled-sync";
 import { processJobBatch, recoverStuckJobs } from "@/lib/jobs/processor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRequestContext } from "@/lib/observability/request-context";
@@ -38,7 +42,11 @@ function authorize(request: Request): boolean {
  * Vercel Cron invokes GET; manual ops can POST with a JSON body.
  */
 export async function GET(request: Request) {
-  return processJobsRequest(request, { recover: true, sweepConversions: true });
+  return processJobsRequest(request, {
+    recover: true,
+    sweepConversions: true,
+    sweepEcartPay: true,
+  });
 }
 
 export async function POST(request: Request) {
@@ -46,12 +54,14 @@ export async function POST(request: Request) {
   let queue = "default";
   let recover = false;
   let sweepConversions = false;
+  let sweepEcartPay = false;
   try {
     const body = (await request.json().catch(() => null)) as {
       limit?: number;
       queue?: string;
       recover?: boolean;
       sweepConversions?: boolean;
+      sweepEcartPay?: boolean;
     } | null;
     if (body?.limit && Number.isFinite(body.limit)) {
       limit = Math.min(Math.max(Math.floor(body.limit), 1), 50);
@@ -61,10 +71,17 @@ export async function POST(request: Request) {
     }
     recover = Boolean(body?.recover);
     sweepConversions = Boolean(body?.sweepConversions);
+    sweepEcartPay = Boolean(body?.sweepEcartPay);
   } catch {
     // empty body is fine
   }
-  return processJobsRequest(request, { limit, queue, recover, sweepConversions });
+  return processJobsRequest(request, {
+    limit,
+    queue,
+    recover,
+    sweepConversions,
+    sweepEcartPay,
+  });
 }
 
 async function processJobsRequest(
@@ -74,6 +91,7 @@ async function processJobsRequest(
     queue?: string;
     recover?: boolean;
     sweepConversions?: boolean;
+    sweepEcartPay?: boolean;
   },
 ) {
   const ctx = createRequestContext({
@@ -131,6 +149,20 @@ async function processJobsRequest(
     }
   }
 
+  // Ecart Pay auto-sync: due stores (~every 8h). Dedicated cron also hits
+  // /api/internal/ecart-pay/sync; this is a backup on the minute worker.
+  let ecartSweep: EcartScheduledSyncResult | null = null;
+  if (options.sweepEcartPay) {
+    try {
+      ecartSweep = await sweepEcartPayScheduledSyncs(admin);
+    } catch (error) {
+      logger.error("jobs.process.ecart_sweep_failed", {
+        ...ctx,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const sweepDidWork = Boolean(
     conversionSweep &&
       (conversionSweep.released > 0 ||
@@ -139,6 +171,9 @@ async function processJobsRequest(
         conversionSweep.sent > 0 ||
         conversionSweep.errors > 0),
   );
+  const ecartDidWork = Boolean(
+    ecartSweep && (ecartSweep.synced > 0 || ecartSweep.errors > 0 || ecartSweep.due > 0),
+  );
   const processFields = {
     ...ctx,
     workerId,
@@ -146,9 +181,20 @@ async function processJobsRequest(
     claimed: result.claimed,
     completed: result.completed,
     conversion_sweep: conversionSweep ? { ...conversionSweep } : null,
+    ecart_sweep: ecartSweep
+      ? {
+          scanned: ecartSweep.scanned,
+          due: ecartSweep.due,
+          synced: ecartSweep.synced,
+          empty: ecartSweep.empty,
+          ok: ecartSweep.ok,
+          errors: ecartSweep.errors,
+          skipped: ecartSweep.skipped,
+        }
+      : null,
   };
   // Cron idle ticks flood Vercel; keep info for real work only.
-  if (result.claimed > 0 || result.completed > 0 || recovered > 0 || sweepDidWork) {
+  if (result.claimed > 0 || result.completed > 0 || recovered > 0 || sweepDidWork || ecartDidWork) {
     logger.info("jobs.process.complete", processFields);
   } else {
     logger.debug("jobs.process.complete", processFields);
@@ -160,6 +206,7 @@ async function processJobsRequest(
       request_id: ctx.request_id,
       ...result,
       conversionSweep,
+      ecartSweep,
     },
     { headers: { "x-request-id": ctx.request_id } },
   );

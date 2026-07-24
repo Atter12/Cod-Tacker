@@ -38,11 +38,17 @@ import {
 import type { Enums, Json } from "@/types/database.generated";
 import { rollupBatchStatus } from "@/lib/reconciliation/matching";
 import { assertCanImportCsvRows } from "@/lib/billing/limits";
+import { ECART_GATEWAY } from "@/lib/integrations/ecart-pay/sync";
+import type { EcartSyncOutcome } from "@/lib/integrations/ecart-pay/sync-outcome";
 
 export type ReconciliationActionResult = ActionResult<{
   jobId?: string;
   rawEventId?: string;
   batchId?: string;
+  message?: string;
+  outcome?: EcartSyncOutcome;
+  rowCount?: number;
+  syncRunId?: string;
   preview?: {
     headers: string[];
     rows: ValidatedSettlementRow[];
@@ -280,8 +286,6 @@ export async function confirmSettlementCsvImport(
   }
 }
 
-const ECART_GATEWAY = "ecart_pay";
-
 async function findEcartPayIntegration(storeId: string, agencyId: string) {
   const admin = createAdminClient();
   const result = await admin
@@ -375,7 +379,7 @@ export async function connectEcartPay(
       connected_by: user.id,
       last_error_at: null,
       last_error_message: null,
-      last_success_at: now,
+      // Leave last_success_at untouched on connect so scheduled sync is due soon.
       updated_at: now,
     };
 
@@ -387,7 +391,10 @@ export async function connectEcartPay(
         .eq("store_id", membership.storeId);
       if (upd.error) throw new ValidationError("No se pudo actualizar Ecart Pay.");
     } else {
-      const ins = await admin.from("integrations").insert(payload);
+      const ins = await admin.from("integrations").insert({
+        ...payload,
+        last_success_at: null,
+      });
       if (ins.error) throw new ValidationError("No se pudo conectar Ecart Pay.");
     }
 
@@ -410,6 +417,7 @@ export async function connectEcartPay(
 
 /**
  * Pull paid transactions from Ecart Pay and enqueue the shared settlement import matcher.
+ * Zero rows is success with a clear empty message (not an error).
  */
 export async function syncEcartPaySettlements(
   agencySlug: string,
@@ -424,119 +432,30 @@ export async function syncEcartPaySettlements(
       throw new ValidationError("Tienda inválida.");
     }
 
-    const integration = await findEcartPayIntegration(membership.storeId, membership.agencyId);
-    if (!integration || integration.status === "disconnected" || integration.status === "revoked") {
+    const { findEcartPayIntegration: findConnected, syncEcartPaySettlementsForIntegration } =
+      await import("@/lib/integrations/ecart-pay/sync");
+    const admin = createAdminClient();
+    const integration = await findConnected(admin, membership.storeId, membership.agencyId);
+    if (!integration) {
       throw new ValidationError("Conecta Ecart Pay antes de sincronizar liquidaciones.");
     }
 
-    const { resolveEcartPayAccessTokenFromIntegration } = await import(
-      "@/lib/integrations/ecart-pay/credentials"
-    );
-    const { fetchEcartPayTransactions } = await import("@/lib/integrations/ecart-pay/api");
-    const { mapEcartTransactionsToSettlementRows } = await import(
-      "@/lib/integrations/ecart-pay/map-transactions"
-    );
-
-    let access: { token: string; source: "api_keys" | "legacy_bearer" };
-    try {
-      const resolved = await resolveEcartPayAccessTokenFromIntegration(integration);
-      if (!resolved) {
-        throw new ValidationError(
-          "Faltan claves Ecart Pay cifradas. Vuelve a conectar con public + private key.",
-        );
-      }
-      access = resolved;
-    } catch (error) {
-      if (error instanceof ValidationError) throw error;
-      throw new ValidationError(
-        `No se pudo obtener Bearer de Ecart Pay${
-          error instanceof Error && error.message ? `: ${error.message.slice(0, 180)}` : "."
-        }`,
-      );
-    }
-
-    if (access.source === "legacy_bearer") {
-      throw new ValidationError(
-        "Esta conexión usa un Bearer antiguo (~1h). Actualiza con clave pública y privada de Ecart Pay.",
-      );
-    }
-
-    const days = Math.min(Math.max(input?.days ?? 30, 1), 90);
-    const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const transactions = await fetchEcartPayTransactions({
-      token: access.token,
-      fromIso,
-      status: "paid",
-      limit: 250,
-    });
-    const rows = mapEcartTransactionsToSettlementRows(transactions);
-    if (rows.length === 0) {
-      throw new ValidationError(
-        "Ecart Pay no devolvió pagos conciliables en el rango. Verifica COD vía Envia → Ecart Pay.",
-      );
-    }
-
-    await assertCanImportCsvRows(await createClient(), membership.agencyId, rows.length);
-
-    const externalBatchId = `ecart-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-    const idempotencyKey = `settlement-ecart:${membership.storeId}:${externalBatchId}`;
-    const currencyCode = rows[0]?.currencyCode ?? "PEN";
-
-    const admin = createAdminClient();
-    const payload: Json = {
-      external_batch_id: externalBatchId,
-      reference: `Ecart Pay ${fromIso.slice(0, 10)} → sync`,
-      currency_code: currencyCode,
-      source_file_path: null,
-      preset_id: "ecart_pay",
-      rows,
-    };
-
-    const enqueued = await enqueueRawEventAndJob(admin, {
-      agencyId: membership.agencyId,
-      storeId: membership.storeId,
-      provider: "custom_payment",
-      integrationId: integration.id,
-      eventType: "settlement.ecart.synced",
-      jobType: "settlement.ecart.synced",
-      idempotencyKey,
-      correlationId: crypto.randomUUID(),
-      externalEventId: externalBatchId,
-      payload,
-    });
-
-    const { kickJobProcessing } = await import("@/lib/jobs/kick");
-    await kickJobProcessing({ limit: 8, reason: "settlement-ecart-sync" });
-
-    await admin
-      .from("integrations")
-      .update({
-        last_success_at: new Date().toISOString(),
-        last_error_at: null,
-        last_error_message: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", integration.id);
-
-    await writeAuditLog({
-      action: "settlement_ecart_sync_enqueued",
-      entityType: "background_job",
-      entityId: enqueued.jobId,
+    const result = await syncEcartPaySettlementsForIntegration(admin, {
+      integration,
+      days: input?.days,
+      triggerSource: "manual",
       actorId: user.id,
-      agencyId: membership.agencyId,
-      storeId: membership.storeId,
-      newData: {
-        jobId: enqueued.jobId,
-        externalBatchId,
-        rowCount: rows.length,
-        days,
-      },
+      kickWorker: true,
     });
 
     revalidateRecon(agencySlug, storeSlug);
     return actionOk({
-      jobId: enqueued.jobId,
-      rawEventId: enqueued.rawEventId,
+      jobId: result.jobId,
+      rawEventId: result.rawEventId,
+      message: result.message,
+      outcome: result.outcome,
+      rowCount: result.rowCount,
+      syncRunId: result.syncRunId ?? undefined,
     });
   } catch (error) {
     return actionFail(error);
