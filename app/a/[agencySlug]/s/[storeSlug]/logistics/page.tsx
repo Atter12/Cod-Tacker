@@ -8,7 +8,6 @@ import {
   SectionHeader,
   Skeleton,
   StatusBadge,
-  DemoModeBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import {
@@ -101,17 +100,10 @@ export default async function LogisticsPage({
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <DemoModeBadge />
-        <p className="text-[12.5px] text-text-secondary">
-          Los carriers live aún no están activos; conecta Enviame u otro proveedor en{" "}
-          <Link href={integrationsHref} className="font-medium text-brand-primary hover:underline">
-            Integraciones
-          </Link>
-          .
-        </p>
-      </div>
-      <SectionHeader title="Logística" description={`${result.total} envío(s) en la tienda.`} />
+      <SectionHeader
+        title="Logística"
+        description={`${result.total} envío(s) en la tienda. Conecta Envia.com (u otro courier) en Integraciones para sincronizar guías.`}
+      />
       <Suspense fallback={<Skeleton className="h-32 w-full" />}>
         <LogisticsFiltersForm
           initial={{
@@ -133,7 +125,7 @@ export default async function LogisticsPage({
         ) : (
           <EmptyState
             title="Aún no hay envíos"
-            description="Conecta un proveedor logístico para sincronizar guías, o genera envíos mock desde Integraciones (Enviame / custom carrier) para probar el embudo de entrega y devolución."
+            description="Conecta Envia.com u otro courier en Integraciones para sincronizar guías y el embudo de entrega / RTO."
             action={{ label: "Ir a Integraciones", href: integrationsHref }}
           />
         )

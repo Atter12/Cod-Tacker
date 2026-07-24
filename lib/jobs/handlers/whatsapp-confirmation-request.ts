@@ -6,7 +6,10 @@ import type { Json } from "@/types/database.generated";
 
 export const whatsappConfirmationRequestPayloadSchema = z.object({
   order_id: z.string().uuid(),
-  demo_seed: z.string().max(200).optional(),
+  // Enqueue may serialize missing demo_seed as JSON null — accept both.
+  demo_seed: z.string().max(200).nullish(),
+  source: z.string().max(64).nullish(),
+  requested_by: z.string().uuid().nullish(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {

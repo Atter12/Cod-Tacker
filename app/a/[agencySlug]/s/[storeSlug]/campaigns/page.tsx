@@ -7,7 +7,6 @@ import {
   SectionHeader,
   Skeleton,
   Tooltip,
-  DemoModeBadge,
 } from "@/components/ui";
 import { routes } from "@/config/routes";
 import { formatRoas } from "@/lib/attribution/metrics";
@@ -43,7 +42,6 @@ export default async function CampaignsPage({
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
       <SectionHeader
         title="Campañas"
         description="Drill-down publicitario. ROAS entregado excluye retornos; ROAS conciliado usa settled."

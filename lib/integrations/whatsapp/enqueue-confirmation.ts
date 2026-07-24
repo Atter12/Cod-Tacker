@@ -81,7 +81,7 @@ export async function enqueueWhatsappCodConfirmationRequest(input: {
     payload: {
       order_id: input.orderId,
       source: input.source,
-      demo_seed: input.demoSeed ?? null,
+      ...(input.demoSeed ? { demo_seed: input.demoSeed } : {}),
       ...(input.actorId ? { requested_by: input.actorId } : {}),
     } as Json,
   });
