@@ -16,6 +16,7 @@ import {
   applySettledPatch,
   type OrderPaymentSnapshot,
 } from "@/lib/reconciliation/effects";
+import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
 import {
   ALLOWED_CSV_MIME,
   CARRIER_CSV_PRESETS,
@@ -38,11 +39,17 @@ import {
 import type { Enums, Json } from "@/types/database.generated";
 import { rollupBatchStatus } from "@/lib/reconciliation/matching";
 import { assertCanImportCsvRows } from "@/lib/billing/limits";
+import { ECART_GATEWAY } from "@/lib/integrations/ecart-pay/sync";
+import type { EcartSyncOutcome } from "@/lib/integrations/ecart-pay/sync-outcome";
 
 export type ReconciliationActionResult = ActionResult<{
   jobId?: string;
   rawEventId?: string;
   batchId?: string;
+  message?: string;
+  outcome?: EcartSyncOutcome;
+  rowCount?: number;
+  syncRunId?: string;
   preview?: {
     headers: string[];
     rows: ValidatedSettlementRow[];
@@ -280,8 +287,6 @@ export async function confirmSettlementCsvImport(
   }
 }
 
-const ECART_GATEWAY = "ecart_pay";
-
 async function findEcartPayIntegration(storeId: string, agencyId: string) {
   const admin = createAdminClient();
   const result = await admin
@@ -305,11 +310,11 @@ async function findEcartPayIntegration(storeId: string, agencyId: string) {
   );
 }
 
-/** Connect / rotate Ecart Pay API token (COD liquidación via Envia COD → Ecart Pay). */
+/** Connect / rotate Ecart Pay API keys (mint Bearer on demand; ~1h tokens). */
 export async function connectEcartPay(
   agencySlug: string,
   storeSlug: string,
-  input: { apiToken: string },
+  input: { publicKey: string; privateKey: string },
 ): Promise<ReconciliationActionResult> {
   try {
     const user = await requireUser();
@@ -319,30 +324,33 @@ export async function connectEcartPay(
       throw new ValidationError("Tienda inválida.");
     }
 
-    const token = input.apiToken.trim();
-    if (!token) throw new ValidationError("Token de Ecart Pay requerido.");
+    const publicKey = input.publicKey.trim();
+    const privateKey = input.privateKey.trim();
+    if (!publicKey || !privateKey) {
+      throw new ValidationError("Clave pública y privada de Ecart Pay son requeridas.");
+    }
 
-    const { packEcartPayApiToken, fingerprintEcartPayToken } = await import(
+    const { packEcartPayApiKeys, fingerprintEcartPayPublicKey } = await import(
       "@/lib/integrations/ecart-pay/credentials"
     );
-    const { probeEcartPayToken } = await import("@/lib/integrations/ecart-pay/api");
-    const probe = await probeEcartPayToken(token);
+    const { probeEcartPayApiKeys } = await import("@/lib/integrations/ecart-pay/api");
+    const probe = await probeEcartPayApiKeys({ publicKey, privateKey });
     if (!probe.ok) {
       throw new ValidationError(
-        `No se pudo validar el token de Ecart Pay${probe.detail ? `: ${probe.detail}` : "."}`,
+        `No se pudo validar las claves de Ecart Pay${probe.detail ? `: ${probe.detail}` : "."}`,
       );
     }
 
     let secretRef: string;
     try {
-      secretRef = packEcartPayApiToken(token);
+      secretRef = packEcartPayApiKeys({ publicKey, privateKey });
     } catch {
       throw new ValidationError(
-        "ENCRYPTION_KEY no configurada. No se puede guardar el token de forma segura.",
+        "ENCRYPTION_KEY no configurada. No se pueden guardar las claves de forma segura.",
       );
     }
 
-    const fingerprint = fingerprintEcartPayToken(token);
+    const fingerprint = fingerprintEcartPayPublicKey(publicKey);
     const now = new Date().toISOString();
     const admin = createAdminClient();
     const existing = await findEcartPayIntegration(membership.storeId, membership.agencyId);
@@ -359,18 +367,20 @@ export async function connectEcartPay(
       scopes: ["ecart_pay:transactions"],
       settings: {
         gateway: ECART_GATEWAY,
-        token_fingerprint: fingerprint,
+        auth_mode: "api_keys_v2",
+        public_key_fingerprint: fingerprint,
       } as Json,
       metadata: {
         mode: "live",
         demo: false,
         gateway: ECART_GATEWAY,
+        auth_mode: "api_keys_v2",
       } as Json,
       connected_at: now,
       connected_by: user.id,
       last_error_at: null,
       last_error_message: null,
-      last_success_at: now,
+      // Leave last_success_at untouched on connect so scheduled sync is due soon.
       updated_at: now,
     };
 
@@ -382,7 +392,10 @@ export async function connectEcartPay(
         .eq("store_id", membership.storeId);
       if (upd.error) throw new ValidationError("No se pudo actualizar Ecart Pay.");
     } else {
-      const ins = await admin.from("integrations").insert(payload);
+      const ins = await admin.from("integrations").insert({
+        ...payload,
+        last_success_at: null,
+      });
       if (ins.error) throw new ValidationError("No se pudo conectar Ecart Pay.");
     }
 
@@ -393,7 +406,7 @@ export async function connectEcartPay(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { gateway: ECART_GATEWAY },
+      newData: { gateway: ECART_GATEWAY, auth_mode: "api_keys_v2" },
     });
 
     revalidateRecon(agencySlug, storeSlug);
@@ -405,6 +418,7 @@ export async function connectEcartPay(
 
 /**
  * Pull paid transactions from Ecart Pay and enqueue the shared settlement import matcher.
+ * Zero rows is success with a clear empty message (not an error).
  */
 export async function syncEcartPaySettlements(
   agencySlug: string,
@@ -419,98 +433,30 @@ export async function syncEcartPaySettlements(
       throw new ValidationError("Tienda inválida.");
     }
 
-    const integration = await findEcartPayIntegration(membership.storeId, membership.agencyId);
-    if (!integration || integration.status === "disconnected" || integration.status === "revoked") {
+    const { findEcartPayIntegration: findConnected, syncEcartPaySettlementsForIntegration } =
+      await import("@/lib/integrations/ecart-pay/sync");
+    const admin = createAdminClient();
+    const integration = await findConnected(admin, membership.storeId, membership.agencyId);
+    if (!integration) {
       throw new ValidationError("Conecta Ecart Pay antes de sincronizar liquidaciones.");
     }
 
-    const { resolveEcartPayTokenFromIntegration } = await import(
-      "@/lib/integrations/ecart-pay/credentials"
-    );
-    const { fetchEcartPayTransactions } = await import("@/lib/integrations/ecart-pay/api");
-    const { mapEcartTransactionsToSettlementRows } = await import(
-      "@/lib/integrations/ecart-pay/map-transactions"
-    );
-
-    const token = resolveEcartPayTokenFromIntegration(integration);
-    if (!token) throw new ValidationError("Falta token cifrado de Ecart Pay.");
-
-    const days = Math.min(Math.max(input?.days ?? 30, 1), 90);
-    const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const transactions = await fetchEcartPayTransactions({
-      token,
-      fromIso,
-      status: "paid",
-      limit: 250,
-    });
-    const rows = mapEcartTransactionsToSettlementRows(transactions);
-    if (rows.length === 0) {
-      throw new ValidationError(
-        "Ecart Pay no devolvió pagos conciliables en el rango. Verifica COD vía Envia → Ecart Pay.",
-      );
-    }
-
-    await assertCanImportCsvRows(await createClient(), membership.agencyId, rows.length);
-
-    const externalBatchId = `ecart-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-    const idempotencyKey = `settlement-ecart:${membership.storeId}:${externalBatchId}`;
-    const currencyCode = rows[0]?.currencyCode ?? "PEN";
-
-    const admin = createAdminClient();
-    const payload: Json = {
-      external_batch_id: externalBatchId,
-      reference: `Ecart Pay ${fromIso.slice(0, 10)} → sync`,
-      currency_code: currencyCode,
-      source_file_path: null,
-      preset_id: "ecart_pay",
-      rows,
-    };
-
-    const enqueued = await enqueueRawEventAndJob(admin, {
-      agencyId: membership.agencyId,
-      storeId: membership.storeId,
-      provider: "custom_payment",
-      integrationId: integration.id,
-      eventType: "settlement.ecart.synced",
-      jobType: "settlement.ecart.synced",
-      idempotencyKey,
-      correlationId: crypto.randomUUID(),
-      externalEventId: externalBatchId,
-      payload,
-    });
-
-    const { kickJobProcessing } = await import("@/lib/jobs/kick");
-    await kickJobProcessing({ limit: 8, reason: "settlement-ecart-sync" });
-
-    await admin
-      .from("integrations")
-      .update({
-        last_success_at: new Date().toISOString(),
-        last_error_at: null,
-        last_error_message: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", integration.id);
-
-    await writeAuditLog({
-      action: "settlement_ecart_sync_enqueued",
-      entityType: "background_job",
-      entityId: enqueued.jobId,
+    const result = await syncEcartPaySettlementsForIntegration(admin, {
+      integration,
+      days: input?.days,
+      triggerSource: "manual",
       actorId: user.id,
-      agencyId: membership.agencyId,
-      storeId: membership.storeId,
-      newData: {
-        jobId: enqueued.jobId,
-        externalBatchId,
-        rowCount: rows.length,
-        days,
-      },
+      kickWorker: true,
     });
 
     revalidateRecon(agencySlug, storeSlug);
     return actionOk({
-      jobId: enqueued.jobId,
-      rawEventId: enqueued.rawEventId,
+      jobId: result.jobId,
+      rawEventId: result.rawEventId,
+      message: result.message,
+      outcome: result.outcome,
+      rowCount: result.rowCount,
+      syncRunId: result.syncRunId ?? undefined,
     });
   } catch (error) {
     return actionFail(error);
@@ -533,40 +479,64 @@ export async function confirmCollectedMatch(
     const item = await getSettlementItemById(client, membership.storeId, itemId);
     if (!item) throw new ValidationError("Ítem no encontrado.");
     if (!item.order_id) throw new ValidationError("El ítem no tiene pedido emparejado.");
-    if (item.match_status !== "matched" && item.match_status !== "difference") {
-      throw new ValidationError("Solo se puede confirmar cobro en ítems emparejados o con diferencia.");
+    if (item.collected_applied_at) {
+      throw new ValidationError("Este ítem ya fue marcado como cobrado.");
+    }
+    if (
+      item.match_status !== "matched" &&
+      item.match_status !== "difference" &&
+      item.match_status !== "resolved"
+    ) {
+      throw new ValidationError(
+        "Solo se puede confirmar cobro en ítems emparejados, con diferencia o resueltos.",
+      );
     }
 
     const orderRes = await client
       .from("orders")
       .select(
-        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code",
+        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount",
       )
       .eq("id", item.order_id)
       .eq("store_id", membership.storeId)
       .single();
     if (orderRes.error || !orderRes.data) throw new ValidationError("Pedido no encontrado.");
 
-    const collectedAmount = item.settled_amount + item.fee_amount;
+    const remesaAmount = item.settled_amount + item.fee_amount;
+    const gate = gateConfirmCollectedRemesa({
+      remesaAmount,
+      itemCurrency: item.currency_code,
+      order: {
+        expectedCodAmount: orderRes.data.expected_cod_amount,
+        totalAmount: orderRes.data.total_amount,
+        currencyCode: orderRes.data.currency_code,
+        collectedCodAmount: orderRes.data.collected_cod_amount,
+      },
+    });
+    if (!gate.ok) throw new ValidationError(gate.error);
+
     const patch = applyCollectedPatch({
       order: orderSnapshot(orderRes.data),
-      collectedAmount,
+      collectedAmount: gate.newCollected,
     });
 
     const upd = await client.from("orders").update(patch).eq("id", orderRes.data.id).eq("store_id", membership.storeId);
     if (upd.error) throw new ValidationError("No se pudo actualizar el cobro del pedido.");
 
     try {
-      await recordPurchaseConversionEvent({
-        admin: createAdminClient(),
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        orderId: orderRes.data.id,
-        value: Number(patch.collected_cod_amount ?? collectedAmount),
-        currencyCode: orderRes.data.currency_code || "PEN",
-        eventTime: patch.cash_collected_at ?? undefined,
-        source: "reconciliation",
-      });
+      // Solo avisar compra a ads cuando el cobro cierra Shopify (evita parciales inflados).
+      if (gate.mode === "full") {
+        await recordPurchaseConversionEvent({
+          admin: createAdminClient(),
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          orderId: orderRes.data.id,
+          value: Number(patch.collected_cod_amount ?? gate.newCollected),
+          currencyCode: orderRes.data.currency_code || "PEN",
+          eventTime: patch.cash_collected_at ?? undefined,
+          source: "reconciliation",
+        });
+      }
     } catch (convErr) {
       logger.warn("reconciliation.collected.conversion_record_failed", {
         order_id: orderRes.data.id,
@@ -587,7 +557,15 @@ export async function confirmCollectedMatch(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { orderId: item.order_id, ...patch },
+      newData: {
+        orderId: item.order_id,
+        mode: gate.mode,
+        remesaAmount: gate.remesaAmount,
+        previousCollected: gate.previousCollected,
+        newCollected: gate.newCollected,
+        shopifyExpected: gate.shopifyExpected,
+        ...patch,
+      },
     });
 
     revalidateRecon(agencySlug, storeSlug, item.batch_id);
@@ -633,7 +611,7 @@ export async function approveSettlementBatch(
       const orderRes = await client
         .from("orders")
         .select(
-          "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount",
+          "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount",
         )
         .eq("id", item.order_id!)
         .eq("store_id", membership.storeId)
@@ -641,31 +619,96 @@ export async function approveSettlementBatch(
       if (orderRes.error || !orderRes.data) continue;
 
       const snap = orderSnapshot(orderRes.data);
-      // Ensure collected is set if not yet
+      // Ensure collected is set if not yet — full or partial remesa vs Shopify.
       if (snap.collectedCodAmount == null) {
+        const remesaAmount = item.settled_amount + item.fee_amount;
+        const gate = gateConfirmCollectedRemesa({
+          remesaAmount,
+          itemCurrency: item.currency_code,
+          order: {
+            expectedCodAmount: orderRes.data.expected_cod_amount,
+            totalAmount: orderRes.data.total_amount,
+            currencyCode: orderRes.data.currency_code,
+            collectedCodAmount: orderRes.data.collected_cod_amount,
+          },
+        });
+        if (!gate.ok) {
+          throw new ValidationError(
+            `No se puede liquidar la fila ${item.source_row_number ?? item.id.slice(0, 8)}: ${gate.error}`,
+          );
+        }
         const collectedPatch = applyCollectedPatch({
           order: snap,
-          collectedAmount: item.settled_amount + item.fee_amount,
+          collectedAmount: gate.newCollected,
         });
         await client.from("orders").update(collectedPatch).eq("id", snap.id).eq("store_id", membership.storeId);
         snap.collectedCodAmount = collectedPatch.collected_cod_amount ?? null;
         snap.paymentStatus = collectedPatch.payment_status;
         try {
-          await recordPurchaseConversionEvent({
-            admin: createAdminClient(),
-            agencyId: membership.agencyId,
-            storeId: membership.storeId,
-            orderId: snap.id,
-            value: Number(collectedPatch.collected_cod_amount ?? 0),
-            currencyCode: "PEN",
-            eventTime: collectedPatch.cash_collected_at ?? undefined,
-            source: "reconciliation",
-          });
+          if (gate.mode === "full") {
+            await recordPurchaseConversionEvent({
+              admin: createAdminClient(),
+              agencyId: membership.agencyId,
+              storeId: membership.storeId,
+              orderId: snap.id,
+              value: Number(collectedPatch.collected_cod_amount ?? 0),
+              currencyCode: orderRes.data.currency_code || "PEN",
+              eventTime: collectedPatch.cash_collected_at ?? undefined,
+              source: "reconciliation",
+            });
+          }
         } catch (convErr) {
           logger.warn("reconciliation.batch.conversion_record_failed", {
             order_id: snap.id,
             error: convErr instanceof Error ? convErr.message : "conversion_failed",
           });
+        }
+      } else if (
+        snap.paymentStatus === "partially_collected" &&
+        !item.collected_applied_at
+      ) {
+        // Anexar remesa a un cobro parcial ya existente al liquidar el lote.
+        const remesaAmount = item.settled_amount + item.fee_amount;
+        const gate = gateConfirmCollectedRemesa({
+          remesaAmount,
+          itemCurrency: item.currency_code,
+          order: {
+            expectedCodAmount: orderRes.data.expected_cod_amount,
+            totalAmount: orderRes.data.total_amount,
+            currencyCode: orderRes.data.currency_code,
+            collectedCodAmount: snap.collectedCodAmount,
+          },
+        });
+        if (!gate.ok) {
+          throw new ValidationError(
+            `No se puede liquidar la fila ${item.source_row_number ?? item.id.slice(0, 8)}: ${gate.error}`,
+          );
+        }
+        const collectedPatch = applyCollectedPatch({
+          order: snap,
+          collectedAmount: gate.newCollected,
+        });
+        await client.from("orders").update(collectedPatch).eq("id", snap.id).eq("store_id", membership.storeId);
+        snap.collectedCodAmount = collectedPatch.collected_cod_amount ?? null;
+        snap.paymentStatus = collectedPatch.payment_status;
+        if (gate.mode === "full") {
+          try {
+            await recordPurchaseConversionEvent({
+              admin: createAdminClient(),
+              agencyId: membership.agencyId,
+              storeId: membership.storeId,
+              orderId: snap.id,
+              value: Number(collectedPatch.collected_cod_amount ?? 0),
+              currencyCode: orderRes.data.currency_code || "PEN",
+              eventTime: collectedPatch.cash_collected_at ?? undefined,
+              source: "reconciliation",
+            });
+          } catch (convErr) {
+            logger.warn("reconciliation.batch.conversion_record_failed", {
+              order_id: snap.id,
+              error: convErr instanceof Error ? convErr.message : "conversion_failed",
+            });
+          }
         }
       }
 
@@ -807,7 +850,7 @@ export async function manualMatchSettlementItem(
 
     const orderRes = await client
       .from("orders")
-      .select("id, expected_cod_amount")
+      .select("id, expected_cod_amount, order_number")
       .eq("id", orderId)
       .eq("store_id", membership.storeId)
       .maybeSingle();
@@ -823,11 +866,12 @@ export async function manualMatchSettlementItem(
       .from("settlement_items")
       .update({
         order_id: orderId,
+        order_number: orderRes.data.order_number ?? item.order_number,
         match_method: "manual",
         match_confidence: 1,
         match_status: matchStatus,
         expected_amount: expected,
-        difference_amount: diff,
+        // difference_amount is GENERATED in DB — do not update
         discrepancy_reason: matchStatus === "difference" ? "manual_amount_difference" : null,
         matched_at: new Date().toISOString(),
         matched_by: user.id,
@@ -899,6 +943,19 @@ export async function resolveSettlementDiscrepancy(
       .eq("id", itemId)
       .eq("store_id", membership.storeId);
 
+    const all = await listSettlementItemsPaginated(client, {
+      storeId: membership.storeId,
+      batchId: item.batch_id,
+      page: 1,
+      pageSize: 500,
+    });
+    const status = rollupBatchStatus(all.rows.map((r) => r.match_status));
+    await client
+      .from("settlement_batches")
+      .update({ status })
+      .eq("id", item.batch_id)
+      .eq("store_id", membership.storeId);
+
     await writeAuditLog({
       action: "settlement_item_discrepancy_resolved",
       entityType: "settlement_item",
@@ -906,7 +963,7 @@ export async function resolveSettlementDiscrepancy(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: input,
+      newData: { ...input, batchStatus: status },
     });
 
     revalidateRecon(agencySlug, storeSlug, item.batch_id);

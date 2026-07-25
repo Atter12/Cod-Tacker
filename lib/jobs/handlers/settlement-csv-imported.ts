@@ -212,7 +212,7 @@ export const handleSettlementCsvImported: JobHandler = async ({
         settled_amount: r.netAmount,
         fee_amount: r.feeAmount,
         expected_amount: m.expectedAmount,
-        difference_amount: m.differenceAmount,
+        // difference_amount is GENERATED in DB — do not insert
         order_id: m.orderId,
         shipment_id: m.shipmentId,
         match_method: m.matchMethod,

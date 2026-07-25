@@ -4,6 +4,10 @@
     {
       "path": "/api/internal/jobs/process",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/ecart-pay/sync",
+      "schedule": "0 */8 * * *"
     }
   ]
 }

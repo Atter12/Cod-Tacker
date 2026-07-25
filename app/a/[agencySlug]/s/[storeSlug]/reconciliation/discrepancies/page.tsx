@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ItemActionsPanel } from "@/components/reconciliation/BatchActionsPanel";
 import { ReconciliationFiltersForm } from "@/components/reconciliation/ReconciliationFiltersForm";
+import { SettlementItemRefCell } from "@/components/reconciliation/SettlementItemRefCell";
 import {
   DataTable,
   EmptyState,
@@ -83,8 +84,14 @@ export default async function ReconciliationDiscrepanciesPage({
             },
             {
               id: "tracking",
-              header: "Tracking",
-              cell: (row) => row.tracking_number ?? row.order_number ?? "—",
+              header: "Tracking / Pedido",
+              cell: (row) => (
+                <SettlementItemRefCell
+                  agencySlug={p.agencySlug}
+                  storeSlug={p.storeSlug}
+                  item={row}
+                />
+              ),
             },
             {
               id: "status",
@@ -115,6 +122,15 @@ export default async function ReconciliationDiscrepanciesPage({
                   storeSlug={p.storeSlug}
                   itemId={row.id}
                   matchStatus={row.match_status}
+                  orderId={row.order_id}
+                  collectedAppliedAt={row.collected_applied_at}
+                  settledAmount={row.settled_amount}
+                  feeAmount={row.fee_amount}
+                  itemCurrency={row.currency_code}
+                  linkedExpectedCodAmount={row.linked_expected_cod_amount}
+                  linkedTotalAmount={row.linked_total_amount}
+                  linkedCurrencyCode={row.linked_currency_code}
+                  linkedCollectedCodAmount={row.linked_collected_cod_amount}
                   canManage={canManage}
                 />
               ),

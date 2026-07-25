@@ -48,6 +48,64 @@ async function storeHasEcartPay(storeId: string, agencyId: string): Promise<bool
   });
 }
 
+async function loadEcartLastSync(storeId: string, agencyId: string) {
+  const admin = createAdminClient();
+  const integration = await admin
+    .from("integrations")
+    .select("id, settings, status")
+    .eq("store_id", storeId)
+    .eq("agency_id", agencyId)
+    .eq("provider", "custom_payment")
+    .eq("status", "connected")
+    .limit(20);
+  const ecart = (integration.data ?? []).find((row) => {
+    const settings =
+      row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
+        ? (row.settings as Record<string, unknown>)
+        : {};
+    return settings.gateway === "ecart_pay";
+  });
+  if (!ecart) return null;
+
+  const run = await admin
+    .from("sync_runs")
+    .select("finished_at, trigger_source, received_total, metadata, status, error_message")
+    .eq("store_id", storeId)
+    .eq("integration_id", ecart.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!run.data) return null;
+  const meta =
+    run.data.metadata && typeof run.data.metadata === "object" && !Array.isArray(run.data.metadata)
+      ? (run.data.metadata as Record<string, unknown>)
+      : {};
+  const outcomeRaw = typeof meta.outcome === "string" ? meta.outcome : null;
+  const outcome =
+    outcomeRaw === "ok" || outcomeRaw === "empty" || outcomeRaw === "error"
+      ? outcomeRaw
+      : run.data.status === "failed"
+        ? "error"
+        : run.data.received_total === 0
+          ? "empty"
+          : "ok";
+  const message =
+    outcome === "empty"
+      ? "0 transacciones, no es error"
+      : outcome === "error"
+        ? (run.data.error_message ?? "Error en sync")
+        : `${run.data.received_total} transacción(es)`;
+
+  return {
+    outcome: outcome as "ok" | "empty" | "error",
+    message,
+    finishedAt: run.data.finished_at,
+    triggerSource: run.data.trigger_source,
+    rowCount: run.data.received_total,
+  };
+}
+
 export default async function ReconciliationPage({
   params,
   searchParams,
@@ -89,6 +147,9 @@ export default async function ReconciliationPage({
 
   const canManage = can(member.roles, "reconciliation.manage");
   const ecartConnected = await storeHasEcartPay(member.storeId, member.agencyId);
+  const ecartLastSync = ecartConnected
+    ? await loadEcartLastSync(member.storeId, member.agencyId)
+    : null;
 
   return (
     <section className="space-y-5">
@@ -119,6 +180,7 @@ export default async function ReconciliationPage({
         storeSlug={p.storeSlug}
         connected={ecartConnected}
         canManage={canManage}
+        lastSync={ecartLastSync}
       />
       <Suspense fallback={<Skeleton className="h-10 w-full" />}>
         <ReconciliationFiltersForm mode="batches" />

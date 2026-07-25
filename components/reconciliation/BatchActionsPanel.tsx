@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   approveSettlementBatch,
   confirmCollectedMatch,
@@ -10,7 +10,11 @@ import {
   reopenSettlementBatch,
   resolveSettlementDiscrepancy,
 } from "@/app/actions/reconciliation";
-import { Button } from "@/components/ui";
+import { Button, Dialog, Toast } from "@/components/ui";
+import {
+  gateConfirmCollectedRemesa,
+  resolveShopifyExpectedAmount,
+} from "@/lib/reconciliation/collected-gate";
 
 export function BatchActionsPanel({
   agencySlug,
@@ -94,34 +98,179 @@ export function ItemActionsPanel({
   itemId,
   matchStatus,
   canManage,
+  orderId = null,
+  collectedAppliedAt = null,
+  settledAmount = 0,
+  feeAmount = 0,
+  itemCurrency = null,
+  linkedExpectedCodAmount = null,
+  linkedTotalAmount = null,
+  linkedCurrencyCode = null,
+  linkedCollectedCodAmount = null,
 }: {
   agencySlug: string;
   storeSlug: string;
   itemId: string;
   matchStatus: string;
   canManage: boolean;
+  orderId?: string | null;
+  collectedAppliedAt?: string | null;
+  settledAmount?: number;
+  feeAmount?: number;
+  itemCurrency?: string | null;
+  linkedExpectedCodAmount?: number | null;
+  linkedTotalAmount?: number | null;
+  linkedCurrencyCode?: string | null;
+  linkedCollectedCodAmount?: number | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    variant: "success" | "danger" | "info";
+  } | null>(null);
+
   if (!canManage) return null;
+
+  const alreadyCollected = Boolean(collectedAppliedAt);
+  const hasLinkedOrder = Boolean(orderId);
+  const canConfirmCollected =
+    hasLinkedOrder &&
+    (matchStatus === "matched" || matchStatus === "difference" || matchStatus === "resolved");
+
+  const remesaAmount = Math.round((settledAmount + feeAmount) * 100) / 100;
+  const amountGate = gateConfirmCollectedRemesa({
+    remesaAmount,
+    itemCurrency,
+    order: {
+      expectedCodAmount: linkedExpectedCodAmount,
+      totalAmount: linkedTotalAmount,
+      currencyCode: linkedCurrencyCode,
+      collectedCodAmount: linkedCollectedCodAmount,
+    },
+  });
+  const shopifyExpected = amountGate.ok
+    ? amountGate.shopifyExpected
+    : resolveShopifyExpectedAmount({
+        expectedCodAmount: linkedExpectedCodAmount,
+        totalAmount: linkedTotalAmount,
+        currencyCode: linkedCurrencyCode,
+      });
+
+  const confirmLabel =
+    alreadyCollected
+      ? "Cobrado"
+      : amountGate.ok && amountGate.mode === "partial"
+        ? "Confirmar cobro parcial"
+        : "Confirmar cobrado";
 
   return (
     <div className="flex flex-wrap gap-2">
-      {(matchStatus === "matched" || matchStatus === "difference") && (
-        <Button
-          type="button"
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const r = await confirmCollectedMatch(agencySlug, storeSlug, itemId);
-              if (r.error) alert(r.error);
-              else router.refresh();
-            })
-          }
-        >
-          Confirmar cobrado
-        </Button>
+      {canConfirmCollected && (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant={alreadyCollected ? "outline" : "primary"}
+            disabled={pending || alreadyCollected}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {confirmLabel}
+          </Button>
+          <Dialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            title={
+              amountGate.ok && amountGate.mode === "partial"
+                ? "Confirmar cobro parcial"
+                : "Confirmar cobrado"
+            }
+          >
+            <div className="space-y-3 text-sm text-text-secondary">
+              <p>
+                Aplica la remesa de esta fila al <strong className="text-text-primary">pedido</strong>.
+                Si no cubre Shopify, queda cobro parcial y puedes anexar otra remesa después.
+                No se aceptan montos por encima de Shopify.
+              </p>
+              <ul className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                <li>
+                  Remesa fila (neto+fee):{" "}
+                  <strong className="text-text-primary">{remesaAmount}</strong>
+                  {itemCurrency ? ` ${itemCurrency}` : ""}
+                </li>
+                <li>
+                  Ya cobrado:{" "}
+                  <strong className="text-text-primary">
+                    {linkedCollectedCodAmount != null ? linkedCollectedCodAmount : 0}
+                  </strong>
+                </li>
+                <li>
+                  Shopify (COD/total):{" "}
+                  <strong className="text-text-primary">
+                    {shopifyExpected != null ? shopifyExpected : "—"}
+                  </strong>
+                  {linkedCurrencyCode ? ` ${linkedCurrencyCode}` : ""}
+                </li>
+                {amountGate.ok ? (
+                  <>
+                    <li>
+                      Nuevo cobrado:{" "}
+                      <strong className="text-text-primary">{amountGate.newCollected}</strong>
+                    </li>
+                    <li>
+                      Saldo restante:{" "}
+                      <strong className="text-text-primary">{amountGate.remainingAfter}</strong>
+                      {amountGate.mode === "partial" ? " · parcial" : " · cierra cobro"}
+                    </li>
+                  </>
+                ) : null}
+              </ul>
+              {!amountGate.ok ? (
+                <p className="text-xs text-danger">{amountGate.error}</p>
+              ) : null}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={pending}
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending || !amountGate.ok}
+                onClick={() =>
+                  start(async () => {
+                    const r = await confirmCollectedMatch(agencySlug, storeSlug, itemId);
+                    if (r.error) {
+                      setConfirmOpen(false);
+                      setToast({ message: r.error, variant: "danger" });
+                      return;
+                    }
+                    setConfirmOpen(false);
+                    setToast({
+                      message:
+                        amountGate.ok && amountGate.mode === "partial"
+                          ? "Cobro parcial aplicado. Puedes anexar otra remesa al mismo pedido."
+                          : "Cobro confirmado en el pedido. Revisa el detalle del pedido.",
+                      variant: "success",
+                    });
+                    router.refresh();
+                  })
+                }
+              >
+                {amountGate.ok && amountGate.mode === "partial"
+                  ? "Confirmar cobro parcial"
+                  : "Confirmar cobrado"}
+              </Button>
+            </div>
+          </Dialog>
+        </>
       )}
       {["unmatched", "difference", "duplicate", "disputed"].includes(matchStatus) && (
         <Button
@@ -136,8 +285,12 @@ export function ItemActionsPanel({
                 note,
                 acceptDifference: true,
               });
-              if (r.error) alert(r.error);
-              else router.refresh();
+              if (r.error) {
+                setToast({ message: r.error, variant: "danger" });
+                return;
+              }
+              setToast({ message: "Discrepancia resuelta.", variant: "success" });
+              router.refresh();
             })
           }
         >
@@ -160,14 +313,25 @@ export function ItemActionsPanel({
                 itemId,
                 orderId.trim(),
               );
-              if (r.error) alert(r.error);
-              else router.refresh();
+              if (r.error) {
+                setToast({ message: r.error, variant: "danger" });
+                return;
+              }
+              setToast({ message: "Match manual aplicado.", variant: "success" });
+              router.refresh();
             })
           }
         >
           Match manual
         </Button>
       )}
+      {toast ? (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
     </div>
   );
 }

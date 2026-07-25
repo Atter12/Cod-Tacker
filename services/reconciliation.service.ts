@@ -28,13 +28,37 @@ export type ListSettlementItemsOptions = {
 };
 
 export type SettlementItemsListResult = {
-  rows: SettlementItemRow[];
+  rows: SettlementItemListRow[];
   total: number;
   page: number;
   pageSize: number;
 };
 
+/** Item row plus linked pedido fields (source of truth when matched). */
+export type SettlementItemListRow = SettlementItemRow & {
+  linked_order_number: string | null;
+  linked_expected_cod_amount: number | null;
+  linked_total_amount: number | null;
+  linked_currency_code: string | null;
+  linked_collected_cod_amount: number | null;
+};
+
 export type BatchItemCounts = Record<Enums<"settlement_match_status">, number>;
+
+type LinkedOrderJoin = {
+  order_number: string | null;
+  expected_cod_amount: number | null;
+  total_amount: number | null;
+  currency_code: string | null;
+  collected_cod_amount: number | null;
+};
+
+function linkedOrderFromJoin(
+  orders: LinkedOrderJoin | LinkedOrderJoin[] | null | undefined,
+): LinkedOrderJoin | null {
+  if (!orders) return null;
+  return Array.isArray(orders) ? (orders[0] ?? null) : orders;
+}
 
 /** Services receive the request-scoped typed client so RLS remains enforced. */
 export async function listSettlementBatches(
@@ -101,7 +125,10 @@ export async function listSettlementItemsPaginated(
 
   let query = client
     .from("settlement_items")
-    .select("*", { count: "exact" })
+    .select(
+      "*, orders!settlement_items_order_id_fkey ( order_number, expected_cod_amount, total_amount, currency_code, collected_cod_amount )",
+      { count: "exact" },
+    )
     .eq("store_id", requireValue(options.storeId, "Tienda inválida."));
   if (options.batchId) query = query.eq("batch_id", options.batchId);
   if (options.matchStatuses?.length) query = query.in("match_status", options.matchStatuses);
@@ -111,7 +138,21 @@ export async function listSettlementItemsPaginated(
 
   const result = await query.order("source_row_number", { ascending: true }).range(from, to);
   throwQueryError(result.error);
-  return { rows: result.data ?? [], total: result.count ?? 0, page, pageSize };
+  const rows: SettlementItemListRow[] = (result.data ?? []).map((row) => {
+    const { orders, ...item } = row as SettlementItemRow & {
+      orders?: LinkedOrderJoin | LinkedOrderJoin[] | null;
+    };
+    const linked = linkedOrderFromJoin(orders);
+    return {
+      ...item,
+      linked_order_number: linked?.order_number?.trim() || null,
+      linked_expected_cod_amount: linked?.expected_cod_amount ?? null,
+      linked_total_amount: linked?.total_amount ?? null,
+      linked_currency_code: linked?.currency_code ?? null,
+      linked_collected_cod_amount: linked?.collected_cod_amount ?? null,
+    };
+  });
+  return { rows, total: result.count ?? 0, page, pageSize };
 }
 
 export async function getSettlementItemById(
