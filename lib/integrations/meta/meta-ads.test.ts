@@ -43,10 +43,12 @@ describe("Meta Ads Insights (S16)", () => {
     assert.equal(readMetaAdsCredentials({ ads_access_token: "only" }, null), null);
   });
 
-  it("maps Insights rows to daily spend snapshots", () => {
+  it("maps Insights rows to daily campaign spend snapshots", () => {
     const rows = mapMetaInsightsToSpendSnapshots(
       [
         {
+          campaign_id: "120330001",
+          campaign_name: "Verano COD",
           spend: "42.5",
           impressions: "1000",
           clicks: "12",
@@ -55,17 +57,23 @@ describe("Meta Ads Insights (S16)", () => {
           date_stop: "2026-07-18",
         },
         { spend: "0", date_start: "bad-date" },
+        {
+          spend: "9",
+          date_start: "2026-07-18",
+          date_stop: "2026-07-18",
+        },
       ],
-      { adAccountId: "act_1", currencyFallback: "PEN" },
+      { currencyFallback: "PEN" },
     );
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.date, "2026-07-18");
     assert.equal(rows[0]?.spend, 42.5);
     assert.equal(rows[0]?.currency, "USD");
-    assert.equal(rows[0]?.campaignExternalId, "act_1");
+    assert.equal(rows[0]?.campaignExternalId, "120330001");
+    assert.equal(rows[0]?.campaignName, "Verano COD");
   });
 
-  it("builds Insights URL with time_increment and account level", () => {
+  it("builds Insights URL with time_increment and campaign level", () => {
     const url = buildMetaInsightsUrl(
       {
         accessToken: "tok",
@@ -77,8 +85,9 @@ describe("Meta Ads Insights (S16)", () => {
       { from: "2026-07-01", to: "2026-07-07" },
     );
     assert.match(url.pathname, /\/v21\.0\/act_9\/insights$/);
-    assert.equal(url.searchParams.get("level"), "account");
+    assert.equal(url.searchParams.get("level"), "campaign");
     assert.equal(url.searchParams.get("time_increment"), "1");
+    assert.match(url.searchParams.get("fields") ?? "", /campaign_id/);
     assert.equal(url.searchParams.get("access_token"), "tok");
   });
 
@@ -88,6 +97,8 @@ describe("Meta Ads Insights (S16)", () => {
         JSON.stringify({
           data: [
             {
+              campaign_id: "99",
+              campaign_name: "Test",
               spend: "10",
               impressions: "100",
               clicks: "2",
@@ -115,6 +126,7 @@ describe("Meta Ads Insights (S16)", () => {
     if (!result.ok) return;
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0]?.spend, 10);
+    assert.equal(result.rows[0]?.campaignExternalId, "99");
   });
 
   it("exposes a clear missing-credentials constant", () => {

@@ -10,7 +10,10 @@ export type AdsProviderId = Enums<"ad_platform">;
 
 export type AdsSpendSnapshot = {
   date: string;
+  /** Platform campaign id (Meta campaign_id / TikTok campaign_id). */
   campaignExternalId: string;
+  /** Optional display name from Insights/report. */
+  campaignName?: string;
   spend: number;
   impressions: number;
   clicks: number;

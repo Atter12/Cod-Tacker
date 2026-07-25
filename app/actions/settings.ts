@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-result";
+import { applyStoreUtmAliasesToPendingAttributions } from "@/lib/attribution/match-campaign";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
 import { routes } from "@/config/routes";
@@ -13,6 +14,7 @@ import {
   storeSettingsToJson,
   type StoreSettingsUpdateInput,
 } from "@/lib/settings/store-settings";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import type { Json } from "@/types/database";
@@ -70,6 +72,15 @@ export async function updateStoreSettings(
 
     if (error) throw error;
 
+    const aliases = input.settings.attribution.utmCampaignAliases;
+    if (aliases.length > 0 && membership.storeId) {
+      await applyStoreUtmAliasesToPendingAttributions({
+        admin: createAdminClient(),
+        storeId: membership.storeId,
+        aliases,
+      });
+    }
+
     await writeAuditLog({
       action: "store_settings_updated",
       entityType: "store",
@@ -90,6 +101,8 @@ export async function updateStoreSettings(
     });
 
     revalidatePath(routes.store.settings(agencySlug, storeSlug));
+    revalidatePath(routes.store.attribution(agencySlug, storeSlug));
+    revalidatePath(routes.store.campaigns(agencySlug, storeSlug));
     return actionOk();
   } catch (error) {
     return actionFail(error);

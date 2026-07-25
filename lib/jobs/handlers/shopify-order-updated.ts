@@ -8,8 +8,10 @@ import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-it
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import { shouldApplyShopifyPaymentSync } from "@/lib/integrations/shopify/map-payment";
+import { shouldApplyShopifyOrderStatus } from "@/lib/orders/status-precedence";
 import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
 import type { Json } from "@/types/database.generated";
+import type { OrderStatus } from "@/types/orders";
 
 export { shopifyOrderUpdatedPayloadSchema };
 
@@ -104,7 +106,15 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       ...orderContactMetadataPatch(data.customer),
     } as Json,
   };
-  if (data.order_status) patch.order_status = data.order_status;
+  if (
+    data.order_status &&
+    shouldApplyShopifyOrderStatus(
+      existing.data.order_status as OrderStatus,
+      data.order_status as OrderStatus,
+    )
+  ) {
+    patch.order_status = data.order_status;
+  }
   if (typeof data.total_amount === "number") {
     patch.total_amount = data.total_amount;
   }
@@ -178,12 +188,12 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
     });
   }
 
-  if (data.order_status && data.order_status !== existing.data.order_status) {
+  if (patch.order_status && patch.order_status !== existing.data.order_status) {
     await admin.from("order_status_history").insert({
       store_id: job.store_id,
       order_id: existing.data.id,
       previous_status: existing.data.order_status,
-      new_status: data.order_status,
+      new_status: patch.order_status,
       occurred_at: new Date().toISOString(),
       reason_code: live ? "jobs_shopify_update" : "jobs_mock_update",
       reason_detail: live

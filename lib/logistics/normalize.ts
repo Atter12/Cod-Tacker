@@ -1,5 +1,6 @@
 import type { Json } from "@/types/database.generated";
 import type { Enums } from "@/types/database.generated";
+import { orderStatusFromShipmentStatus } from "@/lib/orders/status-precedence";
 
 export type ShipmentStatus = Enums<"shipment_status">;
 
@@ -230,16 +231,16 @@ export function planShipmentEventApply(input: ShipmentEventApplyInput): Shipment
   }
 
   let orderPatch: ShipmentEventApplyPlan["orderPatch"] = null;
-  if (!skipStatusUpdate && normalize.normalizedStatus === "delivered") {
-    orderPatch = {
-      order_status: "delivered",
-      delivered_at: input.occurredAt,
-    };
-  } else if (!skipStatusUpdate && normalize.normalizedStatus === "returned") {
-    orderPatch = {
-      order_status: "returned",
-      returned_at: input.occurredAt,
-    };
+  if (!skipStatusUpdate) {
+    const mappedOrderStatus = orderStatusFromShipmentStatus(normalize.normalizedStatus);
+    if (mappedOrderStatus) {
+      orderPatch = { order_status: mappedOrderStatus };
+      if (normalize.normalizedStatus === "delivered") {
+        orderPatch.delivered_at = input.occurredAt;
+      } else if (normalize.normalizedStatus === "returned") {
+        orderPatch.returned_at = input.occurredAt;
+      }
+    }
   }
 
   return {

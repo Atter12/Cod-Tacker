@@ -5,7 +5,7 @@ import type {
   ProviderSyncResult,
 } from "./common";
 
-export type SettlementProviderId = "custom_payment" | "other";
+export type SettlementProviderId = "custom_payment" | "csv_upload" | "ecart_pay" | "other";
 
 export type SettlementBatchSnapshot = {
   externalId: string;

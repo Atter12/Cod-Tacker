@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
 import {
@@ -242,6 +243,34 @@ export const handleSettlementCsvImported: JobHandler = async ({
         processing_finished_at: new Date().toISOString(),
       })
       .eq("id", batchId);
+
+    const discrepancyCount = matches.filter(
+      (m) =>
+        m.matchStatus === "unmatched" ||
+        m.matchStatus === "difference" ||
+        m.matchStatus === "duplicate",
+    ).length;
+    if (discrepancyCount > 0 && job.store_id) {
+      try {
+        await runAutomationsForTrigger({
+          admin,
+          trigger: "settlement.discrepancy",
+          agencyId: job.agency_id,
+          storeId: job.store_id,
+          ctx: {
+            batchId,
+            discrepancyCount,
+            batchStatus,
+            itemCount: matches.length,
+            source: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv_upload",
+          },
+          entityType: "settlement_batch",
+          entityId: batchId,
+        });
+      } catch {
+        // Automations must not fail settlement ingest.
+      }
+    }
 
     return {
       ok: true,

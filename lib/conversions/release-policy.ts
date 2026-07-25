@@ -15,7 +15,7 @@ export type ConversionReleaseDecision =
   | { release: true; reason: ReleaseReason }
   | { release: false; reason: HoldReason };
 
-export type ReleaseReason = "payment_collected" | "delivered_cod";
+export type ReleaseReason = "payment_collected";
 
 export type HoldReason =
   | "non_positive_value"
@@ -79,9 +79,7 @@ export function evaluatePurchaseRelease(
   if (input.paymentStatus && COLLECTED_PAYMENT_STATUSES.includes(input.paymentStatus)) {
     return { release: true, reason: "payment_collected" };
   }
-  if (input.orderStatus === "delivered" && input.paymentStatus === "cash_expected") {
-    return { release: true, reason: "delivered_cod" };
-  }
+  // Delivered + cash_expected is NOT enough — wait for Cobrado or conciliación.
   return { release: false, reason: "awaiting_collection" };
 }
 
@@ -107,9 +105,12 @@ export function labelHoldReason(reason: string | null | undefined): string | nul
     case "payment_refunded_or_written_off":
       return "Pago reembolsado o castigado";
     case "awaiting_collection":
-      return "A la espera de cobro/entrega confirmada";
+      return "A la espera de cobro o liquidación";
     case "manual_reject":
       return "Rechazada manualmente";
+    case "delivered_cod":
+      // Legacy reason from older events; no longer auto-released.
+      return "Entrega COD (legado; ya no libera Purchase)";
     default:
       return reason ?? null;
   }
