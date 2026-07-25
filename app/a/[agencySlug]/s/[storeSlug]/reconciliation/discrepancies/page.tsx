@@ -115,6 +115,8 @@ export default async function ReconciliationDiscrepanciesPage({
                   storeSlug={p.storeSlug}
                   itemId={row.id}
                   matchStatus={row.match_status}
+                  orderId={row.order_id}
+                  collectedAppliedAt={row.collected_applied_at}
                   canManage={canManage}
                 />
               ),

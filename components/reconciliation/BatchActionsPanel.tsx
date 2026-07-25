@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   approveSettlementBatch,
   confirmCollectedMatch,
@@ -10,7 +10,7 @@ import {
   reopenSettlementBatch,
   resolveSettlementDiscrepancy,
 } from "@/app/actions/reconciliation";
-import { Button } from "@/components/ui";
+import { Button, Dialog, Toast } from "@/components/ui";
 
 export function BatchActionsPanel({
   agencySlug,
@@ -94,34 +94,91 @@ export function ItemActionsPanel({
   itemId,
   matchStatus,
   canManage,
+  orderId = null,
+  collectedAppliedAt = null,
 }: {
   agencySlug: string;
   storeSlug: string;
   itemId: string;
   matchStatus: string;
   canManage: boolean;
+  orderId?: string | null;
+  collectedAppliedAt?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    variant: "success" | "danger" | "info";
+  } | null>(null);
+
   if (!canManage) return null;
+
+  const alreadyCollected = Boolean(collectedAppliedAt);
+  const hasLinkedOrder = Boolean(orderId);
+  const canConfirmCollected =
+    hasLinkedOrder &&
+    (matchStatus === "matched" || matchStatus === "difference" || matchStatus === "resolved");
 
   return (
     <div className="flex flex-wrap gap-2">
-      {(matchStatus === "matched" || matchStatus === "difference") && (
-        <Button
-          type="button"
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const r = await confirmCollectedMatch(agencySlug, storeSlug, itemId);
-              if (r.error) alert(r.error);
-              else router.refresh();
-            })
-          }
-        >
-          Confirmar cobrado
-        </Button>
+      {canConfirmCollected && (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant={alreadyCollected ? "outline" : "primary"}
+            disabled={pending || alreadyCollected}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {alreadyCollected ? "Cobrado" : "Confirmar cobrado"}
+          </Button>
+          <Dialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            title="Confirmar cobrado"
+          >
+            <p className="text-sm text-text-secondary">
+              Esto marca el <strong className="text-text-primary">pedido</strong> como cobrado
+              (cash collected). El estado de match de esta fila del lote no cambia.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={pending}
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await confirmCollectedMatch(agencySlug, storeSlug, itemId);
+                    if (r.error) {
+                      setConfirmOpen(false);
+                      setToast({ message: r.error, variant: "danger" });
+                      return;
+                    }
+                    setConfirmOpen(false);
+                    setToast({
+                      message: "Cobro confirmado en el pedido. Revisa el detalle del pedido.",
+                      variant: "success",
+                    });
+                    router.refresh();
+                  })
+                }
+              >
+                Confirmar cobrado
+              </Button>
+            </div>
+          </Dialog>
+        </>
       )}
       {["unmatched", "difference", "duplicate", "disputed"].includes(matchStatus) && (
         <Button
@@ -136,8 +193,12 @@ export function ItemActionsPanel({
                 note,
                 acceptDifference: true,
               });
-              if (r.error) alert(r.error);
-              else router.refresh();
+              if (r.error) {
+                setToast({ message: r.error, variant: "danger" });
+                return;
+              }
+              setToast({ message: "Discrepancia resuelta.", variant: "success" });
+              router.refresh();
             })
           }
         >
@@ -160,14 +221,25 @@ export function ItemActionsPanel({
                 itemId,
                 orderId.trim(),
               );
-              if (r.error) alert(r.error);
-              else router.refresh();
+              if (r.error) {
+                setToast({ message: r.error, variant: "danger" });
+                return;
+              }
+              setToast({ message: "Match manual aplicado.", variant: "success" });
+              router.refresh();
             })
           }
         >
           Match manual
         </Button>
       )}
+      {toast ? (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
     </div>
   );
 }

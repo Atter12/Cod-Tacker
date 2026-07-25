@@ -478,8 +478,17 @@ export async function confirmCollectedMatch(
     const item = await getSettlementItemById(client, membership.storeId, itemId);
     if (!item) throw new ValidationError("Ítem no encontrado.");
     if (!item.order_id) throw new ValidationError("El ítem no tiene pedido emparejado.");
-    if (item.match_status !== "matched" && item.match_status !== "difference") {
-      throw new ValidationError("Solo se puede confirmar cobro en ítems emparejados o con diferencia.");
+    if (item.collected_applied_at) {
+      throw new ValidationError("Este ítem ya fue marcado como cobrado.");
+    }
+    if (
+      item.match_status !== "matched" &&
+      item.match_status !== "difference" &&
+      item.match_status !== "resolved"
+    ) {
+      throw new ValidationError(
+        "Solo se puede confirmar cobro en ítems emparejados, con diferencia o resueltos.",
+      );
     }
 
     const orderRes = await client
