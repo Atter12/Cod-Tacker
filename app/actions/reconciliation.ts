@@ -761,7 +761,7 @@ export async function manualMatchSettlementItem(
 
     const orderRes = await client
       .from("orders")
-      .select("id, expected_cod_amount")
+      .select("id, expected_cod_amount, order_number")
       .eq("id", orderId)
       .eq("store_id", membership.storeId)
       .maybeSingle();
@@ -777,6 +777,7 @@ export async function manualMatchSettlementItem(
       .from("settlement_items")
       .update({
         order_id: orderId,
+        order_number: orderRes.data.order_number ?? item.order_number,
         match_method: "manual",
         match_confidence: 1,
         match_status: matchStatus,

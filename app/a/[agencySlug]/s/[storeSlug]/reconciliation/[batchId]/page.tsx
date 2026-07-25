@@ -5,6 +5,7 @@ import {
   ItemActionsPanel,
 } from "@/components/reconciliation/BatchActionsPanel";
 import { ReconciliationFiltersForm } from "@/components/reconciliation/ReconciliationFiltersForm";
+import { SettlementItemRefCell } from "@/components/reconciliation/SettlementItemRefCell";
 import {
   DataTable,
   ErrorState,
@@ -147,8 +148,14 @@ export default async function ReconciliationBatchPage({
           },
           {
             id: "tracking",
-            header: "Tracking",
-            cell: (row) => row.tracking_number ?? "—",
+            header: "Tracking / Pedido",
+            cell: (row) => (
+              <SettlementItemRefCell
+                agencySlug={p.agencySlug}
+                storeSlug={p.storeSlug}
+                item={row}
+              />
+            ),
           },
           {
             id: "match",
