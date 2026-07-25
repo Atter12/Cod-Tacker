@@ -844,6 +844,19 @@ export async function resolveSettlementDiscrepancy(
       .eq("id", itemId)
       .eq("store_id", membership.storeId);
 
+    const all = await listSettlementItemsPaginated(client, {
+      storeId: membership.storeId,
+      batchId: item.batch_id,
+      page: 1,
+      pageSize: 500,
+    });
+    const status = rollupBatchStatus(all.rows.map((r) => r.match_status));
+    await client
+      .from("settlement_batches")
+      .update({ status })
+      .eq("id", item.batch_id)
+      .eq("store_id", membership.storeId);
+
     await writeAuditLog({
       action: "settlement_item_discrepancy_resolved",
       entityType: "settlement_item",
@@ -851,7 +864,7 @@ export async function resolveSettlementDiscrepancy(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: input,
+      newData: { ...input, batchStatus: status },
     });
 
     revalidateRecon(agencySlug, storeSlug, item.batch_id);
