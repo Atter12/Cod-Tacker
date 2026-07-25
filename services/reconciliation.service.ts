@@ -28,13 +28,27 @@ export type ListSettlementItemsOptions = {
 };
 
 export type SettlementItemsListResult = {
-  rows: SettlementItemRow[];
+  rows: SettlementItemListRow[];
   total: number;
   page: number;
   pageSize: number;
 };
 
+/** Item row plus order number from the linked pedido (source of truth when matched). */
+export type SettlementItemListRow = SettlementItemRow & {
+  linked_order_number: string | null;
+};
+
 export type BatchItemCounts = Record<Enums<"settlement_match_status">, number>;
+
+function linkedOrderNumberFromJoin(
+  orders: { order_number: string | null } | { order_number: string | null }[] | null | undefined,
+): string | null {
+  if (!orders) return null;
+  const row = Array.isArray(orders) ? orders[0] : orders;
+  const n = row?.order_number?.trim();
+  return n || null;
+}
 
 /** Services receive the request-scoped typed client so RLS remains enforced. */
 export async function listSettlementBatches(
@@ -101,7 +115,7 @@ export async function listSettlementItemsPaginated(
 
   let query = client
     .from("settlement_items")
-    .select("*", { count: "exact" })
+    .select("*, orders!settlement_items_order_id_fkey ( order_number )", { count: "exact" })
     .eq("store_id", requireValue(options.storeId, "Tienda inválida."));
   if (options.batchId) query = query.eq("batch_id", options.batchId);
   if (options.matchStatuses?.length) query = query.in("match_status", options.matchStatuses);
@@ -111,7 +125,16 @@ export async function listSettlementItemsPaginated(
 
   const result = await query.order("source_row_number", { ascending: true }).range(from, to);
   throwQueryError(result.error);
-  return { rows: result.data ?? [], total: result.count ?? 0, page, pageSize };
+  const rows: SettlementItemListRow[] = (result.data ?? []).map((row) => {
+    const { orders, ...item } = row as SettlementItemRow & {
+      orders?: { order_number: string | null } | { order_number: string | null }[] | null;
+    };
+    return {
+      ...item,
+      linked_order_number: linkedOrderNumberFromJoin(orders),
+    };
+  });
+  return { rows, total: result.count ?? 0, page, pageSize };
 }
 
 export async function getSettlementItemById(

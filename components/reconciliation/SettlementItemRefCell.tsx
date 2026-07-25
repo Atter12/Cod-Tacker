@@ -6,6 +6,8 @@ type SettlementItemRef = {
   tracking_number: string | null;
   order_id: string | null;
   order_number: string | null;
+  /** Real pedido.order_number when joined — preferred over CSV order_number. */
+  linked_order_number?: string | null;
   match_method: string | null;
 };
 
@@ -25,7 +27,11 @@ export function SettlementItemRefCell({
 
   if (item.order_id) {
     const isManual = item.match_method === "manual";
-    const label = item.order_number?.trim() || item.order_id.slice(0, 8);
+    // Prefer linked pedido number; CSV order_number can be stale/wrong after manual match.
+    const label =
+      item.linked_order_number?.trim() ||
+      (isManual ? null : item.order_number?.trim()) ||
+      item.order_id.slice(0, 8);
     return (
       <span className="inline-flex flex-col gap-0.5">
         <Link
@@ -43,6 +49,10 @@ export function SettlementItemRefCell({
         ) : null}
       </span>
     );
+  }
+
+  if (item.order_number?.trim()) {
+    return <span className="text-sm text-text-secondary">{item.order_number.trim()}</span>;
   }
 
   return <span className="text-text-secondary">—</span>;
