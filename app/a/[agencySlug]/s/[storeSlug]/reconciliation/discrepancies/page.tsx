@@ -124,6 +124,13 @@ export default async function ReconciliationDiscrepanciesPage({
                   matchStatus={row.match_status}
                   orderId={row.order_id}
                   collectedAppliedAt={row.collected_applied_at}
+                  settledAmount={row.settled_amount}
+                  feeAmount={row.fee_amount}
+                  itemCurrency={row.currency_code}
+                  linkedExpectedCodAmount={row.linked_expected_cod_amount}
+                  linkedTotalAmount={row.linked_total_amount}
+                  linkedCurrencyCode={row.linked_currency_code}
+                  linkedCollectedCodAmount={row.linked_collected_cod_amount}
                   canManage={canManage}
                 />
               ),

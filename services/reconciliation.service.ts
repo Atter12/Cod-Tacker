@@ -34,20 +34,30 @@ export type SettlementItemsListResult = {
   pageSize: number;
 };
 
-/** Item row plus order number from the linked pedido (source of truth when matched). */
+/** Item row plus linked pedido fields (source of truth when matched). */
 export type SettlementItemListRow = SettlementItemRow & {
   linked_order_number: string | null;
+  linked_expected_cod_amount: number | null;
+  linked_total_amount: number | null;
+  linked_currency_code: string | null;
+  linked_collected_cod_amount: number | null;
 };
 
 export type BatchItemCounts = Record<Enums<"settlement_match_status">, number>;
 
-function linkedOrderNumberFromJoin(
-  orders: { order_number: string | null } | { order_number: string | null }[] | null | undefined,
-): string | null {
+type LinkedOrderJoin = {
+  order_number: string | null;
+  expected_cod_amount: number | null;
+  total_amount: number | null;
+  currency_code: string | null;
+  collected_cod_amount: number | null;
+};
+
+function linkedOrderFromJoin(
+  orders: LinkedOrderJoin | LinkedOrderJoin[] | null | undefined,
+): LinkedOrderJoin | null {
   if (!orders) return null;
-  const row = Array.isArray(orders) ? orders[0] : orders;
-  const n = row?.order_number?.trim();
-  return n || null;
+  return Array.isArray(orders) ? (orders[0] ?? null) : orders;
 }
 
 /** Services receive the request-scoped typed client so RLS remains enforced. */
@@ -115,7 +125,10 @@ export async function listSettlementItemsPaginated(
 
   let query = client
     .from("settlement_items")
-    .select("*, orders!settlement_items_order_id_fkey ( order_number )", { count: "exact" })
+    .select(
+      "*, orders!settlement_items_order_id_fkey ( order_number, expected_cod_amount, total_amount, currency_code, collected_cod_amount )",
+      { count: "exact" },
+    )
     .eq("store_id", requireValue(options.storeId, "Tienda inválida."));
   if (options.batchId) query = query.eq("batch_id", options.batchId);
   if (options.matchStatuses?.length) query = query.in("match_status", options.matchStatuses);
@@ -127,11 +140,16 @@ export async function listSettlementItemsPaginated(
   throwQueryError(result.error);
   const rows: SettlementItemListRow[] = (result.data ?? []).map((row) => {
     const { orders, ...item } = row as SettlementItemRow & {
-      orders?: { order_number: string | null } | { order_number: string | null }[] | null;
+      orders?: LinkedOrderJoin | LinkedOrderJoin[] | null;
     };
+    const linked = linkedOrderFromJoin(orders);
     return {
       ...item,
-      linked_order_number: linkedOrderNumberFromJoin(orders),
+      linked_order_number: linked?.order_number?.trim() || null,
+      linked_expected_cod_amount: linked?.expected_cod_amount ?? null,
+      linked_total_amount: linked?.total_amount ?? null,
+      linked_currency_code: linked?.currency_code ?? null,
+      linked_collected_cod_amount: linked?.collected_cod_amount ?? null,
     };
   });
   return { rows, total: result.count ?? 0, page, pageSize };

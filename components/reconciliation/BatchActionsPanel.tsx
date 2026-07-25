@@ -11,6 +11,10 @@ import {
   resolveSettlementDiscrepancy,
 } from "@/app/actions/reconciliation";
 import { Button, Dialog, Toast } from "@/components/ui";
+import {
+  gateConfirmCollectedRemesa,
+  resolveShopifyExpectedAmount,
+} from "@/lib/reconciliation/collected-gate";
 
 export function BatchActionsPanel({
   agencySlug,
@@ -96,6 +100,13 @@ export function ItemActionsPanel({
   canManage,
   orderId = null,
   collectedAppliedAt = null,
+  settledAmount = 0,
+  feeAmount = 0,
+  itemCurrency = null,
+  linkedExpectedCodAmount = null,
+  linkedTotalAmount = null,
+  linkedCurrencyCode = null,
+  linkedCollectedCodAmount = null,
 }: {
   agencySlug: string;
   storeSlug: string;
@@ -104,6 +115,13 @@ export function ItemActionsPanel({
   canManage: boolean;
   orderId?: string | null;
   collectedAppliedAt?: string | null;
+  settledAmount?: number;
+  feeAmount?: number;
+  itemCurrency?: string | null;
+  linkedExpectedCodAmount?: number | null;
+  linkedTotalAmount?: number | null;
+  linkedCurrencyCode?: string | null;
+  linkedCollectedCodAmount?: number | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -121,6 +139,32 @@ export function ItemActionsPanel({
     hasLinkedOrder &&
     (matchStatus === "matched" || matchStatus === "difference" || matchStatus === "resolved");
 
+  const remesaAmount = Math.round((settledAmount + feeAmount) * 100) / 100;
+  const amountGate = gateConfirmCollectedRemesa({
+    remesaAmount,
+    itemCurrency,
+    order: {
+      expectedCodAmount: linkedExpectedCodAmount,
+      totalAmount: linkedTotalAmount,
+      currencyCode: linkedCurrencyCode,
+      collectedCodAmount: linkedCollectedCodAmount,
+    },
+  });
+  const shopifyExpected = amountGate.ok
+    ? amountGate.shopifyExpected
+    : resolveShopifyExpectedAmount({
+        expectedCodAmount: linkedExpectedCodAmount,
+        totalAmount: linkedTotalAmount,
+        currencyCode: linkedCurrencyCode,
+      });
+
+  const confirmLabel =
+    alreadyCollected
+      ? "Cobrado"
+      : amountGate.ok && amountGate.mode === "partial"
+        ? "Confirmar cobro parcial"
+        : "Confirmar cobrado";
+
   return (
     <div className="flex flex-wrap gap-2">
       {canConfirmCollected && (
@@ -132,17 +176,60 @@ export function ItemActionsPanel({
             disabled={pending || alreadyCollected}
             onClick={() => setConfirmOpen(true)}
           >
-            {alreadyCollected ? "Cobrado" : "Confirmar cobrado"}
+            {confirmLabel}
           </Button>
           <Dialog
             open={confirmOpen}
             onOpenChange={setConfirmOpen}
-            title="Confirmar cobrado"
+            title={
+              amountGate.ok && amountGate.mode === "partial"
+                ? "Confirmar cobro parcial"
+                : "Confirmar cobrado"
+            }
           >
-            <p className="text-sm text-text-secondary">
-              Esto marca el <strong className="text-text-primary">pedido</strong> como cobrado
-              (cash collected). El estado de match de esta fila del lote no cambia.
-            </p>
+            <div className="space-y-3 text-sm text-text-secondary">
+              <p>
+                Aplica la remesa de esta fila al <strong className="text-text-primary">pedido</strong>.
+                Si no cubre Shopify, queda cobro parcial y puedes anexar otra remesa después.
+                No se aceptan montos por encima de Shopify.
+              </p>
+              <ul className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                <li>
+                  Remesa fila (neto+fee):{" "}
+                  <strong className="text-text-primary">{remesaAmount}</strong>
+                  {itemCurrency ? ` ${itemCurrency}` : ""}
+                </li>
+                <li>
+                  Ya cobrado:{" "}
+                  <strong className="text-text-primary">
+                    {linkedCollectedCodAmount != null ? linkedCollectedCodAmount : 0}
+                  </strong>
+                </li>
+                <li>
+                  Shopify (COD/total):{" "}
+                  <strong className="text-text-primary">
+                    {shopifyExpected != null ? shopifyExpected : "—"}
+                  </strong>
+                  {linkedCurrencyCode ? ` ${linkedCurrencyCode}` : ""}
+                </li>
+                {amountGate.ok ? (
+                  <>
+                    <li>
+                      Nuevo cobrado:{" "}
+                      <strong className="text-text-primary">{amountGate.newCollected}</strong>
+                    </li>
+                    <li>
+                      Saldo restante:{" "}
+                      <strong className="text-text-primary">{amountGate.remainingAfter}</strong>
+                      {amountGate.mode === "partial" ? " · parcial" : " · cierra cobro"}
+                    </li>
+                  </>
+                ) : null}
+              </ul>
+              {!amountGate.ok ? (
+                <p className="text-xs text-danger">{amountGate.error}</p>
+              ) : null}
+            </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 type="button"
@@ -156,7 +243,7 @@ export function ItemActionsPanel({
               <Button
                 type="button"
                 size="sm"
-                disabled={pending}
+                disabled={pending || !amountGate.ok}
                 onClick={() =>
                   start(async () => {
                     const r = await confirmCollectedMatch(agencySlug, storeSlug, itemId);
@@ -167,14 +254,19 @@ export function ItemActionsPanel({
                     }
                     setConfirmOpen(false);
                     setToast({
-                      message: "Cobro confirmado en el pedido. Revisa el detalle del pedido.",
+                      message:
+                        amountGate.ok && amountGate.mode === "partial"
+                          ? "Cobro parcial aplicado. Puedes anexar otra remesa al mismo pedido."
+                          : "Cobro confirmado en el pedido. Revisa el detalle del pedido.",
                       variant: "success",
                     });
                     router.refresh();
                   })
                 }
               >
-                Confirmar cobrado
+                {amountGate.ok && amountGate.mode === "partial"
+                  ? "Confirmar cobro parcial"
+                  : "Confirmar cobrado"}
               </Button>
             </div>
           </Dialog>

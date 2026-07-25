@@ -16,6 +16,7 @@ import {
   applySettledPatch,
   type OrderPaymentSnapshot,
 } from "@/lib/reconciliation/effects";
+import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
 import {
   ALLOWED_CSV_MIME,
   CARRIER_CSV_PRESETS,
@@ -494,33 +495,48 @@ export async function confirmCollectedMatch(
     const orderRes = await client
       .from("orders")
       .select(
-        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code",
+        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount",
       )
       .eq("id", item.order_id)
       .eq("store_id", membership.storeId)
       .single();
     if (orderRes.error || !orderRes.data) throw new ValidationError("Pedido no encontrado.");
 
-    const collectedAmount = item.settled_amount + item.fee_amount;
+    const remesaAmount = item.settled_amount + item.fee_amount;
+    const gate = gateConfirmCollectedRemesa({
+      remesaAmount,
+      itemCurrency: item.currency_code,
+      order: {
+        expectedCodAmount: orderRes.data.expected_cod_amount,
+        totalAmount: orderRes.data.total_amount,
+        currencyCode: orderRes.data.currency_code,
+        collectedCodAmount: orderRes.data.collected_cod_amount,
+      },
+    });
+    if (!gate.ok) throw new ValidationError(gate.error);
+
     const patch = applyCollectedPatch({
       order: orderSnapshot(orderRes.data),
-      collectedAmount,
+      collectedAmount: gate.newCollected,
     });
 
     const upd = await client.from("orders").update(patch).eq("id", orderRes.data.id).eq("store_id", membership.storeId);
     if (upd.error) throw new ValidationError("No se pudo actualizar el cobro del pedido.");
 
     try {
-      await recordPurchaseConversionEvent({
-        admin: createAdminClient(),
-        agencyId: membership.agencyId,
-        storeId: membership.storeId,
-        orderId: orderRes.data.id,
-        value: Number(patch.collected_cod_amount ?? collectedAmount),
-        currencyCode: orderRes.data.currency_code || "PEN",
-        eventTime: patch.cash_collected_at ?? undefined,
-        source: "reconciliation",
-      });
+      // Solo avisar compra a ads cuando el cobro cierra Shopify (evita parciales inflados).
+      if (gate.mode === "full") {
+        await recordPurchaseConversionEvent({
+          admin: createAdminClient(),
+          agencyId: membership.agencyId,
+          storeId: membership.storeId,
+          orderId: orderRes.data.id,
+          value: Number(patch.collected_cod_amount ?? gate.newCollected),
+          currencyCode: orderRes.data.currency_code || "PEN",
+          eventTime: patch.cash_collected_at ?? undefined,
+          source: "reconciliation",
+        });
+      }
     } catch (convErr) {
       logger.warn("reconciliation.collected.conversion_record_failed", {
         order_id: orderRes.data.id,
@@ -541,7 +557,15 @@ export async function confirmCollectedMatch(
       actorId: user.id,
       agencyId: membership.agencyId,
       storeId: membership.storeId,
-      newData: { orderId: item.order_id, ...patch },
+      newData: {
+        orderId: item.order_id,
+        mode: gate.mode,
+        remesaAmount: gate.remesaAmount,
+        previousCollected: gate.previousCollected,
+        newCollected: gate.newCollected,
+        shopifyExpected: gate.shopifyExpected,
+        ...patch,
+      },
     });
 
     revalidateRecon(agencySlug, storeSlug, item.batch_id);
@@ -587,7 +611,7 @@ export async function approveSettlementBatch(
       const orderRes = await client
         .from("orders")
         .select(
-          "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount",
+          "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount",
         )
         .eq("id", item.order_id!)
         .eq("store_id", membership.storeId)
@@ -595,31 +619,96 @@ export async function approveSettlementBatch(
       if (orderRes.error || !orderRes.data) continue;
 
       const snap = orderSnapshot(orderRes.data);
-      // Ensure collected is set if not yet
+      // Ensure collected is set if not yet — full or partial remesa vs Shopify.
       if (snap.collectedCodAmount == null) {
+        const remesaAmount = item.settled_amount + item.fee_amount;
+        const gate = gateConfirmCollectedRemesa({
+          remesaAmount,
+          itemCurrency: item.currency_code,
+          order: {
+            expectedCodAmount: orderRes.data.expected_cod_amount,
+            totalAmount: orderRes.data.total_amount,
+            currencyCode: orderRes.data.currency_code,
+            collectedCodAmount: orderRes.data.collected_cod_amount,
+          },
+        });
+        if (!gate.ok) {
+          throw new ValidationError(
+            `No se puede liquidar la fila ${item.source_row_number ?? item.id.slice(0, 8)}: ${gate.error}`,
+          );
+        }
         const collectedPatch = applyCollectedPatch({
           order: snap,
-          collectedAmount: item.settled_amount + item.fee_amount,
+          collectedAmount: gate.newCollected,
         });
         await client.from("orders").update(collectedPatch).eq("id", snap.id).eq("store_id", membership.storeId);
         snap.collectedCodAmount = collectedPatch.collected_cod_amount ?? null;
         snap.paymentStatus = collectedPatch.payment_status;
         try {
-          await recordPurchaseConversionEvent({
-            admin: createAdminClient(),
-            agencyId: membership.agencyId,
-            storeId: membership.storeId,
-            orderId: snap.id,
-            value: Number(collectedPatch.collected_cod_amount ?? 0),
-            currencyCode: "PEN",
-            eventTime: collectedPatch.cash_collected_at ?? undefined,
-            source: "reconciliation",
-          });
+          if (gate.mode === "full") {
+            await recordPurchaseConversionEvent({
+              admin: createAdminClient(),
+              agencyId: membership.agencyId,
+              storeId: membership.storeId,
+              orderId: snap.id,
+              value: Number(collectedPatch.collected_cod_amount ?? 0),
+              currencyCode: orderRes.data.currency_code || "PEN",
+              eventTime: collectedPatch.cash_collected_at ?? undefined,
+              source: "reconciliation",
+            });
+          }
         } catch (convErr) {
           logger.warn("reconciliation.batch.conversion_record_failed", {
             order_id: snap.id,
             error: convErr instanceof Error ? convErr.message : "conversion_failed",
           });
+        }
+      } else if (
+        snap.paymentStatus === "partially_collected" &&
+        !item.collected_applied_at
+      ) {
+        // Anexar remesa a un cobro parcial ya existente al liquidar el lote.
+        const remesaAmount = item.settled_amount + item.fee_amount;
+        const gate = gateConfirmCollectedRemesa({
+          remesaAmount,
+          itemCurrency: item.currency_code,
+          order: {
+            expectedCodAmount: orderRes.data.expected_cod_amount,
+            totalAmount: orderRes.data.total_amount,
+            currencyCode: orderRes.data.currency_code,
+            collectedCodAmount: snap.collectedCodAmount,
+          },
+        });
+        if (!gate.ok) {
+          throw new ValidationError(
+            `No se puede liquidar la fila ${item.source_row_number ?? item.id.slice(0, 8)}: ${gate.error}`,
+          );
+        }
+        const collectedPatch = applyCollectedPatch({
+          order: snap,
+          collectedAmount: gate.newCollected,
+        });
+        await client.from("orders").update(collectedPatch).eq("id", snap.id).eq("store_id", membership.storeId);
+        snap.collectedCodAmount = collectedPatch.collected_cod_amount ?? null;
+        snap.paymentStatus = collectedPatch.payment_status;
+        if (gate.mode === "full") {
+          try {
+            await recordPurchaseConversionEvent({
+              admin: createAdminClient(),
+              agencyId: membership.agencyId,
+              storeId: membership.storeId,
+              orderId: snap.id,
+              value: Number(collectedPatch.collected_cod_amount ?? 0),
+              currencyCode: orderRes.data.currency_code || "PEN",
+              eventTime: collectedPatch.cash_collected_at ?? undefined,
+              source: "reconciliation",
+            });
+          } catch (convErr) {
+            logger.warn("reconciliation.batch.conversion_record_failed", {
+              order_id: snap.id,
+              error: convErr instanceof Error ? convErr.message : "conversion_failed",
+            });
+          }
         }
       }
 

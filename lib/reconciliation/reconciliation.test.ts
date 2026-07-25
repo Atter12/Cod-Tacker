@@ -7,6 +7,10 @@ import {
   applySettledPatch,
 } from "@/lib/reconciliation/effects";
 import { matchSettlementRows, rollupBatchStatus } from "@/lib/reconciliation/matching";
+import {
+  gateConfirmCollectedRemesa,
+  resolveShopifyExpectedAmount,
+} from "@/lib/reconciliation/collected-gate";
 import { validateSettlementRows } from "@/lib/reconciliation/validate-rows";
 import { generateMockSettlementCsv } from "@/lib/reconciliation/mock-csv";
 import { getPreset } from "@/lib/reconciliation/presets";
@@ -183,5 +187,84 @@ describe("reconciliation domain effects", () => {
     assert.equal(reopened.settled_cod_amount, null);
     assert.equal(reopened.payment_status, "cash_collected");
     assert.equal(reopened.collected_cod_amount, undefined);
+  });
+});
+
+describe("confirm collected Shopify gate", () => {
+  it("allows full when remesa matches COD esperado", () => {
+    const gate = gateConfirmCollectedRemesa({
+      remesaAmount: 100,
+      itemCurrency: "PEN",
+      order: { expectedCodAmount: 100, totalAmount: 120, currencyCode: "PEN" },
+    });
+    assert.equal(gate.ok, true);
+    if (gate.ok) {
+      assert.equal(gate.mode, "full");
+      assert.equal(gate.shopifyExpected, 100);
+    }
+  });
+
+  it("allows partial under Shopify and accumulates a second remesa to full", () => {
+    const first = gateConfirmCollectedRemesa({
+      remesaAmount: 360,
+      itemCurrency: "USD",
+      order: {
+        expectedCodAmount: null,
+        totalAmount: 629.95,
+        currencyCode: "USD",
+        collectedCodAmount: 0,
+      },
+    });
+    assert.equal(first.ok, true);
+    if (first.ok) {
+      assert.equal(first.mode, "partial");
+      assert.equal(first.newCollected, 360);
+      assert.equal(first.remainingAfter, 269.95);
+    }
+
+    const second = gateConfirmCollectedRemesa({
+      remesaAmount: 269.95,
+      itemCurrency: "USD",
+      order: {
+        expectedCodAmount: null,
+        totalAmount: 629.95,
+        currencyCode: "USD",
+        collectedCodAmount: 360,
+      },
+    });
+    assert.equal(second.ok, true);
+    if (second.ok) {
+      assert.equal(second.mode, "full");
+      assert.equal(second.newCollected, 629.95);
+      assert.equal(second.remainingAfter, 0);
+    }
+  });
+
+  it("blocks zero expected, over-collection, and currency mismatch", () => {
+    const noExpected = gateConfirmCollectedRemesa({
+      remesaAmount: 360,
+      itemCurrency: "PEN",
+      order: { expectedCodAmount: 0, totalAmount: 0, currencyCode: "USD" },
+    });
+    assert.equal(noExpected.ok, false);
+
+    const over = gateConfirmCollectedRemesa({
+      remesaAmount: 400,
+      itemCurrency: "USD",
+      order: {
+        expectedCodAmount: null,
+        totalAmount: 629.95,
+        currencyCode: "USD",
+        collectedCodAmount: 360,
+      },
+    });
+    assert.equal(over.ok, false);
+
+    const currency = gateConfirmCollectedRemesa({
+      remesaAmount: 629.95,
+      itemCurrency: "PEN",
+      order: { expectedCodAmount: 629.95, totalAmount: 629.95, currencyCode: "USD" },
+    });
+    assert.equal(currency.ok, false);
   });
 });
