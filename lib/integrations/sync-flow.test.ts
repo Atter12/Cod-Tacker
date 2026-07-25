@@ -55,7 +55,8 @@ describe("integration sync flow shapes", () => {
   it("labels sync/health statuses in Spanish for operations UI", () => {
     assert.equal(labelSyncStatus("completed"), "Completado");
     assert.equal(labelSyncStatus("failed"), "Fallido");
-    assert.equal(labelSyncType("backfill"), "Backfill");
+    assert.equal(labelSyncType("backfill"), "Importación histórica");
+    assert.equal(labelSyncType("incremental"), "Actualización reciente");
     assert.equal(labelHealthStatus("down"), "Caído");
   });
 
