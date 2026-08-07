@@ -46,6 +46,7 @@ export function TenantSwitcher({
   return (
     <Dropdown
       className="min-w-60"
+      align="left"
       trigger={
         <span
           className={cn(
