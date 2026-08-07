@@ -2,19 +2,17 @@ import type { Enums } from "@/types/database.generated";
 
 type PaymentStatus = Enums<"payment_status">;
 
-/** COD states where door delivery implies cash for S11 terminal CAPI. */
-const COD_DELIVERED_PAYMENT_STATUSES: readonly PaymentStatus[] = [
-  "cash_expected",
-  "partially_collected",
-  "cash_collected",
-];
-
-export function shouldFirePurchaseOnDelivered(paymentStatus: PaymentStatus): boolean {
-  return (COD_DELIVERED_PAYMENT_STATUSES as readonly string[]).includes(paymentStatus);
+/**
+ * Delivered ≠ cash in hand for COD.
+ * Purchase CAPI/Events fires from Cobrado manual or conciliación — not from door delivery.
+ */
+export function shouldFirePurchaseOnDelivered(_paymentStatus: PaymentStatus): boolean {
+  return false;
 }
 
-export function shouldMarkCashCollectedOnDelivered(paymentStatus: PaymentStatus): boolean {
-  return paymentStatus === "cash_expected" || paymentStatus === "partially_collected";
+/** Never auto-mark cash_collected on delivered; cash truth comes from ops or settlement. */
+export function shouldMarkCashCollectedOnDelivered(_paymentStatus: PaymentStatus): boolean {
+  return false;
 }
 
 /** True when this apply result newly reached delivered (not RTO, not skipped). */

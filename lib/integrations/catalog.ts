@@ -153,9 +153,9 @@ export function labelSyncStatus(status: string): string {
 export function labelSyncType(syncType: string): string {
   switch (syncType) {
     case "incremental":
-      return "Incremental";
+      return "Actualización reciente";
     case "backfill":
-      return "Backfill";
+      return "Importación histórica";
     case "manual_test":
       return "Prueba manual";
     default:

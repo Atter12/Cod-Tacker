@@ -2,12 +2,16 @@ import type { AdsSpendSnapshot } from "@/lib/integrations/contracts/ads";
 import type { TikTokAdsCredentials } from "@/lib/integrations/tiktok/env";
 
 export type TikTokReportListItem = {
-  dimensions?: { stat_time_day?: string };
+  dimensions?: {
+    stat_time_day?: string;
+    campaign_id?: string;
+  };
   metrics?: {
     spend?: string;
     impressions?: string;
     clicks?: string;
     currency?: string;
+    campaign_name?: string;
   };
 };
 
@@ -17,21 +21,25 @@ function asNumber(raw: string | undefined, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** Map TikTok integrated report rows into AdsSpendSnapshot (one per day). */
+/** Map TikTok integrated report rows into AdsSpendSnapshot (one per campaign/day). */
 export function mapTikTokReportToSpendSnapshots(
   rows: TikTokReportListItem[],
-  input: { advertiserId: string; currencyFallback: string },
+  input: { currencyFallback: string },
 ): AdsSpendSnapshot[] {
   const out: AdsSpendSnapshot[] = [];
   for (const row of rows) {
     const rawDay = row.dimensions?.stat_time_day ?? "";
     const date = rawDay.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const campaignExternalId = String(row.dimensions?.campaign_id ?? "").trim();
+    if (!campaignExternalId) continue;
     const spend = asNumber(row.metrics?.spend);
     const currency = (row.metrics?.currency ?? input.currencyFallback).slice(0, 3).toUpperCase();
+    const campaignName = (row.metrics?.campaign_name ?? "").trim() || undefined;
     out.push({
       date,
-      campaignExternalId: input.advertiserId,
+      campaignExternalId,
+      campaignName,
       spend,
       impressions: Math.max(0, Math.round(asNumber(row.metrics?.impressions))),
       clicks: Math.max(0, Math.round(asNumber(row.metrics?.clicks))),
@@ -42,8 +50,9 @@ export function mapTikTokReportToSpendSnapshots(
 }
 
 /**
- * Build GET URL for TikTok Marketing API integrated report (advertiser / day).
+ * Build GET URL for TikTok Marketing API integrated report (campaign / day).
  * Docs: GET /open_api/{version}/report/integrated/get/
+ * campaign_name is a metric (not a dimension) at AUCTION_CAMPAIGN.
  */
 export function buildTikTokIntegratedReportUrl(
   creds: TikTokAdsCredentials,
@@ -56,9 +65,12 @@ export function buildTikTokIntegratedReportUrl(
   );
   url.searchParams.set("advertiser_id", creds.advertiserId);
   url.searchParams.set("report_type", "BASIC");
-  url.searchParams.set("data_level", "AUCTION_ADVERTISER");
-  url.searchParams.set("dimensions", JSON.stringify(["stat_time_day"]));
-  url.searchParams.set("metrics", JSON.stringify(["spend", "impressions", "clicks"]));
+  url.searchParams.set("data_level", "AUCTION_CAMPAIGN");
+  url.searchParams.set("dimensions", JSON.stringify(["stat_time_day", "campaign_id"]));
+  url.searchParams.set(
+    "metrics",
+    JSON.stringify(["spend", "impressions", "clicks", "campaign_name"]),
+  );
   url.searchParams.set("start_date", dateRange.from);
   url.searchParams.set("end_date", dateRange.to);
   url.searchParams.set("page", String(page));
@@ -67,7 +79,7 @@ export function buildTikTokIntegratedReportUrl(
 }
 
 /**
- * Fetch daily advertiser spend from TikTok Marketing integrated report.
+ * Fetch daily campaign spend from TikTok Marketing integrated report.
  * Paginates until exhausted (cap pages for safety).
  */
 export async function fetchTikTokAdsDailySpend(input: {
@@ -82,7 +94,7 @@ export async function fetchTikTokAdsDailySpend(input: {
   const collected: TikTokReportListItem[] = [];
   let lastStatus = 200;
 
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= 40; page += 1) {
     const url = buildTikTokIntegratedReportUrl(input.creds, input.dateRange, page);
     const res = await fetchImpl(url.toString(), {
       method: "GET",
@@ -150,7 +162,6 @@ export async function fetchTikTokAdsDailySpend(input: {
     ok: true,
     statusCode: lastStatus,
     rows: mapTikTokReportToSpendSnapshots(collected, {
-      advertiserId: input.creds.advertiserId,
       currencyFallback: input.creds.currencyFallback,
     }),
   };

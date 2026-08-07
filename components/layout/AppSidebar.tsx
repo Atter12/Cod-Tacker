@@ -270,7 +270,7 @@ export function AppSidebar({
 
     if (compact) {
       return (
-        <Tooltip key={item.label} content={item.label}>
+        <Tooltip key={item.label} content={item.label} className="block">
           {link}
         </Tooltip>
       );

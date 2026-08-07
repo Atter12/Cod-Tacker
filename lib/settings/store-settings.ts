@@ -27,6 +27,16 @@ const demoSchema = z.object({
   seedTag: z.string().max(64).optional(),
 });
 
+/** Manual utm_campaign → ad_campaigns.id when auto-match by name/id fails. */
+export const utmCampaignAliasSchema = z.object({
+  utm: z.string().trim().min(1).max(200),
+  campaignId: z.string().uuid(),
+});
+
+const attributionSettingsSchema = z.object({
+  utmCampaignAliases: z.array(utmCampaignAliasSchema).max(200).default([]),
+});
+
 export const storeSettingsSchema = z.object({
   schema_version: z.literal(STORE_SETTINGS_SCHEMA_VERSION).default(STORE_SETTINGS_SCHEMA_VERSION),
   rto: rtoSchema.default({
@@ -46,6 +56,7 @@ export const storeSettingsSchema = z.object({
     silenceHoursDefault: 24,
   }),
   demo: demoSchema.default({ enabled: false }),
+  attribution: attributionSettingsSchema.default({ utmCampaignAliases: [] }),
 });
 
 export type StoreSettings = z.infer<typeof storeSettingsSchema>;

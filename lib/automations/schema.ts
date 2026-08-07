@@ -65,7 +65,6 @@ export const automationActionSchema = z.discriminatedUnion("type", [
       "confirmed",
       "cancelled",
       "ready_to_ship",
-      "manual_review",
     ]),
   }),
   z.object({

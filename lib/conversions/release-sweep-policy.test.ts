@@ -18,15 +18,15 @@ describe("conversion release sweep policy", () => {
     assert.equal(decision.reason, "payment_collected");
   });
 
-  it("releases delivered COD awaiting the cash mark", () => {
+  it("holds delivered COD awaiting collection (no Purchase on door delivery)", () => {
     const { action, decision } = decideSweepAction({
       value: 80,
       orderStatus: "delivered",
       paymentStatus: "cash_expected",
       confirmationStatus: "confirmed",
     });
-    assert.equal(action, "release");
-    assert.equal(decision.reason, "delivered_cod");
+    assert.equal(action, "hold");
+    assert.equal(decision.reason, "awaiting_collection");
   });
 
   it("auto-rejects terminal negative orders", () => {

@@ -29,6 +29,13 @@ export default async function StoreSettingsPage({
   }
 
   const canEdit = can(member.roles, "store.manage");
+  const client = await createClient();
+  const campaigns = await client
+    .from("ad_campaigns")
+    .select("id, name, platform")
+    .eq("store_id", member.storeId!)
+    .order("name")
+    .limit(500);
 
   return (
     <section className="space-y-6">
@@ -42,6 +49,11 @@ export default async function StoreSettingsPage({
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
             canEdit={canEdit}
+            campaignOptions={(campaigns.data ?? []).map((c) => ({
+              id: c.id,
+              name: c.name,
+              platform: c.platform,
+            }))}
             initial={{
               name: view.store.name,
               countryCode: view.store.country_code,

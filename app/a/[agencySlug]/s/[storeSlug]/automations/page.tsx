@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DataTable, EmptyState, ErrorState, SectionHeader, StatusBadge, DemoModeBadge } from "@/components/ui";
+import { DataTable, EmptyState, ErrorState, SectionHeader, StatusBadge } from "@/components/ui";
 import { routes } from "@/config/routes";
 import { labelTrigger } from "@/lib/alerts/labels";
 import { can } from "@/lib/permissions/can";
@@ -26,10 +26,9 @@ export default async function AutomationsPage({
 
   return (
     <section className="space-y-5">
-      <DemoModeBadge />
       <SectionHeader
         title="Automatizaciones"
-        description="Reglas internas auditables. Acciones mock únicamente."
+        description="Reglas internas auditables. Triggers reales: pedido creado, confirmación WA, envío/RTO y discrepancias de conciliación."
         action={
           canManage ? (
             <Link
@@ -44,7 +43,7 @@ export default async function AutomationsPage({
       {rows.length === 0 ? (
         <EmptyState
           title="Aún no hay automatizaciones"
-          description="Crea una regla con trigger, condiciones AND/OR y acciones mock."
+          description="Crea una regla con trigger, condiciones AND/OR y acciones."
         />
       ) : (
         <DataTable

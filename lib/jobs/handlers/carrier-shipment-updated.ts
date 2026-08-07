@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import { isNewlyDeliveredTerminal } from "@/lib/conversions/delivered-purchase-policy";
 import { ENVIAME_DEFAULT_MAPPINGS } from "@/lib/integrations/enviame/map-status";
 import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
@@ -197,27 +198,6 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
 
   const externalCode = data.external_status_code ?? data.status ?? "unknown";
 
-  let orderId: string | null = null;
-  if (data.order_external_id) {
-    const order = await admin
-      .from("orders")
-      .select("id")
-      .eq("store_id", job.store_id)
-      .eq("external_order_id", data.order_external_id)
-      .maybeSingle();
-    orderId = order.data?.id ?? null;
-  }
-  if (!orderId) {
-    const anyOrder = await admin
-      .from("orders")
-      .select("id")
-      .eq("store_id", job.store_id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    orderId = anyOrder.data?.id ?? null;
-  }
-
   let shipment = (
     await admin
       .from("shipments")
@@ -227,10 +207,36 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
       .maybeSingle()
   ).data;
 
+  let orderId: string | null = shipment?.order_id ?? null;
+
+  if (data.order_external_id) {
+    const order = await admin
+      .from("orders")
+      .select("id")
+      .eq("store_id", job.store_id)
+      .eq("external_order_id", data.order_external_id)
+      .maybeSingle();
+    if (order.data?.id) {
+      // Prefer explicit external id; reject if it conflicts with an existing shipment link.
+      if (orderId && orderId !== order.data.id) {
+        throw new PermanentJobError(
+          "ORDER_MISMATCH",
+          "Carrier: order_external_id no coincide con el pedido del tracking existente.",
+        );
+      }
+      orderId = order.data.id;
+    } else if (isLive && !shipment) {
+      throw new PermanentJobError(
+        "ORDER_NOT_FOUND",
+        "Carrier live: order_external_id no existe en la tienda. Crea el pedido o corrige el id.",
+      );
+    }
+  }
+
   if (!shipment && !orderId && isLive) {
     throw new PermanentJobError(
       "ORDER_NOT_FOUND",
-      "Carrier live: no hay pedido/shipment para este tracking. Crea el envío en CODTracked o usa order_external_id / imported_id.",
+      "Carrier live: sin pedido/shipment para este tracking. Requiere order_external_id o un envío previo con el mismo tracking.",
     );
   }
 
@@ -265,7 +271,10 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   }
 
   if (!orderId) {
-    throw new PermanentJobError("ORDER_NOT_FOUND", "No se encontró pedido para el envío.");
+    throw new PermanentJobError(
+      "ORDER_NOT_FOUND",
+      "No se encontró pedido para el envío (sin fallback a último pedido).",
+    );
   }
 
   if (!shipment) {
@@ -336,6 +345,45 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
       entityId: applied.eventId,
       detail: "duplicate_external_event_id",
     };
+  }
+
+  if (!applied.plan.skipStatusUpdate) {
+    try {
+      await runAutomationsForTrigger({
+        admin,
+        trigger: "shipment.status_changed",
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        ctx: {
+          orderId,
+          shipmentId: applied.shipmentId,
+          shipmentStatus: applied.plan.nextShipment.status,
+          isRto: applied.plan.nextShipment.is_rto,
+          source: "carrier",
+        },
+        entityType: "shipment",
+        entityId: applied.shipmentId,
+      });
+      if (applied.plan.nextShipment.is_rto) {
+        await runAutomationsForTrigger({
+          admin,
+          trigger: "shipment.rto",
+          agencyId: job.agency_id,
+          storeId: job.store_id,
+          ctx: {
+            orderId,
+            shipmentId: applied.shipmentId,
+            shipmentStatus: applied.plan.nextShipment.status,
+            isRto: true,
+            source: "carrier",
+          },
+          entityType: "shipment",
+          entityId: applied.shipmentId,
+        });
+      }
+    } catch {
+      // Automations must not fail the carrier path.
+    }
   }
 
   let capiDetail = "";

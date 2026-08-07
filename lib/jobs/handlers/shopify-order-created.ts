@@ -6,6 +6,7 @@ import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-custom
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
 import { enqueueWhatsappCodConfirmationRequest } from "@/lib/integrations/whatsapp/enqueue-confirmation";
+import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderCreatedPayloadSchema };
@@ -281,6 +282,26 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       attributedValue: total,
       attribution: data.attribution,
     });
+  }
+
+  try {
+    await runAutomationsForTrigger({
+      admin,
+      trigger: "order.created",
+      agencyId: job.agency_id,
+      storeId: job.store_id,
+      ctx: {
+        orderId: insert.data.id,
+        orderStatus: data.order_status ?? "created",
+        paymentStatus,
+        confirmationStatus: "not_requested",
+        source: live ? "shopify" : "shopify.mock",
+      },
+      entityType: "order",
+      entityId: insert.data.id,
+    });
+  } catch {
+    // Automations must not fail order ingest.
   }
 
   return {

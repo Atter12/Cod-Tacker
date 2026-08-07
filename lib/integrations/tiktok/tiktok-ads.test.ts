@@ -43,30 +43,39 @@ describe("TikTok Ads Reporting (S17)", () => {
     assert.equal(readTikTokAdsCredentials({ ads_access_token: "only" }, null), null);
   });
 
-  it("maps report rows to daily spend snapshots", () => {
+  it("maps report rows to daily campaign spend snapshots", () => {
     const rows = mapTikTokReportToSpendSnapshots(
       [
         {
-          dimensions: { stat_time_day: "2026-07-18 00:00:00" },
+          dimensions: {
+            stat_time_day: "2026-07-18 00:00:00",
+            campaign_id: "cid_1",
+          },
           metrics: {
             spend: "42.5",
             impressions: "1000",
             clicks: "12",
             currency: "usd",
+            campaign_name: "Verano TT",
           },
         },
         { dimensions: { stat_time_day: "bad" }, metrics: { spend: "0" } },
+        {
+          dimensions: { stat_time_day: "2026-07-18 00:00:00" },
+          metrics: { spend: "5" },
+        },
       ],
-      { advertiserId: "adv_1", currencyFallback: "PEN" },
+      { currencyFallback: "PEN" },
     );
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.date, "2026-07-18");
     assert.equal(rows[0]?.spend, 42.5);
     assert.equal(rows[0]?.currency, "USD");
-    assert.equal(rows[0]?.campaignExternalId, "adv_1");
+    assert.equal(rows[0]?.campaignExternalId, "cid_1");
+    assert.equal(rows[0]?.campaignName, "Verano TT");
   });
 
-  it("builds integrated report URL with advertiser day grain", () => {
+  it("builds integrated report URL with campaign day grain", () => {
     const url = buildTikTokIntegratedReportUrl(
       {
         accessToken: "tok",
@@ -79,8 +88,13 @@ describe("TikTok Ads Reporting (S17)", () => {
     );
     assert.match(url.pathname, /\/open_api\/v1\.3\/report\/integrated\/get\/$/);
     assert.equal(url.searchParams.get("advertiser_id"), "9");
-    assert.equal(url.searchParams.get("data_level"), "AUCTION_ADVERTISER");
+    assert.equal(url.searchParams.get("data_level"), "AUCTION_CAMPAIGN");
     assert.equal(url.searchParams.get("report_type"), "BASIC");
+    assert.equal(
+      url.searchParams.get("dimensions"),
+      JSON.stringify(["stat_time_day", "campaign_id"]),
+    );
+    assert.match(url.searchParams.get("metrics") ?? "", /campaign_name/);
   });
 
   it("fetchTikTokAdsDailySpend parses report pages", async () => {
@@ -92,11 +106,15 @@ describe("TikTok Ads Reporting (S17)", () => {
           data: {
             list: [
               {
-                dimensions: { stat_time_day: "2026-07-19 00:00:00" },
+                dimensions: {
+                  stat_time_day: "2026-07-19 00:00:00",
+                  campaign_id: "77",
+                },
                 metrics: {
                   spend: "10",
                   impressions: "100",
                   clicks: "2",
+                  campaign_name: "TT Camp",
                 },
               },
             ],
@@ -121,6 +139,7 @@ describe("TikTok Ads Reporting (S17)", () => {
     if (!result.ok) return;
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0]?.spend, 10);
+    assert.equal(result.rows[0]?.campaignExternalId, "77");
   });
 
   it("exposes a clear missing-credentials constant", () => {

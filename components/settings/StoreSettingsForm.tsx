@@ -35,6 +35,7 @@ export function StoreSettingsForm({
   storeSlug,
   canEdit,
   initial,
+  campaignOptions = [],
 }: {
   agencySlug: string;
   storeSlug: string;
@@ -48,12 +49,14 @@ export function StoreSettingsForm({
     attributionWindowDays: number;
     settings: StoreSettings;
   };
+  campaignOptions?: Array<{ id: string; name: string; platform: string }>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [form, setForm] = useState(initial);
+  const [aliasDraft, setAliasDraft] = useState({ utm: "", campaignId: "" });
 
   function save() {
     if (!canEdit) return;
@@ -165,6 +168,129 @@ export function StoreSettingsForm({
                 }
               />
             </FormField>
+          </div>
+
+          <div className="space-y-3 rounded-[10px] border border-border p-4">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Aliases UTM → campaña</p>
+              <p className="mt-1 text-xs text-text-secondary">
+                Cuando el utm_campaign del pedido no coincide con el nombre/id de Meta o TikTok,
+                mapea el texto UTM a una campaña real. Se aplica a pedidos pendientes al guardar.
+              </p>
+            </div>
+
+            {campaignOptions.length === 0 ? (
+              <p className="text-xs text-text-secondary">
+                Aún no hay campañas sincronizadas. Haz Sync de Meta/TikTok Ads primero.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <FormField label="utm_campaign" htmlFor="utm-alias-key">
+                    <Input
+                      id="utm-alias-key"
+                      className={controlClass}
+                      placeholder="promo_julio"
+                      value={aliasDraft.utm}
+                      onChange={(e) => setAliasDraft((d) => ({ ...d, utm: e.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Campaña" htmlFor="utm-alias-campaign">
+                    <Select
+                      id="utm-alias-campaign"
+                      className={controlClass}
+                      value={aliasDraft.campaignId}
+                      onChange={(e) => setAliasDraft((d) => ({ ...d, campaignId: e.target.value }))}
+                    >
+                      <option value="">Selecciona…</option>
+                      {campaignOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.platform})
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={disabled || !aliasDraft.utm.trim() || !aliasDraft.campaignId}
+                      onClick={() => {
+                        const utm = aliasDraft.utm.trim();
+                        const campaignId = aliasDraft.campaignId;
+                        if (!utm || !campaignId) return;
+                        setForm((f) => {
+                          const rest = f.settings.attribution.utmCampaignAliases.filter(
+                            (a) => a.utm.trim().toLowerCase() !== utm.toLowerCase(),
+                          );
+                          return {
+                            ...f,
+                            settings: {
+                              ...f.settings,
+                              attribution: {
+                                ...f.settings.attribution,
+                                utmCampaignAliases: [...rest, { utm, campaignId }],
+                              },
+                            },
+                          };
+                        });
+                        setAliasDraft({ utm: "", campaignId: "" });
+                      }}
+                    >
+                      Añadir
+                    </Button>
+                  </div>
+                </div>
+
+                {form.settings.attribution.utmCampaignAliases.length > 0 ? (
+                  <ul className="space-y-2">
+                    {form.settings.attribution.utmCampaignAliases.map((alias) => {
+                      const campaign = campaignOptions.find((c) => c.id === alias.campaignId);
+                      return (
+                        <li
+                          key={`${alias.utm}:${alias.campaignId}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
+                        >
+                          <span>
+                            <span className="font-medium">{alias.utm}</span>
+                            <span className="text-text-secondary"> → </span>
+                            <span>{campaign?.name ?? alias.campaignId.slice(0, 8)}</span>
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={disabled}
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                settings: {
+                                  ...f.settings,
+                                  attribution: {
+                                    ...f.settings.attribution,
+                                    utmCampaignAliases:
+                                      f.settings.attribution.utmCampaignAliases.filter(
+                                        (a) =>
+                                          !(
+                                            a.utm === alias.utm &&
+                                            a.campaignId === alias.campaignId
+                                          ),
+                                      ),
+                                  },
+                                },
+                              }))
+                            }
+                          >
+                            Quitar
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-text-secondary">Sin aliases todavía.</p>
+                )}
+              </>
+            )}
           </div>
         </SettingsSection>
 

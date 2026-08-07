@@ -131,6 +131,17 @@ describe("planShipmentEventApply", () => {
     assert.equal("settled_at" in (plan.orderPatch ?? {}), false);
   });
 
+  it("mirrors mid-funnel in_transit onto the order", () => {
+    const plan = planShipmentEventApply({
+      shipment: baseShipment,
+      externalStatusCode: "TRANSITO",
+      occurredAt: "2026-07-10T09:00:00.000Z",
+      mappings,
+    });
+    assert.equal(plan.nextShipment.status, "in_transit");
+    assert.equal(plan.orderPatch?.order_status, "in_transit");
+  });
+
   it("records conflict and keeps terminal on out-of-order older event", () => {
     const plan = planShipmentEventApply({
       shipment: {

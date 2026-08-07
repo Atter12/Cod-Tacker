@@ -46,6 +46,7 @@ import {
   type LiveWhatsAppCredentials,
 } from "@/lib/integrations/whatsapp/live-messaging";
 import { resolveWhatsAppCredentialsFromIntegration } from "@/lib/integrations/whatsapp/credentials";
+import { createLiveSettlementProvider } from "@/lib/integrations/settlement/live-settlement";
 
 export type ProviderKind = "commerce" | "ads" | "carrier" | "messaging" | "settlement";
 
@@ -57,7 +58,7 @@ function assertMockAllowed(mode: IntegrationMode): void {
 
 function assertLiveProviderConfigured(kind: ProviderKind): never {
   throw new Error(
-    `Live ${kind} adapter is not configured. Shopify commerce, Meta/TikTok Ads, WhatsApp messaging, Enviame and Envia.com carriers are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+    `Live ${kind} adapter is not configured. Shopify commerce, Meta/TikTok Ads, WhatsApp messaging, Enviame/Envia carriers, and CSV/Ecart settlement are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
   );
 }
 
@@ -235,10 +236,23 @@ export function resolveLiveWhatsAppCredentials(
 }
 
 export function getSettlementProvider(
-  providerId: SettlementProvider["providerId"] = "custom_payment",
+  providerId: SettlementProvider["providerId"] = "csv_upload",
 ): SettlementProvider {
   const mode = resolveIntegrationMode();
-  if (mode === "live") assertLiveProviderConfigured("settlement");
+  if (mode === "live") {
+    if (
+      providerId === "csv_upload" ||
+      providerId === "ecart_pay" ||
+      providerId === "custom_payment"
+    ) {
+      return createLiveSettlementProvider(
+        providerId === "custom_payment" ? "csv_upload" : providerId,
+      );
+    }
+    assertLiveProviderConfigured("settlement");
+  }
   assertMockAllowed(mode);
-  return createMockSettlementProvider(providerId);
+  return createMockSettlementProvider(
+    providerId === "csv_upload" || providerId === "ecart_pay" ? "custom_payment" : providerId,
+  );
 }
