@@ -2,6 +2,8 @@ import type { AdsSpendSnapshot } from "@/lib/integrations/contracts/ads";
 import type { MetaAdsCredentials } from "@/lib/integrations/meta/env";
 
 export type MetaInsightsDayRow = {
+  campaign_id?: string;
+  campaign_name?: string;
   spend?: string;
   impressions?: string;
   clicks?: string;
@@ -16,20 +18,24 @@ function asNumber(raw: string | undefined, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** Map Graph Insights account-level rows into AdsSpendSnapshot (one per day). */
+/** Map Graph Insights campaign-level rows into AdsSpendSnapshot (one per campaign/day). */
 export function mapMetaInsightsToSpendSnapshots(
   rows: MetaInsightsDayRow[],
-  input: { adAccountId: string; currencyFallback: string },
+  input: { currencyFallback: string },
 ): AdsSpendSnapshot[] {
   const out: AdsSpendSnapshot[] = [];
   for (const row of rows) {
     const date = (row.date_start ?? row.date_stop ?? "").slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const campaignExternalId = (row.campaign_id ?? "").trim();
+    if (!campaignExternalId) continue;
     const spend = asNumber(row.spend);
     const currency = (row.account_currency ?? input.currencyFallback).slice(0, 3).toUpperCase();
+    const campaignName = (row.campaign_name ?? "").trim() || undefined;
     out.push({
       date,
-      campaignExternalId: input.adAccountId,
+      campaignExternalId,
+      campaignName,
       spend,
       impressions: Math.max(0, Math.round(asNumber(row.impressions))),
       clicks: Math.max(0, Math.round(asNumber(row.clicks))),
@@ -49,22 +55,22 @@ export function buildMetaInsightsUrl(
   );
   url.searchParams.set(
     "fields",
-    "spend,impressions,clicks,account_currency,date_start,date_stop",
+    "campaign_id,campaign_name,spend,impressions,clicks,account_currency,date_start,date_stop",
   );
-  url.searchParams.set("level", "account");
+  url.searchParams.set("level", "campaign");
   url.searchParams.set("time_increment", "1");
   url.searchParams.set(
     "time_range",
     JSON.stringify({ since: dateRange.from, until: dateRange.to }),
   );
-  url.searchParams.set("limit", "100");
+  url.searchParams.set("limit", "500");
   url.searchParams.set("access_token", creds.accessToken);
   if (after) url.searchParams.set("after", after);
   return url;
 }
 
 /**
- * Fetch daily account spend from Meta Marketing Insights API.
+ * Fetch daily campaign spend from Meta Marketing Insights API.
  * Paginates with cursors until exhausted (cap pages for safety).
  */
 export async function fetchMetaAdsDailySpend(input: {
@@ -80,7 +86,7 @@ export async function fetchMetaAdsDailySpend(input: {
   let after: string | null = null;
   let lastStatus = 200;
 
-  for (let page = 0; page < 20; page += 1) {
+  for (let page = 0; page < 40; page += 1) {
     const url = buildMetaInsightsUrl(input.creds, input.dateRange, after);
     const res = await fetchImpl(url.toString(), { method: "GET" });
     lastStatus = res.status;
@@ -119,7 +125,6 @@ export async function fetchMetaAdsDailySpend(input: {
     ok: true,
     statusCode: lastStatus,
     rows: mapMetaInsightsToSpendSnapshots(collected, {
-      adAccountId: input.creds.adAccountId,
       currencyFallback: input.creds.currencyFallback,
     }),
   };

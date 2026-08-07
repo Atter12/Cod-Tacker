@@ -46,6 +46,7 @@ describe("store settings schema", () => {
     assert.equal(settings.schema_version, 1);
     assert.equal(settings.rto.highRiskThresholdPct, 35);
     assert.equal(settings.cod.assumeCashOnDelivery, true);
+    assert.deepEqual(settings.attribution.utmCampaignAliases, []);
   });
 
   it("validates update payload", () => {

@@ -30,15 +30,15 @@ describe("conversion release filter", () => {
     }
   });
 
-  it("releases delivered COD even before the cash mark lands", () => {
+  it("holds delivered COD until cash is collected or settled", () => {
     const decision = evaluatePurchaseRelease({
       value: 80,
       orderStatus: "delivered",
       paymentStatus: "cash_expected",
       confirmationStatus: "confirmed",
     });
-    assert.equal(decision.release, true);
-    assert.equal(decision.reason, "delivered_cod");
+    assert.equal(decision.release, false);
+    assert.equal(decision.reason, "awaiting_collection");
   });
 
   it("holds prepaid orders that were not collected", () => {
@@ -134,7 +134,7 @@ describe("conversion release filter", () => {
     assert.equal(labelReleaseStatus("pending_review"), "En revisión");
     assert.equal(labelReleaseStatus("released"), "Liberada");
     assert.equal(labelReleaseStatus("rejected"), "Rechazada");
-    assert.equal(labelHoldReason("awaiting_collection"), "A la espera de cobro/entrega confirmada");
+    assert.equal(labelHoldReason("awaiting_collection"), "A la espera de cobro o liquidación");
     assert.equal(labelHoldReason("manual_reject"), "Rechazada manualmente");
     assert.equal(labelHoldReason(null), null);
   });

@@ -4,9 +4,17 @@ import {
   type ReleaseSweepResult,
 } from "@/lib/conversions/release-sweep";
 import {
+  sweepAdsScheduledSyncs,
+  type AdsScheduledSyncResult,
+} from "@/lib/integrations/ads/scheduled-sync";
+import {
   sweepEcartPayScheduledSyncs,
   type EcartScheduledSyncResult,
 } from "@/lib/integrations/ecart-pay/scheduled-sync";
+import {
+  sweepShopifyScheduledSyncs,
+  type ShopifyScheduledSyncResult,
+} from "@/lib/integrations/shopify/scheduled-sync";
 import { processJobBatch, recoverStuckJobs } from "@/lib/jobs/processor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRequestContext } from "@/lib/observability/request-context";
@@ -46,6 +54,8 @@ export async function GET(request: Request) {
     recover: true,
     sweepConversions: true,
     sweepEcartPay: true,
+    sweepAds: true,
+    sweepShopify: true,
   });
 }
 
@@ -55,6 +65,8 @@ export async function POST(request: Request) {
   let recover = false;
   let sweepConversions = false;
   let sweepEcartPay = false;
+  let sweepAds = false;
+  let sweepShopify = false;
   try {
     const body = (await request.json().catch(() => null)) as {
       limit?: number;
@@ -62,6 +74,8 @@ export async function POST(request: Request) {
       recover?: boolean;
       sweepConversions?: boolean;
       sweepEcartPay?: boolean;
+      sweepAds?: boolean;
+      sweepShopify?: boolean;
     } | null;
     if (body?.limit && Number.isFinite(body.limit)) {
       limit = Math.min(Math.max(Math.floor(body.limit), 1), 50);
@@ -72,6 +86,8 @@ export async function POST(request: Request) {
     recover = Boolean(body?.recover);
     sweepConversions = Boolean(body?.sweepConversions);
     sweepEcartPay = Boolean(body?.sweepEcartPay);
+    sweepAds = Boolean(body?.sweepAds);
+    sweepShopify = Boolean(body?.sweepShopify);
   } catch {
     // empty body is fine
   }
@@ -81,6 +97,8 @@ export async function POST(request: Request) {
     recover,
     sweepConversions,
     sweepEcartPay,
+    sweepAds,
+    sweepShopify,
   });
 }
 
@@ -92,6 +110,8 @@ async function processJobsRequest(
     recover?: boolean;
     sweepConversions?: boolean;
     sweepEcartPay?: boolean;
+    sweepAds?: boolean;
+    sweepShopify?: boolean;
   },
 ) {
   const ctx = createRequestContext({
@@ -163,6 +183,34 @@ async function processJobsRequest(
     }
   }
 
+  // Meta/TikTok Ads auto-sync: due stores (~every 24h). Dedicated cron also hits
+  // /api/internal/ads/sync daily; this is a backup on the minute worker.
+  let adsSweep: AdsScheduledSyncResult | null = null;
+  if (options.sweepAds) {
+    try {
+      adsSweep = await sweepAdsScheduledSyncs(admin);
+    } catch (error) {
+      logger.error("jobs.process.ads_sweep_failed", {
+        ...ctx,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Shopify order reconcile: due stores (~every 8h). Webhooks remain primary;
+  // dedicated cron /api/internal/shopify/sync + minute-worker backup.
+  let shopifySweep: ShopifyScheduledSyncResult | null = null;
+  if (options.sweepShopify) {
+    try {
+      shopifySweep = await sweepShopifyScheduledSyncs(admin);
+    } catch (error) {
+      logger.error("jobs.process.shopify_sweep_failed", {
+        ...ctx,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const sweepDidWork = Boolean(
     conversionSweep &&
       (conversionSweep.released > 0 ||
@@ -173,6 +221,13 @@ async function processJobsRequest(
   );
   const ecartDidWork = Boolean(
     ecartSweep && (ecartSweep.synced > 0 || ecartSweep.errors > 0 || ecartSweep.due > 0),
+  );
+  const adsDidWork = Boolean(
+    adsSweep && (adsSweep.synced > 0 || adsSweep.errors > 0 || adsSweep.due > 0),
+  );
+  const shopifyDidWork = Boolean(
+    shopifySweep &&
+      (shopifySweep.synced > 0 || shopifySweep.errors > 0 || shopifySweep.due > 0),
   );
   const processFields = {
     ...ctx,
@@ -192,9 +247,39 @@ async function processJobsRequest(
           skipped: ecartSweep.skipped,
         }
       : null,
+    ads_sweep: adsSweep
+      ? {
+          scanned: adsSweep.scanned,
+          due: adsSweep.due,
+          synced: adsSweep.synced,
+          backfills: adsSweep.backfills,
+          incrementals: adsSweep.incrementals,
+          errors: adsSweep.errors,
+          skipped: adsSweep.skipped,
+        }
+      : null,
+    shopify_sweep: shopifySweep
+      ? {
+          scanned: shopifySweep.scanned,
+          due: shopifySweep.due,
+          synced: shopifySweep.synced,
+          backfills: shopifySweep.backfills,
+          incrementals: shopifySweep.incrementals,
+          errors: shopifySweep.errors,
+          skipped: shopifySweep.skipped,
+        }
+      : null,
   };
   // Cron idle ticks flood Vercel; keep info for real work only.
-  if (result.claimed > 0 || result.completed > 0 || recovered > 0 || sweepDidWork || ecartDidWork) {
+  if (
+    result.claimed > 0 ||
+    result.completed > 0 ||
+    recovered > 0 ||
+    sweepDidWork ||
+    ecartDidWork ||
+    adsDidWork ||
+    shopifyDidWork
+  ) {
     logger.info("jobs.process.complete", processFields);
   } else {
     logger.debug("jobs.process.complete", processFields);
@@ -207,6 +292,8 @@ async function processJobsRequest(
       ...result,
       conversionSweep,
       ecartSweep,
+      adsSweep,
+      shopifySweep,
     },
     { headers: { "x-request-id": ctx.request_id } },
   );

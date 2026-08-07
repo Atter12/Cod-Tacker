@@ -23,7 +23,7 @@ function defaultDateRange(kind: "incremental" | "historical"): { from: string; t
 
 /**
  * Live Meta Ads adapter (S16).
- * sync() pulls Marketing Insights (account / day) and returns enqueue specs for ads.spend.synced.
+ * sync() pulls Marketing Insights (campaign / day) and returns enqueue specs for ads.spend.synced.
  */
 export function createLiveMetaAdsProvider(
   providerId: AdsProvider["providerId"] = "meta",
@@ -117,13 +117,15 @@ export function createLiveMetaAdsProvider(
       }
 
       const enqueues = fetched.rows.map((row) => ({
-        externalId: `${creds.adAccountId}:${row.date}`,
+        externalId: `${creds.adAccountId}:${row.campaignExternalId}:${row.date}`,
         action: "updated" as const,
         eventType: "ads.spend.synced",
         jobType: "ads.spend.synced",
         payload: {
           platform: "meta" as const,
           external_account_id: creds.adAccountId,
+          external_campaign_id: row.campaignExternalId,
+          campaign_name: row.campaignName,
           metric_date: row.date,
           spend: row.spend,
           currency_code: row.currency,

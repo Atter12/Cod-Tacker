@@ -195,6 +195,30 @@ export async function connectIntegrationAction(
       },
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, safeProvider);
+
+    // First live Ads connect: enqueue historical backfill (~30d) in the background.
+    if (liveAds) {
+      const meta =
+        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          ? (row.metadata as Record<string, unknown>)
+          : {};
+      if (meta.ads_initial_backfill_done !== true) {
+        after(async () => {
+          try {
+            await backfillIntegration(client, {
+              agencyId: membership.agencyId,
+              storeId,
+              provider: safeProvider,
+              userId: user.id,
+            });
+          } catch {
+            // Cron sweep will retry while ads_initial_backfill_pending remains.
+          }
+          await kickJobProcessing({ limit: 30, reason: "ads-initial-backfill" });
+        });
+      }
+    }
+
     return actionOk({ id: row.id });
   } catch (error) {
     return actionFail(error);

@@ -26,11 +26,11 @@ function titleFor(status: OrdersRealtimeStatus): string {
     case "live":
       return "Pedidos se refrescan al instante vía Supabase Realtime.";
     case "polling":
-      return "Realtime no conectó; la lista se refresca cada 30s mientras la pestaña está visible. Los pedidos nuevos aún necesitan webhook o Sincronizar ahora.";
+      return "Realtime no conectó; la lista se refresca cada 30s mientras la pestaña está visible. Los pedidos nuevos aún necesitan webhook o Actualizar pedidos (7 días) en Integraciones → Shopify.";
     case "connecting":
       return "Conectando a Supabase Realtime…";
     case "error":
-      return "No hay sesión o falló Realtime. Usa Sincronizar ahora e Intenta recargar.";
+      return "No hay sesión o falló Realtime. Usa Actualizar pedidos (7 días) en Integraciones → Shopify, o recarga la página.";
     default:
       return "Actualización en pausa.";
   }

@@ -1,0 +1,6 @@
+tracking,order_number,external_order_id,external_shipment_id,gross_amount,fee_amount,net_amount,currency,date,reference
+TRK-EXACT-001,ORD-1001,,,150,5,145,PEN,2026-07-01,exact
+TRK-LOW-002,ORD-1002,,,130,5,125,PEN,2026-07-01,lower
+TRK-FEE-003,ORD-1003,,,150,40,110,PEN,2026-07-01,fee
+TRK-UNKNOWN-999,,,,99,3,96,PEN,2026-07-01,unknown
+,ORD-1004,EXT-ORD-4,EXT-SHIP-4,200,8,192,PEN,2026-07-02,ok_liq

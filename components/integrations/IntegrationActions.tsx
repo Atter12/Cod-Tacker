@@ -83,6 +83,37 @@ export function IntegrationActions({
     });
   }
 
+  const isShopify = provider === "shopify";
+  const isAds = provider === "meta" || provider === "tiktok";
+  const syncLabel = isShopify
+    ? "Actualizar pedidos (7 días)"
+    : isAds
+      ? "Actualizar gasto reciente"
+      : "Actualizar ahora";
+  const backfillLabel = isShopify
+    ? "Importar historial (90 días)"
+    : isAds
+      ? "Importar historial de gasto"
+      : "Importar historial";
+  const syncHelp = isShopify
+    ? "Los webhooks traen pedidos en tiempo real y cada ~8 h se actualizan solos. Usa estas acciones solo si falta un pedido o al conectar la tienda."
+    : isAds
+      ? "El gasto también se sincroniza solo cada día. Usa actualizar si necesitas ver cambios ya, o importar historial al conectar la cuenta."
+      : "La sincronización automática cubre el día a día; estas acciones son para forzar una actualización o recuperar historial.";
+  const syncSuccess = isShopify
+    ? "Actualización iniciada: pedidos modificados en los últimos 7 días."
+    : "Actualización reciente iniciada.";
+  const backfillSuccess = isShopify
+    ? "Importación iniciada: pedidos de los últimos ~90 días."
+    : "Importación de historial iniciada.";
+  const backfillConfirm = liveProvider && isShopify
+    ? "¿Importar el historial de pedidos desde Shopify?\n\nSe traerán pedidos actualizados en los últimos ~90 días (hasta ~250). Los que ya existan se actualizarán, no se duplican."
+    : liveProvider && isAds
+      ? "¿Importar el historial de gasto publicitario?\n\nSe usará para completar datos al conectar o recuperar días faltantes."
+      : liveProvider
+        ? "¿Importar el historial de esta integración?"
+        : "¿Importar historial de demostración? Puede generar más registros mock.";
+
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
       <h2 className="text-sm font-semibold">Acciones</h2>
@@ -95,6 +126,9 @@ export function IntegrationActions({
         <Alert variant="success" title="Listo">
           {message}
         </Alert>
+      ) : null}
+      {connected ? (
+        <p className="text-[12.5px] leading-relaxed text-text-secondary">{syncHelp}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         {!connected ? (
@@ -146,36 +180,40 @@ export function IntegrationActions({
               size="sm"
               variant="outline"
               disabled={pending}
+              title={
+                isShopify
+                  ? "Trae de Shopify los pedidos actualizados en los últimos 7 días"
+                  : "Fuerza una sincronización reciente ahora"
+              }
               onClick={() =>
                 run(
                   () => syncIntegrationAction(agencySlug, storeSlug, provider),
-                  "Sincronización incremental iniciada.",
+                  syncSuccess,
                 )
               }
             >
-              Sincronizar ahora
+              {syncLabel}
             </Button>
             <Button
               size="sm"
               variant="outline"
               disabled={pending}
+              title={
+                isShopify
+                  ? "Importa pedidos de los últimos ~90 días (útil al conectar o recuperar historial)"
+                  : "Importa historial más amplio"
+              }
               onClick={() => {
-                const confirmMsg =
-                  liveProvider && provider === "shopify"
-                    ? "¿Ejecutar backfill histórico desde Shopify? Se importarán pedidos reales (últimos ~90 días)."
-                    : liveProvider
-                      ? "¿Ejecutar backfill para esta integración live?"
-                      : "¿Ejecutar backfill histórico mock? Puede generar más registros de demostración.";
-                if (!window.confirm(confirmMsg)) {
+                if (!window.confirm(backfillConfirm)) {
                   return;
                 }
                 run(
                   () => backfillIntegrationAction(agencySlug, storeSlug, provider),
-                  "Backfill histórico iniciado.",
+                  backfillSuccess,
                 );
               }}
             >
-              Backfill
+              {backfillLabel}
             </Button>
             {liveProvider && provider === "shopify" ? (
               <Button size="sm" variant="outline" disabled={pending} onClick={startLiveOauthReconnect}>

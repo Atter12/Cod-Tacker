@@ -4,8 +4,12 @@ import {
   type CarrierMappingRule,
   type ShipmentEventApplyPlan,
 } from "@/lib/logistics/normalize";
+import {
+  shouldApplyCarrierOrderStatus,
+} from "@/lib/orders/status-precedence";
 import type { JobsAdminClient } from "@/lib/jobs/types";
 import type { Json } from "@/types/database.generated";
+import type { OrderStatus } from "@/types/orders";
 import type { ShipmentRow } from "@/types/database";
 
 export type ApplyShipmentEventInput = {
@@ -127,13 +131,27 @@ export async function applyShipmentEvent(
   if (plan.orderPatch) {
     // Never touch payment_status / settled_* on deliver — orderPatch type forbids it.
     const patch = { ...plan.orderPatch };
-    const orderUpdate = await admin
-      .from("orders")
-      .update(patch)
-      .eq("id", shipment.order_id)
-      .eq("store_id", shipment.store_id);
-    if (orderUpdate.error) {
-      throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el pedido vinculado.");
+    if (patch.order_status) {
+      const current = await admin
+        .from("orders")
+        .select("order_status")
+        .eq("id", shipment.order_id)
+        .eq("store_id", shipment.store_id)
+        .maybeSingle();
+      const currentStatus = current.data?.order_status as OrderStatus | undefined;
+      if (!shouldApplyCarrierOrderStatus(currentStatus, patch.order_status)) {
+        delete patch.order_status;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      const orderUpdate = await admin
+        .from("orders")
+        .update(patch)
+        .eq("id", shipment.order_id)
+        .eq("store_id", shipment.store_id);
+      if (orderUpdate.error) {
+        throw new PermanentJobError("DATABASE_ERROR", "No se pudo actualizar el pedido vinculado.");
+      }
     }
   }
 

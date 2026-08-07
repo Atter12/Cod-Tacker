@@ -151,7 +151,7 @@ export function EcartPayPanel({
             });
           }}
         >
-          Sincronizar ahora (30d)
+          Actualizar liquidaciones (30 días)
         </Button>
       </div>
       {error ? <Alert variant="danger">{error}</Alert> : null}

@@ -50,6 +50,22 @@ describe("handler payload validation", () => {
     assert.equal(result.success, false);
   });
 
+  it("accepts live campaign-grain ads.spend.synced payload", () => {
+    const result = adsSpendSyncedPayloadSchema.safeParse({
+      platform: "meta",
+      external_account_id: "act_1",
+      external_campaign_id: "120330001",
+      campaign_name: "Verano COD",
+      metric_date: "2026-07-18",
+      spend: 42.5,
+      currency_code: "PEN",
+      impressions: 1000,
+      clicks: 12,
+      mode: "live",
+    });
+    assert.equal(result.success, true);
+  });
+
   it("rejects invalid ads.spend.synced.mock payload", () => {
     const result = adsSpendSyncedPayloadSchema.safeParse({
       platform: "meta",

@@ -27,6 +27,7 @@ export function createMockAdsProvider(providerId: AdsProvider["providerId"] = "m
         {
           date: dateRange.from,
           campaignExternalId: `mock-campaign-${providerId}`,
+          campaignName: `Mock ${providerId} campaign`,
           spend: 120.5,
           impressions: 10_000,
           clicks: 320,

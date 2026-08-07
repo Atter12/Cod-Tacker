@@ -23,7 +23,7 @@ function defaultDateRange(kind: "incremental" | "historical"): { from: string; t
 
 /**
  * Live TikTok Ads adapter (S17).
- * sync() pulls Marketing integrated report (advertiser / day) and enqueues ads.spend.synced.
+ * sync() pulls Marketing integrated report (campaign / day) and enqueues ads.spend.synced.
  */
 export function createLiveTikTokAdsProvider(
   providerId: AdsProvider["providerId"] = "tiktok",
@@ -116,13 +116,15 @@ export function createLiveTikTokAdsProvider(
       }
 
       const enqueues = fetched.rows.map((row) => ({
-        externalId: `${creds.advertiserId}:${row.date}`,
+        externalId: `${creds.advertiserId}:${row.campaignExternalId}:${row.date}`,
         action: "updated" as const,
         eventType: "ads.spend.synced",
         jobType: "ads.spend.synced",
         payload: {
           platform: "tiktok" as const,
           external_account_id: creds.advertiserId,
+          external_campaign_id: row.campaignExternalId,
+          campaign_name: row.campaignName,
           metric_date: row.date,
           spend: row.spend,
           currency_code: row.currency,

@@ -669,6 +669,11 @@ export async function connectMetaAdsLive(
 
   const now = new Date().toISOString();
   const catalog = getCatalogEntry("meta");
+  const existingMeta =
+    existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+  const backfillDone = existingMeta.ads_initial_backfill_done === true;
   const payload = {
     agency_id: scope.agencyId,
     store_id: scope.storeId,
@@ -684,6 +689,8 @@ export async function connectMetaAdsLive(
       mode: "live",
       credentials_source: creds.source,
       ad_account_id: creds.adAccountId,
+      ads_initial_backfill_pending: !backfillDone,
+      ads_initial_backfill_done: backfillDone,
     } as Json,
     settings: {
       ad_account_id: creds.adAccountId,
@@ -741,6 +748,11 @@ export async function connectTikTokAdsLive(
 
   const now = new Date().toISOString();
   const catalog = getCatalogEntry("tiktok");
+  const existingMeta =
+    existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+  const backfillDone = existingMeta.ads_initial_backfill_done === true;
   const payload = {
     agency_id: scope.agencyId,
     store_id: scope.storeId,
@@ -756,6 +768,8 @@ export async function connectTikTokAdsLive(
       mode: "live",
       credentials_source: creds.source,
       advertiser_id: creds.advertiserId,
+      ads_initial_backfill_pending: !backfillDone,
+      ads_initial_backfill_done: backfillDone,
     } as Json,
     settings: {
       advertiser_id: creds.advertiserId,
@@ -1087,8 +1101,9 @@ async function runSync(
     agencyId: string;
     storeId: string;
     provider: string;
-    userId: string;
+    userId?: string | null;
     syncType: SyncType;
+    triggerSource?: "manual" | "scheduled";
   },
 ): Promise<SyncRunRow> {
   const scope = assertStoreScope(input.agencyId, input.storeId);
@@ -1102,6 +1117,7 @@ async function runSync(
   const db = createAdminClient();
   const startedAt = new Date().toISOString();
   const runtimeMode = getIntegrationRuntimeMode();
+  const triggerSource = input.triggerSource ?? "manual";
   const insertRun = await db
     .from("sync_runs")
     .insert({
@@ -1110,13 +1126,14 @@ async function runSync(
       integration_id: integration.id,
       provider: input.provider,
       sync_type: input.syncType,
-      trigger_source: "manual",
+      trigger_source: triggerSource,
       status: "running",
       started_at: startedAt,
-      created_by: input.userId,
+      created_by: input.userId ?? null,
       metadata: {
         demo: runtimeMode === "mock",
         mode: runtimeMode,
+        trigger: triggerSource,
       } as Json,
     })
     .select()
@@ -1289,6 +1306,19 @@ async function runSync(
       .single();
     throwQueryError(completed.error);
 
+    const clearAdsInitialBackfill =
+      input.syncType === "backfill" &&
+      (input.provider === "meta" || input.provider === "tiktok");
+    const clearShopifyInitialBackfill =
+      input.syncType === "backfill" && input.provider === "shopify";
+
+    const prevMeta =
+      integration.metadata &&
+      typeof integration.metadata === "object" &&
+      !Array.isArray(integration.metadata)
+        ? (integration.metadata as Record<string, unknown>)
+        : {};
+
     await db
       .from("integrations")
       .update({
@@ -1296,6 +1326,23 @@ async function runSync(
         last_success_at: finishedAt,
         last_error_at: null,
         last_error_message: null,
+        ...(clearAdsInitialBackfill
+          ? {
+              metadata: {
+                ...prevMeta,
+                ads_initial_backfill_pending: false,
+                ads_initial_backfill_done: true,
+              } as Json,
+            }
+          : clearShopifyInitialBackfill
+            ? {
+                metadata: {
+                  ...prevMeta,
+                  shopify_initial_backfill_pending: false,
+                  shopify_initial_backfill_done: true,
+                } as Json,
+              }
+            : {}),
       })
       .eq("id", integration.id)
       .eq("store_id", scope.storeId);
@@ -1339,14 +1386,53 @@ export async function syncNow(
   client: DatabaseClient,
   input: { agencyId: string; storeId: string; provider: string; userId: string },
 ): Promise<SyncRunRow> {
-  return runSync(client, { ...input, syncType: "incremental" });
+  return runSync(client, { ...input, syncType: "incremental", triggerSource: "manual" });
 }
 
 export async function backfill(
   client: DatabaseClient,
   input: { agencyId: string; storeId: string; provider: string; userId: string },
 ): Promise<SyncRunRow> {
-  return runSync(client, { ...input, syncType: "backfill" });
+  return runSync(client, { ...input, syncType: "backfill", triggerSource: "manual" });
+}
+
+/** Cron / worker path: no actor, trigger_source=scheduled. */
+export async function scheduledAdsSync(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    provider: "meta" | "tiktok";
+    syncType: "incremental" | "backfill";
+  },
+): Promise<SyncRunRow> {
+  return runSync(client, {
+    agencyId: input.agencyId,
+    storeId: input.storeId,
+    provider: input.provider,
+    syncType: input.syncType,
+    userId: null,
+    triggerSource: "scheduled",
+  });
+}
+
+/** Cron / worker path for Shopify order reconcile. */
+export async function scheduledShopifySync(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    syncType: "incremental" | "backfill";
+  },
+): Promise<SyncRunRow> {
+  return runSync(client, {
+    agencyId: input.agencyId,
+    storeId: input.storeId,
+    provider: "shopify",
+    syncType: input.syncType,
+    userId: null,
+    triggerSource: "scheduled",
+  });
 }
 
 export async function listSyncRuns(

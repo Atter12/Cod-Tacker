@@ -21,9 +21,9 @@ export {
 } from "@/lib/conversions/delivered-purchase-policy";
 
 /**
- * S11: after a shipment reaches delivered, record Purchase CAPI for COD orders
- * (same event_id dedupe as manual cash_collected / reconciliation).
- * Does not fire on RTO / prepaid-only paths.
+ * After shipment reaches delivered: logistics only.
+ * Does NOT mark cash_collected and does NOT fire Purchase —
+ * those happen on Cobrado (orders action) or conciliación effects.
  */
 export async function maybeRecordPurchaseOnDelivered(input: {
   admin: JobsAdminClient;
@@ -57,15 +57,18 @@ export async function maybeRecordPurchaseOnDelivered(input: {
   }
 
   const order = orderRes.data;
+
+  // Policy: delivered never implies cash or Purchase (route B).
   if (!shouldFirePurchaseOnDelivered(order.payment_status)) {
-    logger.debug("conversion.delivered.skip_non_cod", {
+    logger.debug("conversion.delivered.skip_awaiting_collection", {
       order_id: order.id,
       payment_status: order.payment_status,
       shipment_id: input.shipmentId,
     });
-    return { attempted: false, skippedReason: `payment_status:${order.payment_status}` };
+    return { attempted: false, skippedReason: "awaiting_collection" };
   }
 
+  // Unreachable with current policy; kept for defensive/tests if policy flips.
   if (shouldMarkCashCollectedOnDelivered(order.payment_status)) {
     const collected =
       order.collected_cod_amount ?? order.expected_cod_amount ?? order.total_amount ?? 0;
@@ -101,23 +104,12 @@ export async function maybeRecordPurchaseOnDelivered(input: {
       eventTime: input.deliveredAt,
       source: "delivered",
     });
-
-    logger.info("conversion.delivered.recorded", {
-      order_id: order.id,
-      shipment_id: input.shipmentId,
-      job_id: input.jobId ?? null,
-      event_id: conversion.eventId,
-      delivery_status: conversion.deliveryStatus,
-      capi_mode: conversion.capiMode,
-    });
-
     return { attempted: true, conversion };
-  } catch (err) {
+  } catch (error) {
     logger.warn("conversion.delivered.record_failed", {
       order_id: order.id,
-      shipment_id: input.shipmentId,
-      error: err instanceof Error ? err.message : "conversion_failed",
+      error: error instanceof Error ? error.message : String(error),
     });
-    return { attempted: true, skippedReason: "record_failed" };
+    return { attempted: false, skippedReason: "record_failed" };
   }
 }
