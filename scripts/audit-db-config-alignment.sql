@@ -87,9 +87,9 @@ order by monthly_price nulls first, code;
 with expected(code, monthly_price, annual_price, store_limit, order_limit) as (
   values
     ('enterprise', 0::numeric, null::numeric, null::int, null::int),
-    ('starter', 49::numeric, 470::numeric, 1, 300),
-    ('growth', 79::numeric, 758::numeric, 3, 1000),
-    ('scale', 189::numeric, 1814::numeric, 5, 5000),
+    ('starter', 9::numeric, 90::numeric, 1, 300),
+    ('growth', 15::numeric, 150::numeric, 3, 1000),
+    ('scale', 19::numeric, 190::numeric, 5, 5000),
     ('agency', 399::numeric, 3830::numeric, null::int, 20000)
 )
 select

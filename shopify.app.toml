@@ -18,3 +18,10 @@ redirect_urls = [
 
 [webhooks]
 api_version = "2026-07"
+
+# Mandatory App Store / GDPR compliance webhooks (same HTTPS receiver as order webhooks).
+# Deploy with: shopify app deploy
+# Docs: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "/api/integrations/shopify/webhooks"
