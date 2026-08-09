@@ -4,11 +4,22 @@ Use after applying `20260722160000_billing_stripe_foundation.sql` and setting `B
 
 ## Prerequisites
 
-- [ ] `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on the server
+- [ ] `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on the server (live)
 - [ ] Price IDs for Starter/Growth/Scale (month + year) in `plan_provider_prices` **or** `STRIPE_PRICE_*` env
 - [ ] Stripe webhook endpoint: `{NEXT_PUBLIC_APP_URL}/api/billing/webhooks/stripe`
 - [ ] Events enabled: `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.finalized`, `invoice.payment_failed`
 - [ ] Job worker / cron draining (`/api/internal/jobs/process`)
+
+## Stripe test mode (allowlisted toggle)
+
+For `sandrowonmer@gmail.com` (or `STRIPE_TEST_MODE_ALLOWED_EMAILS`):
+
+- [ ] `STRIPE_TEST_SECRET_KEY=sk_test_…`
+- [ ] `STRIPE_TEST_WEBHOOK_SECRET=whsec_…` (Test mode endpoint → same URL)
+- [ ] `STRIPE_TEST_PRICE_STARTER_MONTH` / `_YEAR` (also GROWTH, SCALE)
+- [ ] Redeploy after adding envs
+- [ ] In Facturación, enable **Modo test** → Checkout with `4242…`
+- [ ] Prefer a non-production agency (blocked if agency already has a live Stripe sub)
 
 ## Happy path
 

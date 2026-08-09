@@ -9,6 +9,8 @@ import type {
   BillingReactivateInput,
 } from "@/lib/integrations/contracts/billing";
 import { isSelfServePlanCode } from "@/lib/integrations/contracts/billing";
+import type { StripeKeyMode } from "@/lib/billing/env";
+import { subscriptionLooksLikeStripeTest } from "@/lib/billing/stripe-test-mode";
 import { getStripeClient } from "@/lib/integrations/stripe/client";
 import { resolveStripePriceId } from "@/lib/integrations/stripe/prices";
 import { ValidationError } from "@/lib/errors";
@@ -27,12 +29,26 @@ async function loadAgencySubscription(agencyId: string) {
   return data;
 }
 
+function subscriptionMeta(
+  existing: Awaited<ReturnType<typeof loadAgencySubscription>>,
+): Record<string, unknown> {
+  if (
+    existing?.metadata &&
+    typeof existing.metadata === "object" &&
+    !Array.isArray(existing.metadata)
+  ) {
+    return existing.metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
 async function ensureStripeCustomer(input: {
   agencyId: string;
   email?: string | null;
   existingCustomerId?: string | null;
+  keyMode: StripeKeyMode;
 }): Promise<string> {
-  const stripe = getStripeClient();
+  const stripe = getStripeClient(input.keyMode);
   if (input.existingCustomerId) {
     return input.existingCustomerId;
   }
@@ -50,16 +66,19 @@ async function ensureStripeCustomer(input: {
     metadata: {
       agency_id: input.agencyId,
       agency_slug: agency?.slug ?? "",
+      stripe_key_mode: input.keyMode,
     },
   });
 
   const existing = await loadAgencySubscription(input.agencyId);
   if (existing) {
+    const prev = subscriptionMeta(existing);
     await admin
       .from("subscriptions")
       .update({
         provider_customer_id: customer.id,
         billing_provider: "stripe",
+        metadata: { ...prev, stripe_key_mode: input.keyMode } as Json,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
@@ -68,7 +87,9 @@ async function ensureStripeCustomer(input: {
   return customer.id;
 }
 
-export function createStripeBillingProvider(): BillingProvider {
+export function createStripeBillingProvider(
+  keyMode: StripeKeyMode = "live",
+): BillingProvider {
   return {
     providerId: "stripe",
     mode: "live",
@@ -85,20 +106,48 @@ export function createStripeBillingProvider(): BillingProvider {
         admin,
         input.planCode,
         input.interval,
+        keyMode,
       );
       void _planId;
 
       const existing = await loadAgencySubscription(input.agencyId);
+      const meta = subscriptionMeta(existing);
+      const isTestSub = subscriptionLooksLikeStripeTest(meta);
+
+      if (keyMode === "test" && existing?.provider_subscription_id && !isTestSub) {
+        throw new ValidationError(
+          "Esta agencia ya tiene una suscripción Stripe en vivo. Usa otra agencia para modo test, o desactiva el toggle.",
+        );
+      }
+      if (keyMode === "live" && existing?.provider_subscription_id && isTestSub) {
+        throw new ValidationError(
+          "Esta agencia tiene una suscripción de prueba. Activa modo test o limpia la suscripción test antes de cobrar en vivo.",
+        );
+      }
+
+      const reuseCustomer =
+        keyMode === "test"
+          ? isTestSub
+            ? existing?.provider_customer_id
+            : null
+          : existing?.provider_customer_id;
+
       const customerId = await ensureStripeCustomer({
         agencyId: input.agencyId,
         email: input.customerEmail,
-        existingCustomerId: existing?.provider_customer_id,
+        existingCustomerId: reuseCustomer,
+        keyMode,
       });
 
-      const stripe = getStripeClient();
+      const stripe = getStripeClient(keyMode);
+      const modeMeta = { stripe_key_mode: keyMode };
 
-      // Existing Stripe subscription → swap price (proration); webhook syncs DB.
-      if (existing?.provider_subscription_id) {
+      // Existing Stripe subscription in the same mode → swap price (proration).
+      const canSwap =
+        Boolean(existing?.provider_subscription_id) &&
+        (keyMode === "live" ? !isTestSub : isTestSub);
+
+      if (canSwap && existing?.provider_subscription_id) {
         const sub = await stripe.subscriptions.retrieve(existing.provider_subscription_id);
         const itemId = sub.items.data[0]?.id;
         if (!itemId) {
@@ -112,6 +161,7 @@ export function createStripeBillingProvider(): BillingProvider {
             plan_code: input.planCode,
             billing_interval: input.interval,
             changed_by: input.actorUserId ?? "",
+            ...modeMeta,
           },
           cancel_at_period_end: false,
         });
@@ -130,12 +180,14 @@ export function createStripeBillingProvider(): BillingProvider {
           agency_slug: input.agencySlug,
           plan_code: input.planCode,
           billing_interval: input.interval,
+          ...modeMeta,
         },
         subscription_data: {
           metadata: {
             agency_id: input.agencyId,
             plan_code: input.planCode,
             billing_interval: input.interval,
+            ...modeMeta,
           },
         },
         allow_promotion_codes: true,
@@ -149,12 +201,25 @@ export function createStripeBillingProvider(): BillingProvider {
 
     async createPortalSession(input: BillingPortalInput): Promise<{ url: string }> {
       const existing = await loadAgencySubscription(input.agencyId);
+      const meta = subscriptionMeta(existing);
+      const isTestSub = subscriptionLooksLikeStripeTest(meta);
+
+      if (keyMode === "test" && !isTestSub) {
+        throw new ValidationError(
+          "No hay cliente Stripe de prueba. Completa un checkout en modo test primero.",
+        );
+      }
+      if (keyMode === "live" && isTestSub) {
+        throw new ValidationError(
+          "La suscripción actual es de prueba. Activa modo test para abrir el portal.",
+        );
+      }
       if (!existing?.provider_customer_id) {
         throw new ValidationError(
           "No hay cliente de Stripe vinculado. Selecciona un plan self-serve primero.",
         );
       }
-      const stripe = getStripeClient();
+      const stripe = getStripeClient(keyMode);
       const portal = await stripe.billingPortal.sessions.create({
         customer: existing.provider_customer_id,
         return_url: input.returnUrl,
@@ -164,31 +229,39 @@ export function createStripeBillingProvider(): BillingProvider {
 
     async cancelAtPeriodEnd(input: BillingCancelInput): Promise<void> {
       const existing = await loadAgencySubscription(input.agencyId);
+      const meta = subscriptionMeta(existing);
+      const isTestSub = subscriptionLooksLikeStripeTest(meta);
+      if (keyMode === "test" && !isTestSub) {
+        throw new ValidationError("No hay suscripción Stripe de prueba activa.");
+      }
+      if (keyMode === "live" && isTestSub) {
+        throw new ValidationError(
+          "La suscripción actual es de prueba. Activa modo test para cancelarla.",
+        );
+      }
       if (!existing?.provider_subscription_id) {
         throw new ValidationError("No hay suscripción de Stripe activa.");
       }
-      const stripe = getStripeClient();
+      const stripe = getStripeClient(keyMode);
       await stripe.subscriptions.update(existing.provider_subscription_id, {
         cancel_at_period_end: true,
         metadata: {
           agency_id: input.agencyId,
           cancel_requested_by: input.actorUserId ?? "",
+          stripe_key_mode: keyMode,
         },
       });
 
       const admin = createAdminClient();
       const grace = new Date(Date.now() + 7 * 86400000).toISOString();
-      const prevMeta =
-        existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
-          ? (existing.metadata as Record<string, unknown>)
-          : {};
       await admin
         .from("subscriptions")
         .update({
           cancel_at_period_end: true,
           billing_provider: "stripe",
           metadata: {
-            ...prevMeta,
+            ...meta,
+            stripe_key_mode: keyMode,
             grace_period_ends_at: grace,
             cancel_requested_at: new Date().toISOString(),
           } as Json,
@@ -199,23 +272,30 @@ export function createStripeBillingProvider(): BillingProvider {
 
     async reactivate(input: BillingReactivateInput): Promise<void> {
       const existing = await loadAgencySubscription(input.agencyId);
+      const meta = subscriptionMeta(existing);
+      const isTestSub = subscriptionLooksLikeStripeTest(meta);
+      if (keyMode === "test" && !isTestSub) {
+        throw new ValidationError("No hay suscripción Stripe de prueba.");
+      }
+      if (keyMode === "live" && isTestSub) {
+        throw new ValidationError(
+          "La suscripción actual es de prueba. Activa modo test para reactivarla.",
+        );
+      }
       if (!existing?.provider_subscription_id) {
         throw new ValidationError("No hay suscripción de Stripe.");
       }
-      const stripe = getStripeClient();
+      const stripe = getStripeClient(keyMode);
       await stripe.subscriptions.update(existing.provider_subscription_id, {
         cancel_at_period_end: false,
         metadata: {
           agency_id: input.agencyId,
           reactivated_by: input.actorUserId ?? "",
+          stripe_key_mode: keyMode,
         },
       });
 
       const admin = createAdminClient();
-      const prevMeta =
-        existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
-          ? (existing.metadata as Record<string, unknown>)
-          : {};
       await admin
         .from("subscriptions")
         .update({
@@ -223,7 +303,8 @@ export function createStripeBillingProvider(): BillingProvider {
           cancel_at_period_end: false,
           billing_provider: "stripe",
           metadata: {
-            ...prevMeta,
+            ...meta,
+            stripe_key_mode: keyMode,
             reactivated_at: new Date().toISOString(),
           } as Json,
           updated_at: new Date().toISOString(),

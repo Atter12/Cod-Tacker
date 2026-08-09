@@ -13,6 +13,7 @@ import {
 } from "@/lib/integrations/stripe/map-subscription";
 import { resolvePlanCodeByStripePriceId } from "@/lib/integrations/stripe/prices";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { StripeKeyMode } from "@/lib/billing/env";
 
 function metaString(
   meta: Stripe.Metadata | null | undefined,
@@ -52,6 +53,7 @@ function primaryPriceId(sub: Stripe.Subscription): string | null {
 export async function normalizeStripeSubscription(
   sub: Stripe.Subscription,
   agencyIdFallback: string | null,
+  keyMode: StripeKeyMode = "live",
 ): Promise<NormalizedBillingSubscription | null> {
   const agencyId =
     metaString(sub.metadata, "agency_id") ??
@@ -65,7 +67,8 @@ export async function normalizeStripeSubscription(
   const priceId = primaryPriceId(sub);
   const planFromMeta = metaString(sub.metadata, "plan_code");
   const planCode =
-    planFromMeta ?? (priceId ? await resolvePlanCodeByStripePriceId(admin, priceId) : null);
+    planFromMeta ??
+    (priceId ? await resolvePlanCodeByStripePriceId(admin, priceId, keyMode) : null);
 
   const period = subscriptionPeriod(sub);
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;

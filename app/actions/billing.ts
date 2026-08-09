@@ -10,6 +10,15 @@ import { ValidationError } from "@/lib/errors";
 import type { Role } from "@/config/permissions";
 import { can } from "@/lib/permissions/can";
 import { getBillingProvider, isDemoBilling } from "@/lib/billing/provider";
+import {
+  canShowStripeTestModeToggle,
+  resolveStripeKeyModeForUser,
+  setStripeTestModeCookie,
+} from "@/lib/billing/stripe-test-mode";
+import {
+  isStripeTestModeConfigured,
+  isStripeTestModeEmailAllowed,
+} from "@/lib/billing/env";
 import type { BillingInterval } from "@/lib/integrations/contracts/billing";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
 
@@ -56,7 +65,8 @@ export async function selectPlan(
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const provider = getBillingProvider();
+    const keyMode = await resolveStripeKeyModeForUser(user.email);
+    const provider = getBillingProvider(keyMode);
     const result = await provider.createCheckoutSession({
       agencyId: membership.agencyId,
       agencySlug,
@@ -79,6 +89,7 @@ export async function selectPlan(
         interval,
         provider: provider.providerId,
         kind: result.kind,
+        stripe_key_mode: keyMode,
       },
     });
 
@@ -100,7 +111,8 @@ export async function openBillingPortal(agencySlug: string): Promise<BillingActi
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const provider = getBillingProvider();
+    const keyMode = await resolveStripeKeyModeForUser(user.email);
+    const provider = getBillingProvider(keyMode);
     const { url } = await provider.createPortalSession({
       agencyId: membership.agencyId,
       returnUrl: billingSuccessUrl(agencySlug),
@@ -112,7 +124,7 @@ export async function openBillingPortal(agencySlug: string): Promise<BillingActi
       entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
-      newData: { provider: provider.providerId, portal: true },
+      newData: { provider: provider.providerId, portal: true, stripe_key_mode: keyMode },
     });
 
     return actionOk({ url, kind: "redirect" });
@@ -127,7 +139,8 @@ export async function scheduleCancelAtPeriodEnd(agencySlug: string): Promise<Bil
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const provider = getBillingProvider();
+    const keyMode = await resolveStripeKeyModeForUser(user.email);
+    const provider = getBillingProvider(keyMode);
     await provider.cancelAtPeriodEnd({
       agencyId: membership.agencyId,
       actorUserId: user.id,
@@ -139,7 +152,7 @@ export async function scheduleCancelAtPeriodEnd(agencySlug: string): Promise<Bil
       entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
-      newData: { provider: provider.providerId },
+      newData: { provider: provider.providerId, stripe_key_mode: keyMode },
     });
 
     revalidatePath(routes.agency.billing(agencySlug));
@@ -159,7 +172,8 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
 
-    const provider = getBillingProvider();
+    const keyMode = await resolveStripeKeyModeForUser(user.email);
+    const provider = getBillingProvider(keyMode);
     await provider.reactivate({
       agencyId: membership.agencyId,
       actorUserId: user.id,
@@ -171,7 +185,7 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
       entityId: membership.agencyId,
       actorId: user.id,
       agencyId: membership.agencyId,
-      newData: { provider: provider.providerId },
+      newData: { provider: provider.providerId, stripe_key_mode: keyMode },
     });
 
     revalidatePath(routes.agency.billing(agencySlug));
@@ -181,13 +195,45 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
   }
 }
 
+/** Toggle Stripe test keys for allowlisted emails only. */
+export async function setStripeTestMode(
+  agencySlug: string,
+  enabled: boolean,
+): Promise<ActionResult<{ enabled: boolean }>> {
+  try {
+    const user = await requireUser();
+    if (!isStripeTestModeEmailAllowed(user.email)) {
+      throw new ValidationError("No tienes permiso para activar el modo test de Stripe.");
+    }
+    if (enabled && !isStripeTestModeConfigured()) {
+      throw new ValidationError(
+        "Falta STRIPE_TEST_SECRET_KEY en el servidor. Agrégala en Vercel y redespliega.",
+      );
+    }
+    await setStripeTestModeCookie(enabled);
+    revalidatePath(routes.agency.billing(agencySlug));
+    return actionOk({ enabled });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
 /** Exposed for UI badges — not a secret. */
 export async function getBillingProviderModeAction(): Promise<
-  ActionResult<{ mode: "demo" | "stripe" }>
+  ActionResult<{
+    mode: "demo" | "stripe";
+    stripeKeyMode: "live" | "test";
+    canUseStripeTestMode: boolean;
+  }>
 > {
   try {
-    await requireUser();
-    return actionOk({ mode: isDemoBilling() ? "demo" : "stripe" });
+    const user = await requireUser();
+    const stripeKeyMode = await resolveStripeKeyModeForUser(user.email);
+    return actionOk({
+      mode: isDemoBilling() ? "demo" : "stripe",
+      stripeKeyMode,
+      canUseStripeTestMode: canShowStripeTestModeToggle(user.email),
+    });
   } catch (error) {
     return actionFail(error);
   }

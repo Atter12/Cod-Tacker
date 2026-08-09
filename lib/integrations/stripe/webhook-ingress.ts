@@ -77,6 +77,7 @@ export async function handleStripeBillingWebhookIngress(input: {
   }
 
   const event = auth.event;
+  const keyMode = auth.mode;
   if (!isHandledStripeBillingEvent(event.type)) {
     return {
       status: 200,
@@ -99,15 +100,20 @@ export async function handleStripeBillingWebhookIngress(input: {
           ? session.subscription
           : session.subscription?.id ?? null;
       if (subId) {
-        const stripe = getStripeClient();
+        const stripe = getStripeClient(keyMode);
         const sub = await stripe.subscriptions.retrieve(subId, {
           expand: ["customer"],
         });
-        const normalized = await normalizeStripeSubscription(sub, agencyId);
+        const normalized = await normalizeStripeSubscription(sub, agencyId, keyMode);
         if (normalized) {
           agencyId = normalized.agencyId;
           jobType = "billing.subscription.updated";
-          payload = { ...normalized, source_event: event.type, stripe_event_id: event.id };
+          payload = {
+            ...normalized,
+            source_event: event.type,
+            stripe_event_id: event.id,
+            stripe_key_mode: keyMode,
+          };
         }
       }
     } else if (
@@ -118,16 +124,21 @@ export async function handleStripeBillingWebhookIngress(input: {
       const sub = event.data.object as Stripe.Subscription;
       const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
       agencyId =
-        (await normalizeStripeSubscription(sub, null))?.agencyId ??
+        (await normalizeStripeSubscription(sub, null, keyMode))?.agencyId ??
         (await resolveAgencyIdFromCustomer(customerId));
-      const normalized = await normalizeStripeSubscription(sub, agencyId);
+      const normalized = await normalizeStripeSubscription(sub, agencyId, keyMode);
       if (normalized) {
         agencyId = normalized.agencyId;
         if (event.type === "customer.subscription.deleted") {
           normalized.status = "cancelled";
         }
         jobType = "billing.subscription.updated";
-        payload = { ...normalized, source_event: event.type, stripe_event_id: event.id };
+        payload = {
+          ...normalized,
+          source_event: event.type,
+          stripe_event_id: event.id,
+          stripe_key_mode: keyMode,
+        };
       }
     } else if (
       event.type === "invoice.paid" ||
@@ -147,6 +158,7 @@ export async function handleStripeBillingWebhookIngress(input: {
           source_event: event.type,
           stripe_event_id: event.id,
           mark_past_due: event.type === "invoice.payment_failed",
+          stripe_key_mode: keyMode,
         };
       }
     }
