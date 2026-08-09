@@ -18,6 +18,7 @@ export const billingSubscriptionUpdatedPayloadSchema = z.object({
   billingInterval: z.enum(["month", "year"]).nullable().optional(),
   source_event: z.string().optional(),
   stripe_event_id: z.string().optional(),
+  stripe_key_mode: z.enum(["live", "test"]).optional(),
 });
 
 function asObject(payload: Json): Record<string, unknown> {
@@ -98,6 +99,7 @@ export const handleBillingSubscriptionUpdated: JobHandler = async ({
     stripeEventId: data.stripe_event_id,
     sourceEvent: data.source_event,
     currentPeriodEnd: data.currentPeriodEnd,
+    stripeKeyMode: data.stripe_key_mode,
   });
 
   const row = {

@@ -1,21 +1,27 @@
 import "server-only";
 
 import Stripe from "stripe";
-import { getStripeBillingEnv } from "@/lib/billing/env";
+import {
+  getStripeBillingEnvForMode,
+  type StripeKeyMode,
+} from "@/lib/billing/env";
 
-let cached: Stripe | null = null;
+const cached = new Map<StripeKeyMode, Stripe>();
 
-export function getStripeClient(): Stripe {
-  if (cached) return cached;
-  const env = getStripeBillingEnv();
+export function getStripeClient(mode: StripeKeyMode = "live"): Stripe {
+  const hit = cached.get(mode);
+  if (hit) return hit;
+
+  const env = getStripeBillingEnvForMode(mode);
+  const keyName = mode === "test" ? "STRIPE_TEST_SECRET_KEY" : "STRIPE_SECRET_KEY";
   if (!env.secretKey) {
     throw new Error(
-      "STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe. Set it in the server environment.",
+      `${keyName} is required when BILLING_PROVIDER=stripe${mode === "test" ? " (test mode)" : ""}. Set it in the server environment.`,
     );
   }
-  cached = new Stripe(env.secretKey, {
-    // Keep in sync with stripe package default when STRIPE_API_VERSION unset.
+  const client = new Stripe(env.secretKey, {
     apiVersion: env.apiVersion as Stripe.LatestApiVersion,
   });
-  return cached;
+  cached.set(mode, client);
+  return client;
 }

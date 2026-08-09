@@ -9,6 +9,7 @@ export function mergeSubscriptionBillingMetadata(input: {
   stripeEventId?: string | null;
   sourceEvent?: string | null;
   currentPeriodEnd?: string | null;
+  stripeKeyMode?: "live" | "test" | null;
   nowIso?: string;
 }): Record<string, unknown> {
   const nowIso = input.nowIso ?? new Date().toISOString();
@@ -20,6 +21,10 @@ export function mergeSubscriptionBillingMetadata(input: {
 
   if (input.billingInterval) {
     next.billing_interval = input.billingInterval;
+  }
+
+  if (input.stripeKeyMode === "test" || input.stripeKeyMode === "live") {
+    next.stripe_key_mode = input.stripeKeyMode;
   }
 
   if (input.status === "past_due") {

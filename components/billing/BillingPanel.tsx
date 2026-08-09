@@ -7,6 +7,7 @@ import {
   reactivateSubscription,
   scheduleCancelAtPeriodEnd,
   selectPlan,
+  setStripeTestMode,
 } from "@/app/actions/billing";
 import { requestDataDeletion, requestDataExport } from "@/app/actions/privacy";
 import { evaluateSubscriptionAccess } from "@/lib/billing/access-policy";
@@ -75,6 +76,8 @@ export function BillingPanel({
   overview,
   stores,
   billingMode = "demo",
+  stripeKeyMode = "live",
+  canUseStripeTestMode = false,
   checkoutStatus = null,
 }: {
   agencySlug: string;
@@ -83,6 +86,10 @@ export function BillingPanel({
   stores: Array<{ id: string; name: string }>;
   /** From server: BILLING_PROVIDER */
   billingMode?: "demo" | "stripe";
+  /** live | test Stripe API keys (allowlisted toggle) */
+  stripeKeyMode?: "live" | "test";
+  /** Show test-mode toggle (allowlisted email + test keys configured) */
+  canUseStripeTestMode?: boolean;
   /** From ?checkout=success|cancel */
   checkoutStatus?: "success" | "cancel" | null;
 }) {
@@ -120,7 +127,9 @@ export function BillingPanel({
     if (checkoutStatus === "success") {
       setNotice(
         billingMode === "stripe"
-          ? "Pago recibido. La suscripción se actualizará en unos segundos."
+          ? stripeKeyMode === "test"
+            ? "Pago de prueba recibido. La suscripción se actualizará en unos segundos."
+            : "Pago recibido. La suscripción se actualizará en unos segundos."
           : "Plan actualizado.",
       );
       router.replace(routes.agency.billing(agencySlug), { scroll: false });
@@ -128,7 +137,7 @@ export function BillingPanel({
       setNotice("Checkout cancelado. No se realizó ningún cobro.");
       router.replace(routes.agency.billing(agencySlug), { scroll: false });
     }
-  }, [checkoutStatus, billingMode, agencySlug, router]);
+  }, [checkoutStatus, billingMode, stripeKeyMode, agencySlug, router]);
 
   function run(fn: () => Promise<{ error?: string; url?: string }>) {
     setError(null);
@@ -151,6 +160,7 @@ export function BillingPanel({
   const storesOver = overview.storeCount > storeLimit;
   const orderRatio = orderLimit > 0 ? overview.orderCountThisMonth / orderLimit : 0;
   const isDemo = billingMode === "demo";
+  const isStripeTest = !isDemo && stripeKeyMode === "test";
   const access = evaluateSubscriptionAccess(limits);
   const savingsSample = overview.availablePlans
     .map(annualSavingsPercent)
@@ -161,10 +171,51 @@ export function BillingPanel({
       <div className="flex flex-wrap items-center gap-2">
         {isDemo ? <DemoModeBadge /> : null}
         <AgencyStatusPill
-          label={isDemo ? "Facturación de demostración" : "Stripe"}
-          tone={isDemo ? "brand" : "success"}
+          label={
+            isDemo
+              ? "Facturación de demostración"
+              : isStripeTest
+                ? "Stripe test"
+                : "Stripe"
+          }
+          tone={isDemo ? "brand" : isStripeTest ? "danger" : "success"}
         />
+        {canUseStripeTestMode ? (
+          <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
+            <span>Modo test</span>
+            <input
+              type="checkbox"
+              className="size-4 accent-[var(--brand-primary)]"
+              checked={stripeKeyMode === "test"}
+              disabled={pending}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                run(async () => {
+                  const r = await setStripeTestMode(agencySlug, enabled);
+                  if (r.error) return { error: r.error };
+                  setNotice(
+                    enabled
+                      ? "Modo test activo. Los checkouts usan claves sk_test_… (tarjeta 4242)."
+                      : "Modo live activo. Los checkouts usan producción.",
+                  );
+                  router.refresh();
+                  return {};
+                });
+              }}
+            />
+          </label>
+        ) : null}
       </div>
+      {isStripeTest ? (
+        <p
+          className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-text-primary"
+          role="status"
+        >
+          Estás en <strong>Stripe test</strong>. Usa tarjeta{" "}
+          <code className="text-xs">4242 4242 4242 4242</code>. No cobres agencias con
+          suscripción live activa.
+        </p>
+      ) : null}
       {access.code === "past_due_grace" || access.code === "past_due_blocked" ? (
         <div
           className={cn(
