@@ -123,31 +123,41 @@ export async function issueFlipyWidgetTokenAction(input: {
     });
 
     const embedUrl =
-      issued.embedUrl ??
-      issued.recargaEmbedUrl ??
-      issued.pujasEmbedUrl ??
-      (scope === "wallet_topup"
-        ? buildFlipyWalletEmbedUrl({
+      scope === "wallet_topup"
+        ? issued.recargaEmbedUrl ??
+          issued.embedUrl ??
+          buildFlipyWalletEmbedUrl({
             embedOrigin: env.embedOrigin,
             token: issued.token,
           })
         : scope === "bids_panel"
-          ? buildFlipyBidsEmbedUrl({
+          ? issued.pujasEmbedUrl ??
+            issued.embedUrl ??
+            buildFlipyBidsEmbedUrl({
               embedOrigin: env.embedOrigin,
               token: issued.token,
             })
-          : buildFlipyLocationEmbedUrl({
-            embedOrigin: env.embedOrigin,
-            token: issued.token,
-            prefillAddress: input.prefillAddress,
-            prefillLat: input.prefillLat,
-            prefillLng: input.prefillLng,
-          }));
+          : issued.ubicacionEmbedUrl ??
+            issued.embedUrl ??
+            buildFlipyLocationEmbedUrl({
+              embedOrigin: env.embedOrigin,
+              token: issued.token,
+              prefillAddress: input.prefillAddress,
+              prefillLat: input.prefillLat,
+              prefillLng: input.prefillLng,
+            });
+
+    let resolvedEmbedOrigin = env.embedOrigin;
+    try {
+      resolvedEmbedOrigin = new URL(embedUrl).origin;
+    } catch {
+      // keep env default
+    }
 
     return actionOk({
       token: issued.token,
       embedUrl,
-      embedOrigin: env.embedOrigin,
+      embedOrigin: resolvedEmbedOrigin,
     });
   } catch (error) {
     return actionFail(error);

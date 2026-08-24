@@ -60,6 +60,7 @@ export function FlipyCreateShipmentModal({
   );
   const [destination, setDestination] = useState<Destination | null>(null);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [fletePrice, setFletePrice] = useState<string>(
     paymentResolution.suggestedFlete != null && paymentResolution.suggestedFlete > 0
       ? String(paymentResolution.suggestedFlete)
@@ -80,6 +81,7 @@ export function FlipyCreateShipmentModal({
     setWalletEmbedUrl(null);
     setDestination(null);
     setEmbedUrl(null);
+    setResolvedEmbedOrigin(embedOrigin);
     setResult(null);
     setEscenario(
       paymentResolution.suggestedEscenario && paymentResolution.suggestedEscenario !== "GRATIS"
@@ -112,6 +114,7 @@ export function FlipyCreateShipmentModal({
         return;
       }
       setEmbedUrl(tokenResult.embedUrl);
+      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       setStep("location");
     });
   }
@@ -130,6 +133,7 @@ export function FlipyCreateShipmentModal({
         return;
       }
       setWalletEmbedUrl(tokenResult.embedUrl);
+      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       setStep("recarga");
     });
   }
@@ -257,7 +261,7 @@ export function FlipyCreateShipmentModal({
           <div className="space-y-3">
             <FlipyLocationEmbed
               embedUrl={embedUrl}
-              embedOrigin={embedOrigin}
+              embedOrigin={resolvedEmbedOrigin}
               onConfirmed={(next) => {
                 setDestination(next);
                 setError(null);
@@ -333,7 +337,7 @@ export function FlipyCreateShipmentModal({
           <div className="space-y-3">
             <FlipyWalletEmbed
               embedUrl={walletEmbedUrl}
-              embedOrigin={embedOrigin}
+              embedOrigin={resolvedEmbedOrigin}
               onToppedUp={() => {
                 setError(null);
                 setErrorCode(null);
