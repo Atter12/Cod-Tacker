@@ -7,7 +7,7 @@ import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl } from "@/lib/integrations/flipy/embed-urls";
+import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, resolveFlipyScopedEmbedUrl } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -122,30 +122,52 @@ export async function issueFlipyWidgetTokenAction(input: {
       },
     });
 
-    const embedUrl =
-      scope === "wallet_topup"
-        ? issued.recargaEmbedUrl ??
-          issued.embedUrl ??
-          buildFlipyWalletEmbedUrl({
-            embedOrigin: env.embedOrigin,
-            token: issued.token,
-          })
-        : scope === "bids_panel"
-          ? issued.pujasEmbedUrl ??
-            issued.embedUrl ??
-            buildFlipyBidsEmbedUrl({
+    let embedUrl: string;
+    try {
+      embedUrl =
+        scope === "wallet_topup"
+          ? resolveFlipyScopedEmbedUrl({
+              scope: "wallet_topup",
+              apiEmbedUrl: issued.recargaEmbedUrl,
               embedOrigin: env.embedOrigin,
-              token: issued.token,
+              appOrigin: env.appOrigin,
+              buildFallback: () =>
+                buildFlipyWalletEmbedUrl({
+                  embedOrigin: env.embedOrigin,
+                  token: issued.token,
+                }),
             })
-          : issued.ubicacionEmbedUrl ??
-            issued.embedUrl ??
-            buildFlipyLocationEmbedUrl({
-              embedOrigin: env.embedOrigin,
-              token: issued.token,
-              prefillAddress: input.prefillAddress,
-              prefillLat: input.prefillLat,
-              prefillLng: input.prefillLng,
-            });
+          : scope === "bids_panel"
+            ? resolveFlipyScopedEmbedUrl({
+                scope: "bids_panel",
+                apiEmbedUrl: issued.pujasEmbedUrl,
+                embedOrigin: env.embedOrigin,
+                appOrigin: env.appOrigin,
+                buildFallback: () =>
+                  buildFlipyBidsEmbedUrl({
+                    embedOrigin: env.embedOrigin,
+                    token: issued.token,
+                  }),
+              })
+            : resolveFlipyScopedEmbedUrl({
+                scope: "location_picker",
+                apiEmbedUrl: issued.ubicacionEmbedUrl,
+                embedOrigin: env.embedOrigin,
+                appOrigin: env.appOrigin,
+                buildFallback: () =>
+                  buildFlipyLocationEmbedUrl({
+                    embedOrigin: env.embedOrigin,
+                    token: issued.token,
+                    prefillAddress: input.prefillAddress,
+                    prefillLat: input.prefillLat,
+                    prefillLng: input.prefillLng,
+                  }),
+              });
+    } catch (error) {
+      throw new IntegrationError(
+        error instanceof Error ? error.message : "No se pudo resolver la URL del embed Flipy.",
+      );
+    }
 
     let resolvedEmbedOrigin = env.embedOrigin;
     try {

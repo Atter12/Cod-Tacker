@@ -10,6 +10,67 @@ export function normalizeFlipyEmbedOrigin(origin: string): string {
   return origin.replace(/\/$/, "");
 }
 
+export type FlipyEmbedScope = "location_picker" | "wallet_topup" | "bids_panel";
+
+const FLIPY_EMBED_PATH_BY_SCOPE: Record<FlipyEmbedScope, string> = {
+  location_picker: "/partner/ubicacion",
+  wallet_topup: "/partner/recarga",
+  bids_panel: "/partner/pujas",
+};
+
+export function originsMatchFlipyHost(a: string, b: string): boolean {
+  try {
+    return (
+      new URL(normalizeFlipyEmbedOrigin(a)).origin ===
+      new URL(normalizeFlipyEmbedOrigin(b)).origin
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function assertFlipyEmbedPath(url: string, expectedPath: string): string {
+  const parsed = new URL(url);
+  if (!parsed.pathname.includes(expectedPath)) {
+    throw new Error(
+      `URL embed Flipy inválida (${parsed.pathname}); se esperaba ruta ${expectedPath}.`,
+    );
+  }
+  return url;
+}
+
+/** Prefer scoped URL from Partner API; never fall back to the tienda app origin. */
+export function resolveFlipyScopedEmbedUrl(input: {
+  scope: FlipyEmbedScope;
+  apiEmbedUrl?: string | null;
+  embedOrigin: string;
+  appOrigin: string;
+  buildFallback: () => string;
+}): string {
+  const expectedPath = FLIPY_EMBED_PATH_BY_SCOPE[input.scope];
+  const apiUrl = input.apiEmbedUrl?.trim();
+  if (apiUrl) {
+    const resolved = assertFlipyEmbedPath(apiUrl, expectedPath);
+    if (originsMatchFlipyHost(resolved, input.appOrigin)) {
+      throw new Error(
+        `La API Flipy devolvió un embed en la app tienda (${input.appOrigin}). ` +
+          `Configura EMBED_ORIGIN en el backend Flipy al host del web-app partner (${expectedPath}).`,
+      );
+    }
+    return resolved;
+  }
+
+  if (originsMatchFlipyHost(input.embedOrigin, input.appOrigin)) {
+    throw new Error(
+      `FLIPY_EMBED_ORIGIN no puede ser la app tienda (${input.appOrigin}). ` +
+        `Los embeds partner viven en el web-app de Flipy (${expectedPath}). ` +
+        `Configura FLIPY_EMBED_ORIGIN en Vercel o pide a Flipy que devuelva la URL scoped en widgets/token.`,
+    );
+  }
+
+  return assertFlipyEmbedPath(input.buildFallback(), expectedPath);
+}
+
 export function buildFlipyLocationEmbedUrl(input: FlipyLocationEmbedParams): string {
   const base = normalizeFlipyEmbedOrigin(input.embedOrigin);
   const url = new URL(`${base}/partner/ubicacion`);
