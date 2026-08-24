@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { toUserMessage } from "./to-user-message";
 import { AppError } from "./AppError";
 import { ValidationError } from "./ValidationError";
+import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
 
 describe("toUserMessage", () => {
   it("returns AppError safeMessage", () => {
@@ -29,6 +30,13 @@ describe("toUserMessage", () => {
     assert.equal(
       toUserMessage({ code: "23505", message: "duplicate key value violates unique constraint" }),
       "Ya existe un registro con esos datos.",
+    );
+  });
+
+  it("surfaces Flipy partner API errors instead of masking them as postgres codes", () => {
+    assert.equal(
+      toUserMessage(new FlipyPartnerApiError("Partner key inválida.", 401, "UNAUTHORIZED")),
+      "Partner key inválida.",
     );
   });
 });

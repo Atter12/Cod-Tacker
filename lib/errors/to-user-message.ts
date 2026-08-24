@@ -1,4 +1,9 @@
 import { AppError } from "@/lib/errors/AppError";
+import {
+  FlipyPartnerApiError,
+  flipyErrorUserHint,
+  readFlipyErrorCode,
+} from "@/lib/integrations/flipy/errors";
 
 const AUTH_SAFE_MESSAGES: Record<string, string> = {
   "invalid login credentials": "Correo o contraseña incorrectos.",
@@ -39,12 +44,23 @@ function mapAuthOrKnownMessage(message: string): string | null {
   return null;
 }
 
+function isPostgresOrPostgrestCode(code: string): boolean {
+  return /^\d{5}$/.test(code) || /^PGRST\d+$/i.test(code);
+}
+
 /**
  * Converts any thrown/returned error into a Spanish message safe for UI.
  * Never forwards raw database, stack, or credential details to the client.
  */
 export function toUserMessage(error: unknown): string {
   if (error instanceof AppError) return error.safeMessage;
+
+  if (error instanceof FlipyPartnerApiError) {
+    const hint = flipyErrorUserHint(readFlipyErrorCode(error));
+    if (hint) return hint;
+    if (error.message.length <= 180 && !looksSensitive(error.message)) return error.message;
+    return "No fue posible contactar Flipy. Inténtalo nuevamente.";
+  }
 
   if (typeof error === "string") {
     const mapped = mapAuthOrKnownMessage(error);
@@ -62,7 +78,7 @@ export function toUserMessage(error: unknown): string {
       const mapped = mapAuthOrKnownMessage(message);
       if (mapped) return mapped;
       // PostgREST / Postgres codes — never echo raw details
-      if (typeof record.code === "string" && /^[0-9A-Z]{2,}/.test(record.code)) {
+      if (typeof record.code === "string" && isPostgresOrPostgrestCode(record.code)) {
         if (record.code === "23505") return "Ya existe un registro con esos datos.";
         return "No se pudo completar la operación. Inténtalo nuevamente.";
       }
