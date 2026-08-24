@@ -77,7 +77,7 @@ export function FlipyConnectForm({
       }
       setSuccess(
         connected
-          ? "Flipy actualizado. La tienda partner quedó provisionada."
+          ? "Flipy actualizado. Configuración guardada y webhook re-registrado."
           : "Flipy conectado. Ya puedes crear envíos desde el detalle de pedidos.",
       );
       router.refresh();

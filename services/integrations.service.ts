@@ -50,6 +50,7 @@ import {
   generateFlipyWebhookSecret,
   packFlipyPartnerKey,
   packFlipyWebhookSecret,
+  readFlipyTiendaId,
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv, isFlipyConfigured } from "@/lib/integrations/flipy/env";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
@@ -1019,36 +1020,47 @@ export async function connectFlipyLive(
     externalStoreId: scope.storeId,
   });
 
-  const provision = await flipyClient.provisionTienda(
-    {
-      nombre,
-      contactEmail,
-      ruc: input.ruc?.trim() || null,
-      telefono: input.telefono?.trim() || null,
-      originAddress,
-      originLat: input.originLat,
-      originLng: input.originLng,
-      webhookUrl,
-    },
-    `codtracked:store:${scope.storeId}`,
-  );
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
+  const linkedTiendaId =
+    readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
+
+  const tiendaId = linkedTiendaId
+    ? linkedTiendaId
+    : (
+        await flipyClient.provisionTienda(
+          {
+            nombre,
+            contactEmail,
+            ruc: input.ruc?.trim() || null,
+            telefono: input.telefono?.trim() || null,
+            originAddress,
+            originLat: input.originLat,
+            originLng: input.originLng,
+            webhookUrl,
+          },
+          `codtracked:store:${scope.storeId}`,
+        )
+      ).tiendaId;
 
   try {
-    await flipyClient.registerWebhook(provision.tiendaId, {
+    await flipyClient.registerWebhook(tiendaId, {
       webhookUrl,
       webhookSecret,
     });
   } catch (error) {
     throw new IntegrationError(
       error instanceof Error
-        ? `Tienda provisionada pero webhook falló: ${error.message}`
-        : "Tienda provisionada pero webhook falló.",
+        ? linkedTiendaId
+          ? `Webhook Flipy falló: ${error.message}`
+          : `Tienda provisionada pero webhook falló: ${error.message}`
+        : linkedTiendaId
+          ? "No se pudo actualizar el webhook Flipy."
+          : "Tienda provisionada pero webhook falló.",
     );
   }
 
   const fingerprint = fingerprintFlipyPartnerKey(partnerKey);
   const now = new Date().toISOString();
-  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
 
   const settings = {
     ...(existing?.settings &&
@@ -1059,7 +1071,7 @@ export async function connectFlipyLive(
     origin_address: originAddress,
     origin_lat: input.originLat,
     origin_lng: input.originLng,
-    flipy_tienda_id: provision.tiendaId,
+    flipy_tienda_id: tiendaId,
     webhook_url: webhookUrl,
     webhook_secret_ref: webhookSecretRef,
     partner_key_fingerprint: fingerprint,
@@ -1085,7 +1097,7 @@ export async function connectFlipyLive(
     provider: "flipy" as const,
     status: "connected" as const,
     display_name: nombre,
-    external_account_id: provision.tiendaId,
+    external_account_id: tiendaId,
     external_account_name: "Flipy",
     secret_reference: secretRef,
     scopes: ["flipy:partner"],
