@@ -47,6 +47,8 @@ export type ShopifyOrderJobPayload = {
   customer?: ShopifyMappedCustomer;
   shipping?: ShopifyMappedShipping;
   line_items?: ShopifyMappedLineItem[];
+  shipping_lines?: Array<{ title?: string; code?: string }>;
+  note_attributes?: Array<{ name?: string | null; value?: string | null }>;
   payment_kind?: ShopifyMappedPayment["payment_kind"];
   payment_status?: ShopifyMappedPayment["payment_status"];
   expected_cod_amount?: number | null;
@@ -74,6 +76,8 @@ export type ShopifyRestOrder = {
     presentment_money?: { amount?: string | number | null; currency_code?: string | null } | null;
   } | null;
   shipping_lines?: Array<{
+    title?: string | null;
+    code?: string | null;
     price?: string | number | null;
     discounted_price?: string | number | null;
     price_set?: {
@@ -162,6 +166,32 @@ function moneyFromSet(
   return parseMoney(raw);
 }
 
+function mapRestShippingLines(
+  order: ShopifyRestOrder,
+): Array<{ title?: string; code?: string }> | undefined {
+  if (!Array.isArray(order.shipping_lines) || order.shipping_lines.length === 0) return undefined;
+  const lines = order.shipping_lines
+    .map((line) => ({
+      title: typeof line?.title === "string" ? line.title.trim() : undefined,
+      code: typeof line?.code === "string" ? line.code.trim() : undefined,
+    }))
+    .filter((line) => line.title || line.code);
+  return lines.length ? lines : undefined;
+}
+
+function mapGraphqlShippingLines(
+  node: ShopifyGraphqlOrderNode,
+): Array<{ title?: string; code?: string }> | undefined {
+  const edges = node.shippingLines?.edges ?? [];
+  const lines = edges
+    .map((edge) => ({
+      title: typeof edge?.node?.title === "string" ? edge.node.title.trim() : undefined,
+      code: undefined,
+    }))
+    .filter((line) => line.title);
+  return lines.length ? lines : undefined;
+}
+
 /** Prefer Shopify shipping totals; fall back to summing shipping_lines. */
 export function mapRestShippingAmount(order: ShopifyRestOrder): number {
   const fromCurrent = moneyFromSet(order.current_shipping_price_set);
@@ -223,6 +253,8 @@ function attachMappedParts(
     customer?: ShopifyMappedCustomer;
     shipping?: ShopifyMappedShipping;
     line_items: ShopifyMappedLineItem[];
+    shipping_lines?: Array<{ title?: string; code?: string }>;
+    note_attributes?: Array<{ name?: string | null; value?: string | null }>;
     payment: ShopifyMappedPayment;
     attribution?: ShopifyMappedAttribution;
   },
@@ -232,6 +264,8 @@ function attachMappedParts(
     ...(mapped.customer ? { customer: mapped.customer } : {}),
     ...(mapped.shipping ? { shipping: mapped.shipping } : {}),
     line_items: mapped.line_items,
+    ...(mapped.shipping_lines?.length ? { shipping_lines: mapped.shipping_lines } : {}),
+    ...(mapped.note_attributes?.length ? { note_attributes: mapped.note_attributes } : {}),
     payment_kind: mapped.payment.payment_kind,
     payment_status: mapped.payment.payment_status,
     expected_cod_amount: mapped.payment.expected_cod_amount,
@@ -287,6 +321,13 @@ export function mapRestOrderToCreatedPayload(order: ShopifyRestOrder): ShopifyOr
   return attachMappedParts(base, {
     ...customerShipping,
     line_items: mapRestLineItems(order.line_items),
+    shipping_lines: mapRestShippingLines(order),
+    note_attributes: Array.isArray(order.note_attributes)
+      ? order.note_attributes.map((row) => ({
+          name: row.name ?? undefined,
+          value: row.value ?? null,
+        }))
+      : undefined,
     payment,
     attribution: mapRestOrderAttribution({
       landing_site: order.landing_site,
@@ -347,6 +388,13 @@ export function mapGraphqlOrderToEnqueue(
   const payload = attachMappedParts(base, {
     ...customerShipping,
     line_items: mapGraphqlLineItems(node.lineItems?.edges),
+    shipping_lines: mapGraphqlShippingLines(node),
+    note_attributes: [
+      ...(node.customAttributes ?? []).map((row) => ({
+        name: row.key ?? undefined,
+        value: row.value ?? null,
+      })),
+    ],
     payment,
     // Prefer REST-style merge so GraphQL sync also picks up order.note (admin notes / UTM text).
     attribution: mapRestOrderAttribution({

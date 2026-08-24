@@ -53,6 +53,7 @@ import {
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv, isFlipyConfigured } from "@/lib/integrations/flipy/env";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
+import { ensureFlipyAutomationRules } from "@/lib/integrations/flipy/ensure-automations";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
 import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
@@ -1109,12 +1110,24 @@ export async function connectFlipyLive(
       .single();
     throwQueryError(result.error);
     if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo actualizar Flipy.");
+    await ensureFlipyAutomationRules({
+      admin: client,
+      agencyId: scope.agencyId,
+      storeId: scope.storeId,
+      userId: input.userId,
+    });
     return result.data;
   }
 
   const result = await client.from("integrations").insert(payload).select().single();
   throwQueryError(result.error);
   if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Flipy.");
+  await ensureFlipyAutomationRules({
+    admin: client,
+    agencyId: scope.agencyId,
+    storeId: scope.storeId,
+    userId: input.userId,
+  });
   return result.data;
 }
 

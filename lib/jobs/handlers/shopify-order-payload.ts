@@ -70,10 +70,32 @@ export const shopifyOrderLineItemsFieldsSchema = {
   line_items: z.array(shopifyMappedLineItemSchema).max(200).optional(),
 };
 
+export const shopifyMappedShippingLineSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    code: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+
+export const shopifyOrderShippingLineFieldsSchema = {
+  shipping_lines: z.array(shopifyMappedShippingLineSchema).max(20).optional(),
+};
+
 export const shopifyOrderPaymentFieldsSchema = {
   payment_kind: z.enum(["cod", "prepaid"]).optional(),
   payment_status: z.enum(["cash_expected", "unpaid", "refunded"]).optional(),
   expected_cod_amount: z.number().nonnegative().nullable().optional(),
+};
+
+export const shopifyMappedNoteAttributeSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    value: z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+
+export const shopifyOrderNoteAttributeFieldsSchema = {
+  note_attributes: z.array(shopifyMappedNoteAttributeSchema).max(80).optional(),
 };
 
 export const shopifyMappedAttributionSchema = z
@@ -109,8 +131,10 @@ export const shopifyOrderCreatedPayloadSchema = z.object({
   mode: z.enum(["mock", "live"]).optional(),
   ...shopifyOrderCustomerFieldsSchema,
   ...shopifyOrderLineItemsFieldsSchema,
+  ...shopifyOrderShippingLineFieldsSchema,
   ...shopifyOrderPaymentFieldsSchema,
   ...shopifyOrderAttributionFieldsSchema,
+  ...shopifyOrderNoteAttributeFieldsSchema,
 });
 
 export const shopifyOrderUpdatedPayloadSchema = z.object({
@@ -123,8 +147,10 @@ export const shopifyOrderUpdatedPayloadSchema = z.object({
   mode: z.enum(["mock", "live"]).optional(),
   ...shopifyOrderCustomerFieldsSchema,
   ...shopifyOrderLineItemsFieldsSchema,
+  ...shopifyOrderShippingLineFieldsSchema,
   ...shopifyOrderPaymentFieldsSchema,
   ...shopifyOrderAttributionFieldsSchema,
+  ...shopifyOrderNoteAttributeFieldsSchema,
 });
 
 export { ORDER_STATUSES };

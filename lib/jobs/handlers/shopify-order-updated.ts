@@ -103,6 +103,8 @@ export const handleShopifyOrderUpdated: JobHandler = async ({
       event: live ? "shopify.order.updated" : "shopify.order.updated.mock",
       mode: live ? "live" : "mock",
       ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
+      ...(data.shipping_lines?.length ? { shopify_shipping_lines: data.shipping_lines } : {}),
+      ...(data.note_attributes?.length ? { shopify_note_attributes: data.note_attributes } : {}),
       ...orderContactMetadataPatch(data.customer),
     } as Json,
   };

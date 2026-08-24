@@ -10,7 +10,8 @@ import { handleShopifyOrderUpdated } from "@/lib/jobs/handlers/shopify-order-upd
 import { handleWhatsappMessageReceived } from "@/lib/jobs/handlers/whatsapp-message-received";
 import { handleWhatsappStatusUpdated } from "@/lib/jobs/handlers/whatsapp-status-updated";
 import { handleWhatsappConfirmationRequest } from "@/lib/jobs/handlers/whatsapp-confirmation-request";
-import { handlePrivacyDataExport } from "@/lib/jobs/handlers/privacy-data-export";
+import { handleFlipyBidStaleCheck } from "@/lib/jobs/handlers/flipy-bid-stale-check";
+import { handleFlipyAutoCreateShipment } from "@/lib/jobs/handlers/flipy-auto-create-shipment";
 import type { JobHandler } from "@/lib/jobs/types";
 
 export const JOB_TYPES = [
@@ -35,6 +36,8 @@ export const JOB_TYPES = [
   "privacy.data_export.mock",
   "billing.subscription.updated",
   "billing.invoice.upserted",
+  "flipy.bid_stale.check",
+  "flipy.auto_create.shipment",
 ] as const;
 
 export type KnownJobType = (typeof JOB_TYPES)[number];
@@ -61,6 +64,8 @@ const registry: Record<KnownJobType, JobHandler> = {
   "privacy.data_export.mock": handlePrivacyDataExport,
   "billing.subscription.updated": handleBillingSubscriptionUpdated,
   "billing.invoice.upserted": handleBillingInvoiceUpserted,
+  "flipy.bid_stale.check": handleFlipyBidStaleCheck,
+  "flipy.auto_create.shipment": handleFlipyAutoCreateShipment,
 };
 
 export function getJobHandler(jobType: string): JobHandler | null {

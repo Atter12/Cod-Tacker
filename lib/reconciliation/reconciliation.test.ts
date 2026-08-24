@@ -17,6 +17,13 @@ import { getPreset } from "@/lib/reconciliation/presets";
 import { rowsToObjects } from "@/lib/reconciliation/csv";
 
 describe("reconciliation csv parser", () => {
+  it("includes flipy_cod preset", () => {
+    const preset = getPreset("flipy_cod");
+    assert.ok(preset);
+    assert.equal(preset?.mapping.tracking_number, "tracking");
+    assert.equal(preset?.mapping.gross_amount, "gross_amount");
+  });
+
   it("parses quoted commas and escaped quotes", () => {
     const { headers, rows } = parseCsv('a,b\n"hello, world","say ""hi"""\n');
     assert.deepEqual(headers, ["a", "b"]);

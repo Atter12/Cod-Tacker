@@ -5,6 +5,7 @@ import { ENVIAME_DEFAULT_MAPPINGS } from "@/lib/integrations/enviame/map-status"
 import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
 import { FLIPY_DEFAULT_MAPPINGS } from "@/lib/integrations/flipy/map-status";
 import { normalizeFlipyOrderExternalId } from "@/lib/integrations/flipy/map-webhook";
+import { enqueueFlipyStaleBidCheck } from "@/lib/integrations/flipy/enqueue-stale-bid-check";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import { applyShipmentEvent } from "@/lib/logistics/apply-shipment-event";
 import type { CarrierMappingRule } from "@/lib/logistics/normalize";
@@ -317,6 +318,26 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
       throw new PermanentJobError("DATABASE_ERROR", "No se pudo crear el envío.");
     }
     shipment = insert.data;
+
+    if (
+      isLive &&
+      carrierCode === "flipy" &&
+      (externalCode === "PENDIENTE_PUJAS" || externalCode === "BORRADOR")
+    ) {
+      try {
+        await enqueueFlipyStaleBidCheck({
+          admin,
+          agencyId: job.agency_id,
+          storeId: job.store_id,
+          orderId,
+          shipmentId: shipment.id,
+          externalShipmentId: shipment.external_shipment_id,
+          integrationId: job.integration_id,
+        });
+      } catch {
+        // Non-blocking scheduling for stale-bid alert.
+      }
+    }
   }
 
   const occurredAt = data.occurred_at ?? new Date().toISOString();

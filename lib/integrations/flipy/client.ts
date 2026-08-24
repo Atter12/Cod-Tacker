@@ -49,6 +49,7 @@ export type FlipyCreateEnvioInput = {
   destinationContact?: string | null;
   destinationPhone?: string | null;
   shopifyPayment?: Record<string, unknown>;
+  noteAttributes?: Array<{ name?: string | null; value?: string | null } | null> | null;
 };
 
 export type FlipyCreateEnvioResult = {
@@ -57,12 +58,37 @@ export type FlipyCreateEnvioResult = {
   trackingToken?: string | null;
   trackingUrl?: string | null;
   escenarioPago?: string | null;
+  appDeepLink?: string | null;
+  appWebUrl?: string | null;
+  pujasDeepLink?: string | null;
+  pujasWebUrl?: string | null;
 };
 
 export type FlipySaldoResult = {
   saldoOperaciones: number;
   saldoReservado?: number | null;
   warningBajo?: boolean;
+};
+
+export type FlipyWidgetTokenInput = {
+  scope?: string[];
+  orderContext: {
+    orderId: string;
+    externalOrderId: string;
+    envioId?: string;
+    prefillAddress?: string;
+    prefillLat?: number;
+    prefillLng?: number;
+  };
+};
+
+export type FlipyWidgetTokenResult = {
+  token: string;
+  expiresAt?: string | null;
+  embedUrl?: string | null;
+  ubicacionEmbedUrl?: string | null;
+  recargaEmbedUrl?: string | null;
+  pujasEmbedUrl?: string | null;
 };
 
 export class FlipyPartnerApiError extends Error {
@@ -196,6 +222,52 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       };
     },
 
+    async issueWidgetToken(input: FlipyWidgetTokenInput): Promise<FlipyWidgetTokenResult> {
+      const raw = await request<unknown>("/api/partner/widgets/token", {
+        method: "POST",
+        body: {
+          scope: input.scope ?? ["location_picker"],
+          orderContext: input.orderContext,
+        },
+      });
+      const bag = asRecord(raw) ?? {};
+      const token = readString(bag, "token", "widgetToken", "jwt");
+      if (!token) {
+        throw new FlipyPartnerApiError("Flipy no devolvió token de widget", 502);
+      }
+      return {
+        token,
+        embedUrl: readString(bag, "embedUrl", "embed_url", "url"),
+        ubicacionEmbedUrl: readString(bag, "ubicacionEmbedUrl", "ubicacion_embed_url"),
+        recargaEmbedUrl: readString(bag, "recargaEmbedUrl", "recarga_embed_url"),
+        pujasEmbedUrl: readString(bag, "pujasEmbedUrl", "pujas_embed_url"),
+        expiresAt: readString(bag, "expiresAt", "expires_at"),
+      };
+    },
+
+    async geocodeAddress(input: string): Promise<{ address: string; lat: number; lng: number } | null> {
+      const query = input.trim();
+      if (query.length < 4) return null;
+
+      const autocomplete = await request<{
+        success?: boolean;
+        predictions?: Array<{ placeId?: string; description?: string }>;
+      }>(`/api/partner/maps/autocomplete?input=${encodeURIComponent(query)}`, { method: "GET" });
+
+      const placeId = autocomplete.predictions?.[0]?.placeId;
+      if (!placeId) return null;
+
+      const details = await request<{
+        success?: boolean;
+        place?: { address?: string; lat?: number; lng?: number };
+      }>(`/api/partner/maps/place-details?placeId=${encodeURIComponent(placeId)}`, { method: "GET" });
+
+      const place = details.place;
+      if (!place || typeof place.lat !== "number" || typeof place.lng !== "number") return null;
+      const address = place.address?.trim() || autocomplete.predictions?.[0]?.description?.trim() || query;
+      return { address, lat: place.lat, lng: place.lng };
+    },
+
     async createEnvio(input: FlipyCreateEnvioInput, idempotencyKey: string): Promise<FlipyCreateEnvioResult> {
       const raw = await request<unknown>("/api/partner/envios", {
         method: "POST",
@@ -218,6 +290,7 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
           destinationContact: input.destinationContact ?? undefined,
           destinationPhone: input.destinationPhone ?? undefined,
           shopifyPayment: input.shopifyPayment ?? undefined,
+          noteAttributes: input.noteAttributes ?? undefined,
         },
       });
       const bag = asRecord(raw) ?? {};
@@ -231,6 +304,10 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         trackingToken: readString(bag, "trackingToken", "tracking_token"),
         trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
         escenarioPago: readString(bag, "escenarioPago", "escenario_pago"),
+        appDeepLink: readString(bag, "appDeepLink", "app_deep_link"),
+        appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
+        pujasDeepLink: readString(bag, "pujasDeepLink", "pujas_deep_link"),
+        pujasWebUrl: readString(bag, "pujasWebUrl", "pujas_web_url"),
       };
     },
   };

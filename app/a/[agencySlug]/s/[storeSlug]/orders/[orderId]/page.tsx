@@ -9,6 +9,9 @@ import {
   ConversionReleasePanel,
   type ConversionReleaseItem,
 } from "@/components/orders/ConversionReleasePanel";
+import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
+import { FlipyOrderLogisticsPanel } from "@/components/orders/FlipyOrderLogisticsPanel";
+import { FlipyShipmentPanel } from "@/components/orders/FlipyShipmentPanel";
 import { OrderActionsPanel } from "@/components/orders/OrderActionsPanel";
 import { OrderSourceBadge } from "@/components/orders/OrderSourceBadge";
 import { OrdersRealtimeBridge } from "@/components/orders/OrdersRealtimeBridge";
@@ -36,9 +39,14 @@ import { formatDateTime } from "@/lib/formatting/date";
 import { labelShipmentStatus } from "@/lib/logistics/labels";
 import { labelTimelineKind } from "@/lib/orders/labels";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
-import { can } from "@/lib/permissions/can";
+import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
+import { getFlipyEnv } from "@/lib/integrations/flipy/env";
+import { buildFlipyOrderShipmentContext } from "@/lib/integrations/flipy/order-shipment-context";
+import { readFlipyEmbedBidsEvalEnabled } from "@/lib/integrations/flipy/settings";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { can } from "@/lib/permissions/can";
+import { getByProvider } from "@/services/integrations.service";
 import { getOrderDetail } from "@/services/orders.service";
 
 function maskContact(
@@ -93,9 +101,13 @@ export default async function OrderDetailPage({
   if (!member.storeId || !can(member.roles, "orders.view")) notFound();
 
   const client = await createClient();
-  const [detail, storeResult] = await Promise.all([
+  const flipyLive = getIntegrationRuntimeMode() === "live";
+  const [detail, storeResult, flipyIntegration] = await Promise.all([
     getOrderDetail(client, member.storeId, p.orderId),
     client.from("stores").select("timezone").eq("id", member.storeId).maybeSingle(),
+    flipyLive
+      ? getByProvider(client, member.agencyId, member.storeId, "flipy")
+      : Promise.resolve(null),
   ]);
   if (!detail) notFound();
 
@@ -140,6 +152,20 @@ export default async function OrderDetailPage({
   const pendingConversions = conversionItems.filter(
     (item) => item.releaseStatus === "pending_review",
   ).length;
+  const flipyCtx = buildFlipyOrderShipmentContext(order, flipyIntegration?.settings);
+  const flipyConnected =
+    !!flipyIntegration &&
+    flipyIntegration.status !== "disconnected" &&
+    flipyIntegration.status !== "revoked";
+  const flipyEmbedOrigin = getFlipyEnv().embedOrigin;
+  const flipyAppOrigin = getFlipyEnv().appOrigin;
+  const showFlipyPanel = flipyLive && flipyConnected;
+  const flipyCanCreate =
+    showFlipyPanel && canManage && !flipyCtx.isPickup && !flipyCtx.flipyEnvioId;
+  const showFlipyBidsEmbed =
+    showFlipyPanel &&
+    flipyCtx.flipyEnvioId &&
+    readFlipyEmbedBidsEvalEnabled(flipyIntegration?.settings);
 
   return (
     <section className="min-w-0 space-y-5">
@@ -162,7 +188,33 @@ export default async function OrderDetailPage({
             <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
           </div>
         </div>
-        <div className="w-full min-w-0 max-w-md shrink-0 lg:ml-auto">
+        <div className="w-full min-w-0 max-w-md shrink-0 space-y-4 lg:ml-auto">
+          {showFlipyPanel ? (
+            <FlipyShipmentPanel
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              orderId={order.id}
+              orderNumber={order.order_number ?? order.external_order_id}
+              currencyCode={order.currency_code}
+              prefillAddress={flipyCtx.prefillAddress}
+              embedOrigin={flipyEmbedOrigin}
+              appOrigin={flipyAppOrigin}
+              paymentResolution={flipyCtx.payment}
+              flipyEnvioId={flipyCtx.flipyEnvioId}
+              flipyTrackingUrl={flipyCtx.flipyTrackingUrl}
+              canCreate={flipyCanCreate}
+              pickupOrder={flipyCtx.isPickup}
+            />
+          ) : null}
+          {showFlipyBidsEmbed && flipyCtx.flipyEnvioId ? (
+            <FlipyBidsEmbed
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              orderId={order.id}
+              envioId={flipyCtx.flipyEnvioId}
+              embedOrigin={flipyEmbedOrigin}
+            />
+          ) : null}
           <OrderActionsPanel
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
@@ -434,6 +486,24 @@ export default async function OrderDetailPage({
             label: "Logística",
             content: (
               <div className="space-y-3">
+                {flipyLive && (flipyCtx.flipyEnvioId || flipyCanCreate) ? (
+                  <FlipyOrderLogisticsPanel
+                    agencySlug={p.agencySlug}
+                    storeSlug={p.storeSlug}
+                    appOrigin={flipyAppOrigin}
+                    flipyEnvioId={flipyCtx.flipyEnvioId}
+                    flipyTrackingUrl={flipyCtx.flipyTrackingUrl}
+                    shipments={detail.shipments.map((row) => ({
+                      id: row.id,
+                      tracking_number: row.tracking_number,
+                      tracking_url: row.tracking_url,
+                      status: row.status,
+                      external_shipment_id: row.external_shipment_id,
+                      is_terminal: row.is_terminal,
+                      is_rto: row.is_rto,
+                    }))}
+                  />
+                ) : null}
                 {detail.shipments.length === 0 ? (
                   <LogisticsLatencyNotice mode="empty" />
                 ) : detail.shipments.some((row) => isLogisticsEventStale(row.last_event_at)) ? (

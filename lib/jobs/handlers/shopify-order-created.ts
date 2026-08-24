@@ -5,11 +5,21 @@ import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-it
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
 import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
-import { enqueueWhatsappCodConfirmationRequest } from "@/lib/integrations/whatsapp/enqueue-confirmation";
 import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import type { Json } from "@/types/database.generated";
 
 export { shopifyOrderCreatedPayloadSchema };
+
+async function enqueueWhatsappCodConfirmationRequest(
+  input: Parameters<
+    typeof import("@/lib/integrations/whatsapp/enqueue-confirmation").enqueueWhatsappCodConfirmationRequest
+  >[0],
+) {
+  const { enqueueWhatsappCodConfirmationRequest: enqueue } = await import(
+    "@/lib/integrations/whatsapp/enqueue-confirmation"
+  );
+  return enqueue(input);
+}
 
 function asObject(payload: Json): Record<string, unknown> {
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -203,6 +213,8 @@ export const handleShopifyOrderCreated: JobHandler = async ({
         event: live ? "shopify.order.created" : "shopify.order.created.mock",
         mode: live ? "live" : "mock",
         ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
+        ...(data.shipping_lines?.length ? { shopify_shipping_lines: data.shipping_lines } : {}),
+        ...(data.note_attributes?.length ? { shopify_note_attributes: data.note_attributes } : {}),
         ...orderContactMetadataPatch(data.customer),
       } as Json,
       tags: live ? ["jobs", "shopify", "live"] : ["jobs", "shopify", "mock"],
@@ -302,6 +314,23 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     });
   } catch {
     // Automations must not fail order ingest.
+  }
+
+  if (live) {
+    try {
+      const { enqueueFlipyAutoCreateShipment } = await import(
+        "@/lib/integrations/flipy/enqueue-auto-create"
+      );
+      await enqueueFlipyAutoCreateShipment({
+        admin,
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        orderId: insert.data.id,
+        integrationId: job.integration_id,
+      });
+    } catch {
+      // Flipy auto-create must not fail order ingest.
+    }
   }
 
   return {

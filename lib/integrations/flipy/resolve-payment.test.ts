@@ -216,6 +216,32 @@ describe("resolveShopifyFlipyPayment — edge cases", () => {
     assert.equal(r.codAmount, null);
     assert.equal(r.suggestedFlete, 12);
   });
+
+  it("F3-05: note_attributes escenario override", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "cod",
+      subtotal_amount: 89,
+      shipping_amount: 15,
+      total_amount: 104,
+      expected_cod_amount: 104,
+      shipping_lines: [{ title: "Envío" }],
+      note_attributes: [{ name: "flipy_escenario", value: "1A" }],
+    });
+    assert.equal(r.suggestedEscenario, "1A");
+    assert.ok(r.reasons.includes("note_attribute_escenario_override"));
+    assert.equal(r.requiresUserConfirmation, false);
+  });
+
+  it("F3-04: custom pickup keywords from integration settings", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "cod",
+      subtotal_amount: 50,
+      total_amount: 50,
+      shipping_lines: [{ title: "Click and collect Lima" }],
+      pickup_keywords: ["click and collect"],
+    });
+    assert.equal(r.fulfillmentMode, "pickup");
+  });
 });
 
 describe("flipy map-status — F0-2", () => {

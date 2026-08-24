@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
+import { FlipyAutoCreateSettings } from "@/components/integrations/FlipyAutoCreateSettings";
+import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
+import { FlipyEmbedBidsSettings } from "@/components/integrations/FlipyEmbedBidsSettings";
+import { FlipyPickupSettings } from "@/components/integrations/FlipyPickupSettings";
+import { FlipySaldoCard } from "@/components/integrations/FlipySaldoCard";
+import { FlipyWalletRecargaPanel } from "@/components/integrations/FlipyWalletRecargaPanel";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
 import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import { WhatsAppConnectForm } from "@/components/integrations/WhatsAppConnectForm";
@@ -25,6 +31,13 @@ import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
 import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
 import { readFlipyTiendaId } from "@/lib/integrations/flipy/credentials";
+import { getFlipyEnv } from "@/lib/integrations/flipy/env";
+import {
+  readFlipyAutoCreateEnabled,
+  readFlipyAutoCreateMinConfidence,
+  readFlipyEmbedBidsEvalEnabled,
+  readFlipyPickupKeywords,
+} from "@/lib/integrations/flipy/settings";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
 import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
 import { readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
@@ -168,6 +181,16 @@ export default async function IntegrationDetailPage({
         </Alert>
       ) : null}
 
+      {flipyProvider && flipyLive ? (
+        <Alert variant="info" title="Flipy live">
+          {connected
+            ? health?.safe_message
+              ? `Salud: ${health.safe_message}`
+              : "Carrier conectado. Usa «Probar conexión» para consultar saldo de billetera."
+            : "Conecta la tienda con el formulario de abajo para provisionar Flipy y registrar webhooks."}
+        </Alert>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-border bg-surface-elevated p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
@@ -251,6 +274,44 @@ export default async function IntegrationDetailPage({
         />
       ) : null}
 
+      {flipyProvider && flipyLive && connected && integration ? (
+        <>
+          <FlipySaldoCard integration={integration} storeId={member.storeId} />
+          <FlipyWalletRecargaPanel
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
+            embedOrigin={getFlipyEnv().embedOrigin}
+            appOrigin={getFlipyEnv().appOrigin}
+          />
+          {canManage ? (
+            <FlipyPickupSettings
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              defaultKeywords={readFlipyPickupKeywords(integration.settings)}
+            />
+          ) : null}
+          {canManage ? (
+            <FlipyAutoCreateSettings
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              defaultEnabled={readFlipyAutoCreateEnabled(integration.settings)}
+              defaultMinConfidence={readFlipyAutoCreateMinConfidence(integration.settings)}
+            />
+          ) : null}
+          {canManage ? (
+            <FlipyEmbedBidsSettings
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              defaultEnabled={readFlipyEmbedBidsEvalEnabled(integration.settings)}
+            />
+          ) : null}
+          <FlipyConciliacionExportPanel
+            apiBaseUrl={getFlipyEnv().apiBaseUrl}
+            flipyTiendaId={readFlipyTiendaId(integration.settings) ?? integration.external_account_id}
+          />
+        </>
+      ) : null}
+
       {flipyProvider && flipyLive && canManage && flipyWebhookUrl ? (
         <FlipyConnectForm
           agencySlug={p.agencySlug}
@@ -260,6 +321,10 @@ export default async function IntegrationDetailPage({
           flipyTiendaId={readFlipyTiendaId(integration?.settings) ?? integration?.external_account_id}
           defaultOriginAddress={flipyOrigin?.address}
         />
+      ) : null}
+
+      {flipyProvider && connected && integration && member.storeId && !flipyLive ? (
+        <FlipySaldoCard integration={integration} storeId={member.storeId} />
       ) : null}
 
       {whatsappLive && canManage ? (
@@ -317,9 +382,9 @@ export default async function IntegrationDetailPage({
         provider={p.provider}
         canManage={canManage}
         connected={connected}
-        hideMockConnect={shopifyLive || whatsappLive || (enviaProvider && liveMode)}
+        hideMockConnect={shopifyLive || whatsappLive || (enviaProvider && liveMode) || (flipyProvider && flipyLive)}
         liveProvider={
-          (shopifyLive || enviaProvider || adsLive || whatsappLive) && !isDemoIntegrationMode()
+          (shopifyLive || enviaProvider || flipyLive || adsLive || whatsappLive) && !isDemoIntegrationMode()
         }
         liveReconnectShop={shopDomain}
       />

@@ -46,12 +46,19 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | 3 | Sin smoke cruzado | `scripts/flipy-f1-smoke.ts` |
 | 4 | PARTNER doc disperso | `docs/PARTNER_CODTRACKED.md` canónico |
 
-### Gate F1 — checklist (marcar ✅ tras smoke local exitoso)
+### Gate F1 — checklist ✅ (2026-08-24, prod)
 
-- [ ] `npx tsx scripts/flipy-f1-smoke.ts` → provision + saldo + create + webhooks 200
-- [ ] `npm run jobs:process` → shipment `in_transit` → `delivered`
-- [ ] Connect UI CT → integración `connected` con `flipy_tienda_id`
-- [ ] Flipy repo: gates doc actualizado a F1 ✅ (espejo)
+| # | Criterio | Estado | Evidencia |
+| --- | --- | --- | --- |
+| 1 | `flipy-f1-smoke` → provision + saldo + create **200** | ✅ | Flipy prod API |
+| 2 | CT webhooks EN_CURSO + ENTREGADO **200** | ✅ | `holistic-ecommerce/flipy` — gate script |
+| 3 | `npm run jobs:process` → `in_transit` → `delivered` | ✅ | Shipment `pno6ljnbz4tilj6rbkbnvdw7` → `delivered` |
+| 4 | Connect UI → `connected` + `flipy_tienda_id` | ✅ | `flipy_tienda_id=cmt7pgzdl0003bgtxm020y9nx` |
+| 5 | Flipy gates doc espejo | ✅ | Ambos repos 2026-08-24 |
+
+**Tienda gate:** agenteP **Flipy** — `holistic-ecommerce/flipy`
+
+**F2 desbloqueado** — wizard modal, botón pedido, tab logística.
 
 ### COD-tracked F1 código (2026-08-24)
 
@@ -60,17 +67,67 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | CT1-01 … CT1-07 | ✅ |
 | Contrato v0.1.1 + client alignment | ✅ |
 | Smoke script | ✅ |
+| Gate close script + prod E2E | ✅ |
 
-**No iniciar F2** hasta cerrar checklist gate F1 arriba.
+**F2 desbloqueado** — ver checklist Fase 2 abajo.
 
 ---
 
-## Fase 2 — UI gate
+## Fase 2 — UI gate (código ✅ 2026-08-24, E2E manual pendiente)
 
-- [ ] Modal mapa confirma pin distinto a geocode Shopify
-- [ ] Escenario 1A desde pedido prepago + shipping
-- [ ] Recojo no muestra botón crear
-- [ ] Post-create CTA Flipy visible
+| # | Criterio | Código | E2E |
+| --- | --- | --- | --- |
+| 1 | Modal mapa confirma pin distinto a geocode Shopify | ✅ `FlipyCreateShipmentModal` + iframe `/partner/ubicacion` | ⏳ probar en pedido Flipy |
+| 2 | Escenario 1A desde pedido prepago + shipping | ✅ `FlipyPaymentStep` + `resolveFlipyPaymentForOrder` | ⏳ |
+| 3 | Recojo no muestra botón crear | ✅ `pickupOrder` / `fulfillmentMode=pickup` | ⏳ |
+| 4 | Post-create CTA Flipy visible | ✅ success step + `FlipyOrderLogisticsPanel` | ⏳ |
+| 5 | Saldo integración | ✅ `FlipySaldoCard` en `/integrations/flipy` | ⏳ |
+
+**Probar:** pedido en `holistic-ecommerce/flipy` → Crear envío Flipy → mapa → confirmar → tab Logística.
+
+---
+
+## Fase 3 — Polish gate (código ✅ 2026-08-24, E2E manual pendiente)
+
+| # | Criterio | Código CT | Código Flipy | E2E |
+| --- | --- | --- | --- | --- |
+| 1 | Embed recarga `/partner/recarga` + `flipy-wallet-topped-up` | ✅ `FlipyWalletEmbed` + widget `wallet_topup` | ✅ `/partner/recarga` + embed API | ⏳ |
+| 2 | Error `SALDO_INSUFICIENTE_HOLD` → CTA recarga | ✅ modal + `FlipyWalletRecargaPanel` | ✅ Partner API 400 + code | ⏳ |
+| 3 | Deep link operación post-create (pujas / envío) | ✅ `FLIPY_APP_ORIGIN` + `appWebUrl` API | ✅ `appDeepLink` / `appWebUrl` en create | ⏳ |
+| 4 | Settings reglas recojo por tienda | ✅ `FlipyPickupSettings` | — | ⏳ |
+| 5 | `note_attributes` escenario override | ✅ `resolve-payment` + `noteAttributes` en API | ✅ `resolveEscenarioPago` | ⏳ |
+| 6 | Alerta envío sin puja 24h | ✅ `flipy.bid_stale.check` + automation | — | ⏳ |
+
+### Alineación F3 cerrada (2026-08-24)
+
+| Tema | Contrato |
+| --- | --- |
+| Embed host | `FLIPY_EMBED_ORIGIN` → iframe `/partner/ubicacion` y `/partner/recarga` |
+| App tienda (pujas) | `FLIPY_APP_ORIGIN` → `https://tienda.flipyexpress.com` (o Expo web) |
+| postMessage recarga | `flipy-wallet-topped-up` `{ newBalance }` · error `flipy-wallet-error` |
+| Create envío | CT envía `noteAttributes`; Flipy devuelve `appWebUrl`, `appDeepLink`, `pujasWebUrl` |
+
+**Probar E2E F3** (tienda `holistic-ecommerce/flipy`):
+
+1. Saldo bajo → crear envío → CTA recarga → iframe Stripe test → postMessage saldo → reintentar create **200**.
+2. Post-create → “Abrir en Flipy (pujas)” abre `{FLIPY_APP_ORIGIN}/envios/{envioId}` (no link rastreo cliente).
+3. Pedido con `note_attributes` `flipy_escenario=1A` → escenario 1A en modal y en Partner API.
+
+---
+
+## Fase 4 — Automatización gate (código ✅ 2026-08-24, E2E manual pendiente)
+
+| # | Criterio | COD-tracked | Flipy | E2E |
+| --- | --- | --- | --- | --- |
+| 1 | Job auto-create envío con reglas tienda | ✅ `flipy.auto_create.shipment` + settings | — | ⏳ |
+| 2 | Conciliación export CSV settlement | ✅ preset `flipy_cod` + import wizard | ✅ `GET .../conciliacion/export?format=settlement` | ⏳ |
+| 3 | Embed panel pujas (evaluación) | ✅ `FlipyBidsEmbed` + scope `bids_panel` | ✅ `/partner/pujas` + embed API | ⏳ |
+
+**Probar E2E F4** (tienda `holistic-ecommerce/flipy`):
+
+1. Integraciones → activar auto-create (confianza alta) → pedido Shopify elegible → job crea envío sin modal.
+2. Export Flipy `format=settlement` → importar en Conciliación con preset Flipy → match pedidos entregados.
+3. Activar embed pujas → pedido con envío → iframe resumen pujas + CTA abrir app Flipy.
 
 ---
 
@@ -82,3 +139,15 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 4. Opera pujas/rastreo en Flipy (link claro).
 5. Recarga en Flipy (MVP) o embed (F3).
 6. Maestro + PARTNER + backlog + gates sincronizados en ambos repos.
+
+---
+
+## Changelog
+
+| Versión | Fecha | Cambios |
+| --- | --- | --- |
+| 1.0 | 2026-08-24 | Gates iniciales F0 |
+| 1.1 | 2026-08-24 | Sync CT: v0.1.1, F1 código ✅, gate checklist smoke |
+| 1.2 | 2026-08-24 | **F1 gate ✅** — tienda `holistic-ecommerce/flipy` |
+| 1.3 | 2026-08-24 | F2/F3 código CT; F3 alineado con Flipy (`FLIPY_APP_ORIGIN`, `noteAttributes`, deep links) |
+| 1.4 | 2026-08-24 | **F4 código** — auto-create, conciliación CSV, embed pujas evaluación |

@@ -22,6 +22,11 @@ export type FlipyShippingLineInput = {
   code?: string | null;
 };
 
+export type FlipyNoteAttributeInput = {
+  name?: string | null;
+  value?: string | null;
+};
+
 export type FlipyOrderPaymentInput = {
   payment_kind?: ShopifyPaymentKind | null;
   subtotal_amount?: number | null;
@@ -29,6 +34,8 @@ export type FlipyOrderPaymentInput = {
   total_amount?: number | null;
   expected_cod_amount?: number | null;
   shipping_lines?: Array<FlipyShippingLineInput | null> | null;
+  note_attributes?: Array<FlipyNoteAttributeInput | null> | null;
+  pickup_keywords?: string[] | null;
   financialStatus?: string | null;
   tags?: string[] | string | null;
   paymentGatewayNames?: string[] | string | null;
@@ -50,22 +57,56 @@ function amountsApprox(a: number, b: number): boolean {
 }
 
 function normalizePickupText(value: string): string {
-  return value.replace(/[_-]+/g, " ");
+  return value.replace(/[_-]+/g, " ").toLowerCase();
 }
 
-function isPickupShippingLine(line: FlipyShippingLineInput | null | undefined): boolean {
+function isPickupShippingLine(
+  line: FlipyShippingLineInput | null | undefined,
+  extraKeywords: string[],
+): boolean {
   if (!line) return false;
   const title = normalizePickupText(line.title?.trim() ?? "");
   const code = normalizePickupText(line.code?.trim() ?? "");
-  return PICKUP_TEXT.test(title) || PICKUP_TEXT.test(code);
+  if (PICKUP_TEXT.test(title) || PICKUP_TEXT.test(code)) return true;
+  return extraKeywords.some((keyword) => {
+    const normalized = normalizePickupText(keyword);
+    if (!normalized) return false;
+    return title.includes(normalized) || code.includes(normalized);
+  });
 }
 
 function detectFulfillmentMode(
   shippingLines: Array<FlipyShippingLineInput | null> | null | undefined,
+  extraKeywords: string[],
 ): "delivery" | "pickup" | "unknown" {
   if (!Array.isArray(shippingLines) || shippingLines.length === 0) return "unknown";
-  if (shippingLines.some((line) => isPickupShippingLine(line))) return "pickup";
+  if (shippingLines.some((line) => isPickupShippingLine(line, extraKeywords))) return "pickup";
   return "delivery";
+}
+
+const FLIPY_ESCENARIO_NOTE_KEYS = [
+  "flipy_escenario",
+  "flipy_escenario_pago",
+  "codtracked_flipy_escenario",
+  "flipy_pago_escenario",
+  "escenario_pago",
+  "escenario",
+] as const;
+
+function parseEscenarioOverride(
+  noteAttributes: Array<FlipyNoteAttributeInput | null> | null | undefined,
+): FlipyEscenarioPago | null {
+  if (!Array.isArray(noteAttributes)) return null;
+  for (const attr of noteAttributes) {
+    if (!attr) continue;
+    const name = attr.name?.trim().toLowerCase();
+    if (!name || !FLIPY_ESCENARIO_NOTE_KEYS.some((key) => key === name)) continue;
+    const value = attr.value?.trim().toUpperCase();
+    if (value === "1A" || value === "1C" || value === "1E" || value === "1D" || value === "GRATIS") {
+      return value;
+    }
+  }
+  return null;
 }
 
 function resolvePaymentKind(input: FlipyOrderPaymentInput): ShopifyPaymentKind {
@@ -90,7 +131,9 @@ function resolvePaymentKind(input: FlipyOrderPaymentInput): ShopifyPaymentKind {
  */
 export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): FlipyPaymentResolution {
   const reasons: string[] = [];
-  const fulfillmentMode = detectFulfillmentMode(input.shipping_lines);
+  const pickupKeywords = (input.pickup_keywords ?? []).map((entry) => entry.trim()).filter(Boolean);
+  const fulfillmentMode = detectFulfillmentMode(input.shipping_lines, pickupKeywords);
+  const escenarioOverride = parseEscenarioOverride(input.note_attributes);
 
   if (fulfillmentMode === "pickup") {
     reasons.push("shipping_line_indicates_pickup");
@@ -122,17 +165,18 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
 
     if (shipping > 0) {
       reasons.push("shipping_paid_at_checkout");
-      return {
+      const resolution: FlipyPaymentResolution = {
         fulfillmentMode,
         productPaidAtCheckout: true,
         shippingPaidAtCheckout: true,
-        suggestedEscenario: "1A",
+        suggestedEscenario: escenarioOverride ?? "1A",
         codAmount: null,
         suggestedFlete: shipping,
-        confidence: "high",
-        requiresUserConfirmation: false,
-        reasons,
+        confidence: escenarioOverride ? "high" : "high",
+        requiresUserConfirmation: escenarioOverride ? false : false,
+        reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
       };
+      return resolution;
     }
 
     reasons.push("prepaid_zero_shipping_confirm_flete");
@@ -140,12 +184,12 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
       fulfillmentMode,
       productPaidAtCheckout: true,
       shippingPaidAtCheckout: false,
-      suggestedEscenario: "1A",
+      suggestedEscenario: escenarioOverride ?? "1A",
       codAmount: null,
       suggestedFlete: null,
-      confidence: "medium",
-      requiresUserConfirmation: true,
-      reasons,
+      confidence: escenarioOverride ? "high" : "medium",
+      requiresUserConfirmation: escenarioOverride ? false : true,
+      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
     };
   }
 
@@ -165,12 +209,12 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
       fulfillmentMode,
       productPaidAtCheckout: false,
       shippingPaidAtCheckout: false,
-      suggestedEscenario: "1E",
+      suggestedEscenario: escenarioOverride ?? "1E",
       codAmount: subtotal > 0 ? subtotal : null,
       suggestedFlete: shipping > 0 ? shipping : null,
-      confidence: "high",
-      requiresUserConfirmation: true,
-      reasons,
+      confidence: escenarioOverride ? "high" : "high",
+      requiresUserConfirmation: escenarioOverride ? false : true,
+      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
     };
   }
 
@@ -180,12 +224,12 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
       fulfillmentMode,
       productPaidAtCheckout: false,
       shippingPaidAtCheckout: false,
-      suggestedEscenario: "1E",
+      suggestedEscenario: escenarioOverride ?? "1E",
       codAmount: subtotal,
       suggestedFlete: null,
-      confidence: "medium",
-      requiresUserConfirmation: true,
-      reasons,
+      confidence: escenarioOverride ? "high" : "medium",
+      requiresUserConfirmation: escenarioOverride ? false : true,
+      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
     };
   }
 
@@ -197,11 +241,11 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
     fulfillmentMode,
     productPaidAtCheckout: false,
     shippingPaidAtCheckout: false,
-    suggestedEscenario: "1E",
+    suggestedEscenario: escenarioOverride ?? "1E",
     codAmount: inferredCod > 0 ? inferredCod : null,
     suggestedFlete: shipping > 0 ? shipping : null,
-    confidence: "low",
-    requiresUserConfirmation: true,
-    reasons,
+    confidence: escenarioOverride ? "medium" : "low",
+    requiresUserConfirmation: escenarioOverride ? false : true,
+    reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
   };
 }
