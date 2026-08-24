@@ -12,6 +12,7 @@ import { handleWhatsappStatusUpdated } from "@/lib/jobs/handlers/whatsapp-status
 import { handleWhatsappConfirmationRequest } from "@/lib/jobs/handlers/whatsapp-confirmation-request";
 import { handleFlipyBidStaleCheck } from "@/lib/jobs/handlers/flipy-bid-stale-check";
 import { handleFlipyAutoCreateShipment } from "@/lib/jobs/handlers/flipy-auto-create-shipment";
+import { handlePrivacyDataExport } from "@/lib/jobs/handlers/privacy-data-export";
 import type { JobHandler } from "@/lib/jobs/types";
 
 export const JOB_TYPES = [

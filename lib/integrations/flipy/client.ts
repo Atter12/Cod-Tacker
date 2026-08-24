@@ -1,5 +1,6 @@
 import "server-only";
 
+import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
 import {
   buildFlipyProvisionRequestBody,
@@ -90,18 +91,6 @@ export type FlipyWidgetTokenResult = {
   recargaEmbedUrl?: string | null;
   pujasEmbedUrl?: string | null;
 };
-
-export class FlipyPartnerApiError extends Error {
-  readonly status: number;
-  readonly code?: string;
-
-  constructor(message: string, status: number, code?: string) {
-    super(message);
-    this.name = "FlipyPartnerApiError";
-    this.status = status;
-    this.code = code;
-  }
-}
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;

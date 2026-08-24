@@ -46,7 +46,6 @@ export async function ensureFlipyAutomationRules(input: {
       requires_manual_approval: data.requiresManualApproval,
       is_active: data.isActive,
       created_by: input.userId ?? null,
-      updated_by: input.userId ?? null,
     })
     .select("id")
     .maybeSingle();

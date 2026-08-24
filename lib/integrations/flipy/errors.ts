@@ -1,4 +1,14 @@
-import { FlipyPartnerApiError } from "@/lib/integrations/flipy/client";
+export class FlipyPartnerApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "FlipyPartnerApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 export const FLIPY_ERROR_CODES = {
   SALDO_INSUFICIENTE_HOLD: "SALDO_INSUFICIENTE_HOLD",
