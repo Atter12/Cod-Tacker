@@ -219,7 +219,7 @@ export function IntegrationActions({
               <Button size="sm" variant="outline" disabled={pending} onClick={startLiveOauthReconnect}>
                 {pending ? "Redirigiendo…" : "Reconectar (OAuth)"}
               </Button>
-            ) : liveProvider && (provider === "envia_com" || provider === "whatsapp") ? null : (
+            ) : liveProvider && (provider === "envia_com" || provider === "whatsapp" || provider === "flipy") ? null : (
               <Button
                 size="sm"
                 variant="outline"

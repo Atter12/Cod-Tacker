@@ -85,6 +85,7 @@ export function buildSyncEnqueueSpecs(input: {
       break;
     }
     case "enviame":
+    case "flipy":
     case "custom_carrier": {
       for (let i = 0; i < createdCount; i += 1) {
         specs.push({

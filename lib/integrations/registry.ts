@@ -28,6 +28,15 @@ import {
 } from "@/lib/integrations/envia/live-carrier";
 import { getEnviaEnv, resolveEnviaApiToken } from "@/lib/integrations/envia/env";
 import {
+  createLiveFlipyCarrierProvider,
+  type LiveFlipyCredentials,
+} from "@/lib/integrations/flipy/live-carrier";
+import {
+  readFlipyTiendaId,
+  resolveFlipyPartnerKeyFromIntegration,
+} from "@/lib/integrations/flipy/credentials";
+import { getFlipyEnv } from "@/lib/integrations/flipy/env";
+import {
   createLiveCommerceProvider,
   type LiveShopifyCredentials,
 } from "@/lib/integrations/shopify/live-commerce";
@@ -58,7 +67,7 @@ function assertMockAllowed(mode: IntegrationMode): void {
 
 function assertLiveProviderConfigured(kind: ProviderKind): never {
   throw new Error(
-    `Live ${kind} adapter is not configured. Shopify commerce, Meta/TikTok Ads, WhatsApp messaging, Enviame/Envia carriers, and CSV/Ecart settlement are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.`,
+    "Live ${kind} adapter is not configured. Shopify commerce, Meta/TikTok Ads, WhatsApp messaging, Enviame/Envia/Flipy carriers, and CSV/Ecart settlement are supported; set INTEGRATION_MODE=mock for other providers or implement the live adapter.",
   );
 }
 
@@ -123,10 +132,19 @@ export function getAdsProvider(
 
 export function getCarrierProvider(
   providerId: CarrierProvider["providerId"] = "enviame",
-  liveCreds?: LiveEnviameCredentials | LiveEnviaCredentials,
+  liveCreds?: LiveEnviameCredentials | LiveEnviaCredentials | LiveFlipyCredentials,
 ): CarrierProvider {
   const mode = resolveIntegrationMode();
   if (mode === "live") {
+    if (providerId === "flipy") {
+      const flipy = liveCreds as LiveFlipyCredentials | undefined;
+      if (!flipy?.partnerApiKey || !flipy.flipyTiendaId || !flipy.externalStoreId) {
+        throw new Error(
+          "Flipy live requiere FLIPY_PARTNER_API_KEY, tienda vinculada y store id. Reconecta Flipy.",
+        );
+      }
+      return createLiveFlipyCarrierProvider(providerId, flipy);
+    }
     if (providerId === "envia_com") {
       const env = getEnviaEnv();
       const token =
@@ -201,6 +219,31 @@ export function resolveLiveTikTokAdsCredentials(
   metadata: unknown,
 ): LiveTikTokAdsCredentials | null {
   return resolveTikTokAdsCredentials(settings, metadata);
+}
+
+/** Resolve live Flipy creds from integration JSON + env fallback. */
+export function resolveLiveFlipyCredentials(
+  integration: {
+    secret_reference?: string | null;
+    settings?: unknown;
+    metadata?: unknown;
+    external_account_id?: string | null;
+    store_id?: string | null;
+  },
+): LiveFlipyCredentials | null {
+  const partnerApiKey = resolveFlipyPartnerKeyFromIntegration(integration);
+  const flipyTiendaId =
+    readFlipyTiendaId(integration.settings) ?? integration.external_account_id?.trim() ?? null;
+  const externalStoreId = integration.store_id?.trim() ?? null;
+  if (!partnerApiKey || !flipyTiendaId || !externalStoreId) return null;
+  const env = getFlipyEnv();
+  return {
+    partnerApiKey,
+    flipyTiendaId,
+    externalStoreId,
+    apiBaseUrl: env.apiBaseUrl,
+    partnerId: env.partnerId,
+  };
 }
 
 export function getMessagingProvider(

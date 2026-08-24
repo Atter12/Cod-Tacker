@@ -4232,6 +4232,7 @@ export type Database = {
         | "whatsapp"
         | "enviame"
         | "envia_com"
+        | "flipy"
         | "custom_carrier"
         | "custom_erp"
         | "custom_call_center"
@@ -4508,6 +4509,7 @@ export const Constants = {
         "whatsapp",
         "enviame",
         "envia_com",
+        "flipy",
         "custom_carrier",
         "custom_erp",
         "custom_call_center",

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
+import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
 import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import { WhatsAppConnectForm } from "@/components/integrations/WhatsAppConnectForm";
@@ -21,6 +22,9 @@ import {
   labelSyncType,
 } from "@/lib/integrations/catalog";
 import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
+import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
+import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
+import { readFlipyTiendaId } from "@/lib/integrations/flipy/credentials";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
 import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
 import { readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
@@ -75,7 +79,9 @@ export default async function IntegrationDetailPage({
   const canManage = can(member.roles, "integrations.manage");
   const shopifyLive = p.provider === "shopify" && isShopifyConfigured();
   const enviaProvider = p.provider === "envia_com";
+  const flipyProvider = p.provider === "flipy";
   const liveMode = getIntegrationRuntimeMode() === "live";
+  const flipyLive = flipyProvider && liveMode;
   const metaLive = p.provider === "meta" && liveMode;
   const tiktokLive = p.provider === "tiktok" && liveMode;
   const whatsappLive = p.provider === "whatsapp" && liveMode;
@@ -88,6 +94,10 @@ export default async function IntegrationDetailPage({
   const enviaUrls = enviaProvider
     ? buildEnviaWebhookUrls(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
     : null;
+  const flipyWebhookUrl = flipyProvider
+    ? buildFlipyWebhookUrl(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
+    : null;
+  const flipyOrigin = flipyProvider ? readFlipyOriginFromSettings(integration?.settings) : null;
   const shopDomain =
     (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
     (integration?.metadata as { shop_domain?: string } | null)?.shop_domain ||
@@ -107,7 +117,7 @@ export default async function IntegrationDetailPage({
         <SectionHeader
           title={catalog?.name ?? p.provider}
           description={catalog?.description}
-          action={demo && !shopifyLive && !enviaProvider && !adsLive && !whatsappLive ? <DemoModeBadge /> : null}
+          action={demo && !shopifyLive && !enviaProvider && !flipyProvider && !adsLive && !whatsappLive ? <DemoModeBadge /> : null}
         />
       </div>
 
@@ -238,6 +248,17 @@ export default async function IntegrationDetailPage({
           storeWebhookUrl={enviaUrls.store}
           connected={connected}
           externalAccountId={integration?.external_account_id}
+        />
+      ) : null}
+
+      {flipyProvider && flipyLive && canManage && flipyWebhookUrl ? (
+        <FlipyConnectForm
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          webhookUrl={flipyWebhookUrl}
+          connected={connected}
+          flipyTiendaId={readFlipyTiendaId(integration?.settings) ?? integration?.external_account_id}
+          defaultOriginAddress={flipyOrigin?.address}
         />
       ) : null}
 

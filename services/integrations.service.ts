@@ -29,6 +29,7 @@ import {
   getIntegrationRuntimeMode,
   isDemoIntegrationMode,
   resolveLiveEnviameCredentials,
+  resolveLiveFlipyCredentials,
   resolveLiveMetaAdsCredentials,
   resolveLiveTikTokAdsCredentials,
   resolveLiveWhatsAppCredentials,
@@ -42,6 +43,16 @@ import { packWhatsAppAccessToken } from "@/lib/integrations/whatsapp/credentials
 import { getWhatsAppEnv, readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
 import { createLiveWhatsAppMessagingProvider } from "@/lib/integrations/whatsapp/live-messaging";
 import { AppError, IntegrationError, ValidationError } from "@/lib/errors";
+import { getPublicEnv } from "@/config/env";
+import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
+import {
+  fingerprintFlipyPartnerKey,
+  generateFlipyWebhookSecret,
+  packFlipyPartnerKey,
+  packFlipyWebhookSecret,
+} from "@/lib/integrations/flipy/credentials";
+import { getFlipyEnv, isFlipyConfigured } from "@/lib/integrations/flipy/env";
+import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { buildSyncEnqueueSpecs } from "@/lib/jobs/sync-enqueue-map";
 import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
@@ -144,6 +155,14 @@ export function resolveStoreProvider(provider: string): SyncAdapter {
         connectMock: () => adapter.connect({ credentialRef }),
       };
     }
+    case "flipy": {
+      const adapter = getCarrierProvider("flipy");
+      return {
+        sync: (input) => adapter.sync(input),
+        health: () => adapter.health(),
+        connectMock: () => adapter.connect({ credentialRef: `flipy:${credentialRef}` }),
+      };
+    }
     case "custom_carrier": {
       const adapter = getCarrierProvider("custom_carrier");
       return {
@@ -204,6 +223,22 @@ export async function resolveStoreProviderForIntegration(
       );
     }
     const adapter = getCarrierProvider("envia_com", { apiToken: token });
+    return {
+      sync: (input) => adapter.sync(input),
+      health: () => adapter.health(),
+      connectMock: async () => {
+        throw new IntegrationError("Conexión mock deshabilitada en modo live.");
+      },
+    };
+  }
+  if (provider === "flipy" && getIntegrationRuntimeMode() === "live") {
+    const creds = resolveLiveFlipyCredentials(integration);
+    if (!creds) {
+      throw new IntegrationError(
+        "Flipy live requiere FLIPY_PARTNER_API_KEY y tienda vinculada. Usa Conectar Flipy.",
+      );
+    }
+    const adapter = getCarrierProvider("flipy", creds);
     return {
       sync: (input) => adapter.sync(input),
       health: () => adapter.health(),
@@ -586,6 +621,16 @@ export async function disconnect(
     delete settings.token;
   }
 
+  if (provider === "flipy") {
+    delete settings.origin_address;
+    delete settings.origin_lat;
+    delete settings.origin_lng;
+    delete settings.flipy_tienda_id;
+    delete settings.webhook_url;
+    delete settings.webhook_secret_ref;
+    delete settings.partner_key_fingerprint;
+  }
+
   const result = await client
     .from("integrations")
     .update({
@@ -624,6 +669,11 @@ export async function reconnect(
   if (input.provider === "envia_com" && getIntegrationRuntimeMode() === "live") {
     throw new IntegrationError(
       "En modo live, actualiza Envia con el formulario de token (Conectar Envia), no con reconnect mock.",
+    );
+  }
+  if (input.provider === "flipy" && getIntegrationRuntimeMode() === "live") {
+    throw new IntegrationError(
+      "En modo live, actualiza Flipy con el formulario Conectar Flipy, no con reconnect mock.",
     );
   }
   if (input.provider === "meta" && getIntegrationRuntimeMode() === "live") {
@@ -894,6 +944,177 @@ export async function connectEnviaLive(
   const result = await client.from("integrations").insert(payload).select().single();
   throwQueryError(result.error);
   if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Envia.");
+  return result.data;
+}
+
+/**
+ * Live Flipy connect: provision partner tienda + register webhook.
+ */
+export async function connectFlipyLive(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    userId: string;
+    agencySlug: string;
+    storeSlug: string;
+    nombre: string;
+    ruc?: string | null;
+    email?: string | null;
+    telefono?: string | null;
+    originAddress: string;
+    originLat: number;
+    originLng: number;
+  },
+): Promise<IntegrationRow> {
+  const scope = assertStoreScope(input.agencyId, input.storeId);
+  if (!isFlipyConfigured()) {
+    throw new IntegrationError(
+      "FLIPY_PARTNER_API_KEY no configurada en el servidor. Añádela en Vercel antes de conectar.",
+    );
+  }
+
+  const nombre = input.nombre.trim();
+  const originAddress = input.originAddress.trim();
+  const contactEmail = input.email?.trim() ?? "";
+  if (!nombre) throw new ValidationError("Nombre de tienda requerido.");
+  if (!contactEmail) {
+    throw new ValidationError("Email de contacto requerido (contactEmail en Partner API Flipy).");
+  }
+  if (!originAddress) throw new ValidationError("Dirección de origen requerida.");
+  if (!Number.isFinite(input.originLat) || !Number.isFinite(input.originLng)) {
+    throw new ValidationError("Coordenadas de origen inválidas.");
+  }
+
+  const env = getFlipyEnv();
+  const partnerKey = env.partnerApiKey!;
+  let secretRef: string;
+  try {
+    secretRef = packFlipyPartnerKey(partnerKey);
+  } catch {
+    throw new IntegrationError(
+      "ENCRYPTION_KEY no configurada. No se puede guardar la partner key de forma segura.",
+    );
+  }
+
+  const webhookSecret = generateFlipyWebhookSecret();
+  let webhookSecretRef: string;
+  try {
+    webhookSecretRef = packFlipyWebhookSecret(webhookSecret);
+  } catch {
+    throw new IntegrationError("No se pudo cifrar el secret del webhook Flipy.");
+  }
+
+  const webhookUrl = buildFlipyWebhookUrl(
+    input.agencySlug,
+    input.storeSlug,
+    getPublicEnv().NEXT_PUBLIC_APP_URL,
+  );
+
+  const flipyClient = createFlipyPartnerClient({
+    baseUrl: env.apiBaseUrl,
+    partnerKey,
+    partnerId: env.partnerId,
+    externalStoreId: scope.storeId,
+  });
+
+  const provision = await flipyClient.provisionTienda(
+    {
+      nombre,
+      contactEmail,
+      ruc: input.ruc?.trim() || null,
+      telefono: input.telefono?.trim() || null,
+      originAddress,
+      originLat: input.originLat,
+      originLng: input.originLng,
+      webhookUrl,
+    },
+    `codtracked:store:${scope.storeId}`,
+  );
+
+  try {
+    await flipyClient.registerWebhook(provision.tiendaId, {
+      webhookUrl,
+      webhookSecret,
+    });
+  } catch (error) {
+    throw new IntegrationError(
+      error instanceof Error
+        ? `Tienda provisionada pero webhook falló: ${error.message}`
+        : "Tienda provisionada pero webhook falló.",
+    );
+  }
+
+  const fingerprint = fingerprintFlipyPartnerKey(partnerKey);
+  const now = new Date().toISOString();
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
+
+  const settings = {
+    ...(existing?.settings &&
+    typeof existing.settings === "object" &&
+    !Array.isArray(existing.settings)
+      ? (existing.settings as Record<string, unknown>)
+      : {}),
+    origin_address: originAddress,
+    origin_lat: input.originLat,
+    origin_lng: input.originLng,
+    flipy_tienda_id: provision.tiendaId,
+    webhook_url: webhookUrl,
+    webhook_secret_ref: webhookSecretRef,
+    partner_key_fingerprint: fingerprint,
+    ruc: input.ruc?.trim() || null,
+    email: contactEmail,
+    telefono: input.telefono?.trim() || null,
+  } as Record<string, unknown>;
+
+  const metadata = {
+    ...(existing?.metadata &&
+    typeof existing.metadata === "object" &&
+    !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {}),
+    mode: "live",
+    demo: false,
+    embed_origin: env.embedOrigin,
+  } as Record<string, unknown>;
+
+  const payload = {
+    agency_id: scope.agencyId,
+    store_id: scope.storeId,
+    provider: "flipy" as const,
+    status: "connected" as const,
+    display_name: nombre,
+    external_account_id: provision.tiendaId,
+    external_account_name: "Flipy",
+    secret_reference: secretRef,
+    scopes: ["flipy:partner"],
+    metadata: metadata as Json,
+    settings: settings as Json,
+    connected_at: now,
+    connected_by: input.userId,
+    last_error_at: null,
+    last_error_message: null,
+    last_success_at: now,
+    updated_at: now,
+  };
+
+  if (existing) {
+    const result = await client
+      .from("integrations")
+      .update(payload)
+      .eq("id", existing.id)
+      .eq("agency_id", scope.agencyId)
+      .eq("store_id", scope.storeId)
+      .select()
+      .single();
+    throwQueryError(result.error);
+    if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo actualizar Flipy.");
+    return result.data;
+  }
+
+  const result = await client.from("integrations").insert(payload).select().single();
+  throwQueryError(result.error);
+  if (!result.data) throw new AppError("DATABASE_ERROR", 500, "No se pudo conectar Flipy.");
   return result.data;
 }
 

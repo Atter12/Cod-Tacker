@@ -16,6 +16,7 @@ export type StoreIntegrationProvider = Extract<
   | "whatsapp"
   | "enviame"
   | "envia_com"
+  | "flipy"
   | "custom_carrier"
 >;
 
@@ -89,6 +90,12 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
     provider: "envia_com",
     name: "Envia.com",
     description: "Multi-carrier: tracking y webhooks onShipmentStatusUpdate.",
+    kind: "carrier",
+  },
+  {
+    provider: "flipy",
+    name: "Flipy",
+    description: "Última milla COD: pujas motorizados, billetera y rastreo vía Partner API.",
     kind: "carrier",
   },
   {

@@ -3,6 +3,8 @@ import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import { isNewlyDeliveredTerminal } from "@/lib/conversions/delivered-purchase-policy";
 import { ENVIAME_DEFAULT_MAPPINGS } from "@/lib/integrations/enviame/map-status";
 import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
+import { FLIPY_DEFAULT_MAPPINGS } from "@/lib/integrations/flipy/map-status";
+import { normalizeFlipyOrderExternalId } from "@/lib/integrations/flipy/map-webhook";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import { applyShipmentEvent } from "@/lib/logistics/apply-shipment-event";
 import type { CarrierMappingRule } from "@/lib/logistics/normalize";
@@ -37,7 +39,7 @@ export const carrierShipmentUpdatedPayloadSchema = z.object({
   occurred_at: z.string().min(1).max(80).optional(),
   demo_seed: z.string().min(1).max(200).optional(),
   /** DB carriers.code — enviame / envia_com for live, mock_carrier for demos. */
-  carrier_code: z.enum(["enviame", "envia_com", "mock_carrier", "custom_carrier"]).optional(),
+  carrier_code: z.enum(["enviame", "envia_com", "flipy", "mock_carrier", "custom_carrier"]).optional(),
   mode: z.enum(["live", "mock"]).optional(),
   source: z.string().min(1).max(80).optional(),
 });
@@ -51,13 +53,14 @@ function asObject(payload: Json): Record<string, unknown> {
 
 async function ensureCarrier(
   admin: JobsAdminClient,
-  code: "enviame" | "envia_com" | "mock_carrier" | "custom_carrier",
+  code: "enviame" | "envia_com" | "flipy" | "mock_carrier" | "custom_carrier",
 ): Promise<string> {
   const existing = await admin.from("carriers").select("id").eq("code", code).maybeSingle();
   if (existing.data) return existing.data.id;
 
   const isEnviame = code === "enviame";
   const isEnvia = code === "envia_com";
+  const isFlipy = code === "flipy";
   const created = await admin
     .from("carriers")
     .insert({
@@ -66,19 +69,23 @@ async function ensureCarrier(
         ? "Enviame"
         : isEnvia
           ? "Envia.com"
-          : code === "custom_carrier"
-            ? "Custom Carrier"
-            : "Mock Carrier",
+          : isFlipy
+            ? "Flipy"
+            : code === "custom_carrier"
+              ? "Custom Carrier"
+              : "Mock Carrier",
       country_codes: isEnviame || isEnvia ? ["CL", "PE", "MX"] : ["PE"],
       is_active: true,
       is_aggregator: isEnviame || isEnvia,
-      supports_polling: true,
-      supports_webhooks: isEnviame || isEnvia,
+      supports_polling: isEnviame || isEnvia,
+      supports_webhooks: isEnviame || isEnvia || isFlipy,
       metadata: (isEnviame
         ? { live: true, docs: "https://docs.enviame.io/docs/webhooks/" }
         : isEnvia
           ? { live: true, docs: "https://docs.envia.com/docs/webhooks" }
-          : { demo: true }) as Json,
+          : isFlipy
+            ? { live: true, partner: "codtracked" }
+            : { demo: true }) as Json,
     })
     .select("id")
     .single();
@@ -173,6 +180,7 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     data.mode === "live" ||
     data.carrier_code === "enviame" ||
     data.carrier_code === "envia_com" ||
+    data.carrier_code === "flipy" ||
     !job.job_type.endsWith(".mock");
   const carrierCode =
     data.carrier_code ?? (isLive ? "enviame" : "mock_carrier");
@@ -187,7 +195,9 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
         ? [...ENVIAME_DEFAULT_MAPPINGS]
         : carrierCode === "envia_com"
           ? [...ENVIA_DEFAULT_MAPPINGS]
-          : SHIPMENT_STATUSES.map((status) => ({
+          : carrierCode === "flipy"
+            ? [...FLIPY_DEFAULT_MAPPINGS]
+            : SHIPMENT_STATUSES.map((status) => ({
               external_status_code: status,
               normalized_status: status,
               is_rto: status === "returned" || status === "return_in_transit",
@@ -210,11 +220,15 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
   let orderId: string | null = shipment?.order_id ?? null;
 
   if (data.order_external_id) {
+    const normalizedExternalId =
+      carrierCode === "flipy"
+        ? normalizeFlipyOrderExternalId(data.order_external_id) ?? data.order_external_id
+        : data.order_external_id;
     const order = await admin
       .from("orders")
       .select("id")
       .eq("store_id", job.store_id)
-      .eq("external_order_id", data.order_external_id)
+      .eq("external_order_id", normalizedExternalId)
       .maybeSingle();
     if (order.data?.id) {
       // Prefer explicit external id; reject if it conflicts with an existing shipment link.
@@ -294,7 +308,7 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
           demo: !isLive,
           demo_seed: data.demo_seed ?? null,
           job_id: job.id,
-          source: data.source ?? (isLive ? "enviame" : "carrier.mock"),
+          source: data.source ?? (isLive ? (carrierCode === "flipy" ? "flipy" : "enviame") : "carrier.mock"),
         } as Json,
       })
       .select()

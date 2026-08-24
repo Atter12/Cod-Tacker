@@ -13,6 +13,7 @@ import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import {
   backfill as backfillIntegration,
   connectEnviaLive,
+  connectFlipyLive,
   connectMetaAdsLive,
   connectTikTokAdsLive,
   connectWhatsAppLive,
@@ -84,6 +85,59 @@ export async function connectEnviaLiveAction(
       },
     });
     revalidateIntegrationPaths(agencySlug, storeSlug, "envia_com");
+    return actionOk({ id: row.id });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+export async function connectFlipyLiveAction(
+  agencySlug: string,
+  storeSlug: string,
+  input: {
+    nombre: string;
+    ruc?: string;
+    email?: string;
+    telefono?: string;
+    originAddress: string;
+    originLat: number;
+    originLng: number;
+  },
+): Promise<IntegrationActionResult> {
+  try {
+    const { user, membership, client, storeId } = await loadManagedStore(agencySlug, storeSlug);
+    if (getIntegrationRuntimeMode() !== "live") {
+      throw new ValidationError("Flipy live requiere INTEGRATION_MODE=live.");
+    }
+    const row = await connectFlipyLive(client, {
+      agencyId: membership.agencyId,
+      storeId,
+      userId: user.id,
+      agencySlug,
+      storeSlug,
+      nombre: input.nombre,
+      ruc: input.ruc,
+      email: input.email,
+      telefono: input.telefono,
+      originAddress: input.originAddress,
+      originLat: input.originLat,
+      originLng: input.originLng,
+    });
+    await writeAuditLog({
+      action: "integration_connected",
+      entityType: "integration",
+      entityId: row.id,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      storeId,
+      newData: {
+        provider: "flipy",
+        status: row.status,
+        demo: false,
+        external_account_id: row.external_account_id,
+      },
+    });
+    revalidateIntegrationPaths(agencySlug, storeSlug, "flipy");
     return actionOk({ id: row.id });
   } catch (error) {
     return actionFail(error);

@@ -5,7 +5,7 @@ import type {
   ProviderSyncResult,
 } from "./common";
 
-export type CarrierProviderId = "enviame" | "envia_com" | "custom_carrier" | "other";
+export type CarrierProviderId = "enviame" | "envia_com" | "flipy" | "custom_carrier" | "other";
 
 export type CarrierTrackingSnapshot = {
   trackingNumber: string;

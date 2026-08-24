@@ -18,6 +18,7 @@ const PROVIDER_ICONS: Record<StoreIntegrationProvider, LucideIcon> = {
   whatsapp: MessageCircle,
   enviame: Truck,
   envia_com: Truck,
+  flipy: Truck,
   custom_carrier: Route,
 };
 
