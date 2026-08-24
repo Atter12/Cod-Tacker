@@ -6,6 +6,7 @@
 > - Backlog PRs: `FLIPY_INTEGRATION_BACKLOG.md`  
 > - Casos F0-1: `FLIPY_F0_SHOPIFY_PAYMENT_CASES.md`  
 > - Smoke F1: `scripts/flipy-f1-smoke.ts`
+> - Smoke F3/F4: `scripts/flipy-f3-f4-smoke.ts` (espejo Flipy `backend/scripts/flipy-f3-f4-smoke.js`)
 
 Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en ambos repos.
 
@@ -113,6 +114,8 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 2. Post-create → “Abrir en Flipy (pujas)” abre `{FLIPY_APP_ORIGIN}/envios/{envioId}` (no link rastreo cliente).
 3. Pedido con `note_attributes` `flipy_escenario=1A` → escenario 1A en modal y en Partner API.
 
+**Smoke API F3 (2026-08-24):** `npm run smoke:f3f4` → 17/17 PASS (Flipy prod; espejo CT valida mismos endpoints).
+
 ---
 
 ## Fase 4 — Automatización gate (código ✅ 2026-08-24, E2E manual pendiente)
@@ -128,6 +131,8 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 1. Integraciones → activar auto-create (confianza alta) → pedido Shopify elegible → job crea envío sin modal.
 2. Export Flipy `format=settlement` → importar en Conciliación con preset Flipy → match pedidos entregados.
 3. Activar embed pujas → pedido con envío → iframe resumen pujas + CTA abrir app Flipy.
+
+**Smoke API F4 (2026-08-24):** incluido en `smoke:f3f4` — conciliación csv/json/settlement + embed pujas.
 
 ---
 
@@ -151,3 +156,4 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | 1.2 | 2026-08-24 | **F1 gate ✅** — tienda `holistic-ecommerce/flipy` |
 | 1.3 | 2026-08-24 | F2/F3 código CT; F3 alineado con Flipy (`FLIPY_APP_ORIGIN`, `noteAttributes`, deep links) |
 | 1.4 | 2026-08-24 | **F4 código** — auto-create, conciliación CSV, embed pujas evaluación |
+| 1.5 | 2026-08-24 | Smoke F3/F4 API `scripts/flipy-f3-f4-smoke.ts` |

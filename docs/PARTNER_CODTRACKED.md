@@ -150,6 +150,25 @@ Pasos: provision → saldo → create envío 1E → webhook EN_CURSO + ENTREGADO
 
 ---
 
+## Smoke F3/F4 (prod)
+
+Script: `scripts/flipy-f3-f4-smoke.ts` (espejo de `flipy/backend/scripts/flipy-f3-f4-smoke.js`)
+
+```bash
+FLIPY_PARTNER_API_KEY=... \
+FLIPY_API_BASE_URL=https://flipy-backend.vercel.app \
+STORE_ID=60db8866-b5ff-4ca9-84c7-eacddaa72bd2 \
+TIENDA_ID=cmt7pgzdl0003bgtxm020y9nx \
+ORDER_EXTERNAL_ID=f3f4-smoke-001 \
+npm run smoke:f3f4
+```
+
+Cubre: widget recarga + embed wallet saldo, ubicación, saldo health, deep links, `noteAttributes` → `1C`, panel pujas + embed API, conciliación `csv`/`json`/`settlement`.
+
+**Prod (2026-08-24):** 17/17 PASS desde Flipy repo. CT espejo valida los mismos endpoints Partner API (sin top-up Prisma — asegurar saldo operaciones ≥ S/50 en tienda gate).
+
+---
+
 ## Changelog contrato
 
 | Versión | Cambio |

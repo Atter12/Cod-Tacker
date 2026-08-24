@@ -13,6 +13,8 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "clear:demo": "tsx scripts/clear-demo.ts",
     "jobs:process": "tsx scripts/process-jobs.ts",
+    "smoke:f1": "tsx scripts/flipy-f1-smoke.ts",
+    "smoke:f3f4": "tsx scripts/flipy-f3-f4-smoke.ts",
     "e2e:matrix": "tsx scripts/e2e-matrix.ts",
     "validate": "npm run lint && npm run typecheck && npm run test:unit && npm run build"
   },
