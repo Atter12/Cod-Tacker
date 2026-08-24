@@ -103,7 +103,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 
 | Tema | Contrato |
 | --- | --- |
-| Embed host | `FLIPY_EMBED_ORIGIN` → iframe `/partner/ubicacion` y `/partner/recarga` |
+| Embed host | `FLIPY_EMBED_ORIGIN` → `https://flipy-panel.vercel.app` (`/partner/ubicacion`, `/partner/recarga`, `/partner/pujas`) |
 | App tienda (pujas) | `FLIPY_APP_ORIGIN` → `https://tienda.flipyexpress.com` (o Expo web) |
 | postMessage recarga | `flipy-wallet-topped-up` `{ newBalance }` · error `flipy-wallet-error` |
 | Create envío | CT envía `noteAttributes`; Flipy devuelve `appWebUrl`, `appDeepLink`, `pujasWebUrl` |

@@ -7,6 +7,8 @@ import {
   buildFlipyBidsEmbedUrl,
   isAllowedFlipyPostMessageOrigin,
   resolveFlipyScopedEmbedUrl,
+  FLIPY_DEFAULT_APP_ORIGIN,
+  FLIPY_DEFAULT_EMBED_ORIGIN,
 } from "@/lib/integrations/flipy/embed-urls";
 import { parseFlipyWalletToppedUpMessage } from "@/lib/integrations/flipy/post-message";
 import {
@@ -18,67 +20,70 @@ import { signFlipyWebhook, verifyFlipyWebhookSignature } from "@/lib/integration
 describe("flipy embed-urls", () => {
   it("builds partner ubicacion iframe URL", () => {
     const url = buildFlipyLocationEmbedUrl({
-      embedOrigin: "https://app.flipy.pe",
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
       token: "jwt-token",
       prefillAddress: "Miraflores, Lima",
       prefillLat: -12.12,
       prefillLng: -77.03,
     });
-    assert.match(url, /^https:\/\/app\.flipy\.pe\/partner\/ubicacion\?/);
+    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/ubicacion\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /prefillAddress=Miraflores/);
   });
 
   it("builds partner recarga iframe URL", () => {
     const url = buildFlipyWalletEmbedUrl({
-      embedOrigin: "https://app.flipy.pe",
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
       token: "jwt-token",
     });
-    assert.match(url, /^https:\/\/app\.flipy\.pe\/partner\/recarga\?/);
+    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/recarga\?/);
     assert.match(url, /token=jwt-token/);
   });
 
   it("builds tienda operation web URL for envío", () => {
     const url = buildFlipyOperationWebUrl({
-      appOrigin: "https://tienda.flipyexpress.com",
+      appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
       envioId: "env123",
     });
     assert.equal(url, "https://tienda.flipyexpress.com/envios/env123");
   });
 
   it("builds tienda pujas fallback URL", () => {
-    const url = buildFlipyOperationWebUrl({ appOrigin: "https://tienda.flipyexpress.com" });
+    const url = buildFlipyOperationWebUrl({ appOrigin: FLIPY_DEFAULT_APP_ORIGIN });
     assert.equal(url, "https://tienda.flipyexpress.com/pujas");
   });
 
   it("builds partner pujas embed URL", () => {
     const url = buildFlipyBidsEmbedUrl({
-      embedOrigin: "https://app.flipy.pe",
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
       token: "jwt-token",
       envioId: "env123",
     });
-    assert.match(url, /^https:\/\/app\.flipy\.pe\/partner\/pujas\?/);
+    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/pujas\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /envioId=env123/);
   });
 
   it("validates postMessage origin against embed origin", () => {
     assert.equal(
-      isAllowedFlipyPostMessageOrigin("https://app.flipy.pe", "https://app.flipy.pe/partner"),
+      isAllowedFlipyPostMessageOrigin(
+        FLIPY_DEFAULT_EMBED_ORIGIN,
+        `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner`,
+      ),
       true,
     );
-    assert.equal(isAllowedFlipyPostMessageOrigin("https://evil.test", "https://app.flipy.pe"), false);
+    assert.equal(isAllowedFlipyPostMessageOrigin("https://evil.test", FLIPY_DEFAULT_EMBED_ORIGIN), false);
   });
 
   it("prefers scoped embed URL from Partner API", () => {
     const url = resolveFlipyScopedEmbedUrl({
       scope: "location_picker",
-      apiEmbedUrl: "https://app.flipy.pe/partner/ubicacion?token=abc",
-      embedOrigin: "https://app.flipy.pe",
-      appOrigin: "https://tienda.flipyexpress.com",
-      buildFallback: () => "https://app.flipy.pe/partner/ubicacion?token=fallback",
+      apiEmbedUrl: `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
+      appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+      buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=fallback`,
     });
-    assert.equal(url, "https://app.flipy.pe/partner/ubicacion?token=abc");
+    assert.equal(url, `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`);
   });
 
   it("rejects tienda app host for partner embeds", () => {
@@ -87,9 +92,9 @@ describe("flipy embed-urls", () => {
         resolveFlipyScopedEmbedUrl({
           scope: "location_picker",
           apiEmbedUrl: "https://tienda.flipyexpress.com/partner/ubicacion?token=abc",
-          embedOrigin: "https://app.flipy.pe",
-          appOrigin: "https://tienda.flipyexpress.com",
-          buildFallback: () => "https://app.flipy.pe/partner/ubicacion?token=fallback",
+          embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
+          appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+          buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=fallback`,
         }),
       /app tienda/,
     );

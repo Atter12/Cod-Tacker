@@ -6,6 +6,12 @@ export type FlipyLocationEmbedParams = {
   prefillLng?: number | null;
 };
 
+/** Prod partner embed host (web-app on Vercel). Not tienda.flipyexpress.com. */
+export const FLIPY_DEFAULT_EMBED_ORIGIN = "https://flipy-panel.vercel.app";
+
+/** Prod tienda app (pujas / envíos). Not used for partner iframes. */
+export const FLIPY_DEFAULT_APP_ORIGIN = "https://tienda.flipyexpress.com";
+
 export function normalizeFlipyEmbedOrigin(origin: string): string {
   return origin.replace(/\/$/, "");
 }

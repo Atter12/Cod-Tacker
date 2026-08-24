@@ -1,12 +1,17 @@
 import "server-only";
 
+import {
+  FLIPY_DEFAULT_APP_ORIGIN,
+  FLIPY_DEFAULT_EMBED_ORIGIN,
+} from "@/lib/integrations/flipy/embed-urls";
+
 /**
  * Flipy Partner API — server env.
  *
  * FLIPY_PARTNER_API_KEY   — shared secret (same as Flipy PARTNER_CODTRACKED_API_KEY)
  * FLIPY_API_BASE_URL      — default https://flipy-backend.vercel.app
- * FLIPY_EMBED_ORIGIN      — web-app partner iframe host (NOT tienda.flipyexpress.com); default https://app.flipy.pe
- * FLIPY_APP_ORIGIN        — app tienda web / deep links (pujas); default https://tienda.flipyexpress.com
+ * FLIPY_EMBED_ORIGIN      — partner iframe host (web-app); default https://flipy-panel.vercel.app
+ * FLIPY_APP_ORIGIN        — tienda app web / deep links; default https://tienda.flipyexpress.com
  */
 
 function readTrimmed(name: string): string | null {
@@ -30,8 +35,8 @@ export function getFlipyEnv(): FlipyEnv {
   return {
     partnerApiKey: readTrimmed("FLIPY_PARTNER_API_KEY"),
     apiBaseUrl: (readTrimmed("FLIPY_API_BASE_URL") ?? "https://flipy-backend.vercel.app").replace(/\/$/, ""),
-    embedOrigin: (readTrimmed("FLIPY_EMBED_ORIGIN") ?? "https://app.flipy.pe").replace(/\/$/, ""),
-    appOrigin: (readTrimmed("FLIPY_APP_ORIGIN") ?? "https://tienda.flipyexpress.com").replace(
+    embedOrigin: (readTrimmed("FLIPY_EMBED_ORIGIN") ?? FLIPY_DEFAULT_EMBED_ORIGIN).replace(/\/$/, ""),
+    appOrigin: (readTrimmed("FLIPY_APP_ORIGIN") ?? FLIPY_DEFAULT_APP_ORIGIN).replace(
       /\/$/,
       "",
     ),

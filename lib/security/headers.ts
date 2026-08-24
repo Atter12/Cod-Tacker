@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
+import { FLIPY_DEFAULT_EMBED_ORIGIN } from "../integrations/flipy/embed-urls";
 
 const production = process.env.NODE_ENV === "production";
 
 function readFlipyFrameSrcOrigins(): string {
   const configured = process.env.FLIPY_EMBED_ORIGIN?.trim().replace(/\/$/, "");
-  const defaults = ["https://tienda.flipyexpress.com", "https://app.flipy.pe"];
-  const origins = new Set<string>(defaults);
+  const origins = new Set<string>([FLIPY_DEFAULT_EMBED_ORIGIN]);
   if (configured) origins.add(configured);
   return Array.from(origins).join(" ");
 }
