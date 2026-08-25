@@ -106,8 +106,10 @@ export function FlipyCreateShipmentModal({
   const [destContactName, setDestContactName] = useState(customerName ?? "");
   const [destPhone, setDestPhone] = useState(customerPhone ?? "");
   const [destEmail, setDestEmail] = useState(customerEmail ?? "");
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [pickupEmbedUrl, setPickupEmbedUrl] = useState<string | null>(null);
+  const [deliveryEmbedUrl, setDeliveryEmbedUrl] = useState<string | null>(null);
   const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
+  const [originPinConfirmed, setOriginPinConfirmed] = useState(Boolean(storeOrigin));
 
   const [fletePrice, setFletePrice] = useState<string>(
     initialFleteInputValue(
@@ -151,6 +153,7 @@ export function FlipyCreateShipmentModal({
     setOriginLng(storeOrigin.lng);
     setOriginContactName(storeOrigin.contactName);
     setOriginPhone(storeOrigin.phone);
+    setOriginPinConfirmed(true);
   }
 
   function applyStoreContact() {
@@ -165,8 +168,10 @@ export function FlipyCreateShipmentModal({
     setErrorCode(null);
     setWalletEmbedUrl(null);
     setDestination(null);
-    setEmbedUrl(null);
+    setPickupEmbedUrl(null);
+    setDeliveryEmbedUrl(null);
     setResolvedEmbedOrigin(embedOrigin);
+    setOriginPinConfirmed(Boolean(storeOrigin));
     setResult(null);
     setNotes("");
     const nextEscenario =
@@ -191,9 +196,12 @@ export function FlipyCreateShipmentModal({
   }
 
   function validatePickup(): string | null {
-    if (!originAddress.trim()) return "Indica la dirección de recojo.";
+    if (!originAddress.trim()) return "Confirma o edita la dirección de recojo en el mapa.";
     if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
-      return "Faltan coordenadas de recojo. Usa la dirección de tu tienda Flipy.";
+      return "Confirma el pin de recojo en el mapa Flipy (o usa la dirección de tu tienda).";
+    }
+    if (!originPinConfirmed) {
+      return "Confirma el pin de recojo en el mapa (o pulsa “Usar dirección de mi tienda”).";
     }
     if (!originContactName.trim()) return "Indica quién entrega (nombre).";
     if (!isValidPeMobile(originPhone)) {
@@ -213,6 +221,27 @@ export function FlipyCreateShipmentModal({
       return "Celular de quién recibe: 9 dígitos PE (empieza en 9).";
     }
     return null;
+  }
+
+  function loadPickupEmbed() {
+    setError(null);
+    startTransition(async () => {
+      const tokenResult = await issueFlipyWidgetTokenAction({
+        agencySlug,
+        storeSlug,
+        orderId,
+        prefillAddress: storeOrigin?.address || originAddress || null,
+        prefillLat: storeOrigin?.lat ?? (Number.isFinite(originLat) ? originLat : null),
+        prefillLng: storeOrigin?.lng ?? (Number.isFinite(originLng) ? originLng : null),
+      });
+      if (tokenResult.error || !tokenResult.embedUrl) {
+        setError(tokenResult.error ?? "No se pudo cargar el mapa de recojo Flipy.");
+        return;
+      }
+      setPickupEmbedUrl(tokenResult.embedUrl);
+      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
+      setStep("pickup");
+    });
   }
 
   function loadDeliveryEmbed() {
@@ -235,7 +264,7 @@ export function FlipyCreateShipmentModal({
         setError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
         return;
       }
-      setEmbedUrl(tokenResult.embedUrl);
+      setDeliveryEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       setStep("delivery");
     });
@@ -435,11 +464,15 @@ export function FlipyCreateShipmentModal({
               <Button
                 disabled={pending}
                 onClick={() => {
-                  setError(null);
-                  setStep("pickup");
+                  if (pickupEmbedUrl) {
+                    setError(null);
+                    setStep("pickup");
+                    return;
+                  }
+                  loadPickupEmbed();
                 }}
               >
-                Siguiente: recojo
+                {pending ? "Cargando mapa…" : "Siguiente: recojo"}
               </Button>
             </div>
           </div>
@@ -455,7 +488,57 @@ export function FlipyCreateShipmentModal({
                 Usar datos de mi tienda
               </Button>
             </div>
-            <FormField label="Dirección de recojo" htmlFor="flipy-origin-address">
+            {pickupEmbedUrl ? (
+              <FlipyLocationEmbed
+                embedUrl={pickupEmbedUrl}
+                embedOrigin={resolvedEmbedOrigin}
+                agencySlug={agencySlug}
+                storeSlug={storeSlug}
+                purpose="pickup"
+                prefillAddress={storeOrigin?.address || originAddress || null}
+                prefillCoords={
+                  storeOrigin
+                    ? { lat: storeOrigin.lat, lng: storeOrigin.lng }
+                    : Number.isFinite(originLat) && Number.isFinite(originLng)
+                      ? { lat: originLat, lng: originLng }
+                      : null
+                }
+                mapHeightClassName="h-[min(64vh,580px)]"
+                onConfirmed={(next) => {
+                  setOriginAddress(next.address);
+                  setOriginLat(next.lat);
+                  setOriginLng(next.lng);
+                  setOriginPinConfirmed(true);
+                  setError(null);
+                }}
+              />
+            ) : (
+              <Alert variant="info" title="Mapa de recojo">
+                <div className="space-y-2">
+                  <p>Cargando mapa Flipy…</p>
+                  <Button size="sm" variant="outline" disabled={pending} onClick={() => loadPickupEmbed()}>
+                    Reintentar mapa
+                  </Button>
+                </div>
+              </Alert>
+            )}
+            {originPinConfirmed && originAddress ? (
+              <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-text-secondary">Recojo — dirección</p>
+                  <p className="font-medium">{originAddress}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-secondary">Recojo — pin</p>
+                  <p className="font-mono text-xs">
+                    {Number.isFinite(originLat) && Number.isFinite(originLng)
+                      ? formatCoordsLabel(originLat, originLng)
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <FormField label="Dirección de recojo (editable)" htmlFor="flipy-origin-address">
               <Input
                 id="flipy-origin-address"
                 value={originAddress}
@@ -463,15 +546,6 @@ export function FlipyCreateShipmentModal({
                 placeholder="Av. Larco 123, Miraflores"
               />
             </FormField>
-            {Number.isFinite(originLat) && Number.isFinite(originLng) ? (
-              <p className="text-xs text-text-secondary">
-                Coords recojo: {formatCoordsLabel(originLat, originLng)}
-              </p>
-            ) : (
-              <Alert variant="warning" title="Sin coords de tienda">
-                Conecta Flipy con origen completo o pega coords válidas vía “Usar dirección de mi tienda”.
-              </Alert>
-            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Quién entrega — nombre" htmlFor="flipy-origin-name">
                 <Input
@@ -501,13 +575,14 @@ export function FlipyCreateShipmentModal({
           </div>
         ) : null}
 
-        {step === "delivery" && embedUrl ? (
+        {step === "delivery" && deliveryEmbedUrl ? (
           <div className="space-y-3">
             <FlipyLocationEmbed
-              embedUrl={embedUrl}
+              embedUrl={deliveryEmbedUrl}
               embedOrigin={resolvedEmbedOrigin}
               agencySlug={agencySlug}
               storeSlug={storeSlug}
+              purpose="delivery"
               prefillAddress={prefillAddress}
               prefillCoords={prefillCoords}
               mapHeightClassName="h-[min(64vh,580px)]"

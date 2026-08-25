@@ -27,6 +27,8 @@ type Props = {
   prefillCoords?: { lat: number; lng: number } | null;
   /** Visual height of the map shell (Flipy-tienda-like). */
   mapHeightClassName?: string;
+  /** Copy + iframe title for recojo vs entrega. */
+  purpose?: "pickup" | "delivery";
   onConfirmed: (destination: FlipyDestination) => void;
 };
 
@@ -43,6 +45,7 @@ export function FlipyLocationEmbed({
   prefillAddress,
   prefillCoords,
   mapHeightClassName = "h-[min(62vh,560px)]",
+  purpose = "delivery",
   onConfirmed,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
@@ -172,12 +175,15 @@ export function FlipyLocationEmbed({
   }, []);
 
   const mapSrc = withMapInteractionParams(embedUrl);
+  const intro =
+    purpose === "pickup"
+      ? "Busca o confirma el punto de recojo en el mapa (como en Flipy tienda). Puedes usar la dirección de tu tienda y ajustar el pin."
+      : "Arrastra el pin y confirma la dirección exacta del cliente (no solo el geocode de Shopify).";
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-text-secondary">
-        Arrastra el pin y confirma la dirección exacta del cliente (no solo el geocode de Shopify).
-        Sobre el mapa, la rueda/trackpad hace zoom — no hace scroll del modal.
+        {intro} Sobre el mapa, la rueda/trackpad hace zoom — no hace scroll del modal.
       </p>
       <div
         ref={shellRef}
@@ -185,11 +191,10 @@ export function FlipyLocationEmbed({
         data-flipy-map-shell
       >
         <iframe
-          title="Mapa Flipy"
+          title={purpose === "pickup" ? "Mapa Flipy — recojo" : "Mapa Flipy — entrega"}
           src={mapSrc}
           className={`block w-full border-0 ${mapHeightClassName}`}
           allow="geolocation"
-          // Keep focusable so keyboard/trackpad gestures prefer the map frame.
           tabIndex={0}
         />
       </div>
