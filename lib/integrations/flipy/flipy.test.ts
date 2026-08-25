@@ -11,7 +11,7 @@ import {
   FLIPY_DEFAULT_APP_ORIGIN,
   FLIPY_DEFAULT_EMBED_ORIGIN,
 } from "@/lib/integrations/flipy/embed-urls";
-import { parseFlipyWalletToppedUpMessage } from "@/lib/integrations/flipy/post-message";
+import { parseFlipyLocationMessage, parseFlipyWalletToppedUpMessage } from "@/lib/integrations/flipy/post-message";
 import {
   mapFlipyWebhookToJobPayload,
   normalizeFlipyOrderExternalId,
@@ -120,6 +120,17 @@ describe("flipy post-message", () => {
     });
     assert.ok(parsed);
     assert.equal(parsed?.newBalance, 150.5);
+  });
+
+  it("parses nested location payload and latitude aliases", () => {
+    const msg = parseFlipyLocationMessage({
+      type: "flipy-location-confirmed",
+      payload: { direccion: "Av. Larco 1", latitude: -12.12, longitude: -77.03 },
+    });
+    assert.ok(msg);
+    assert.equal(msg?.address, "Av. Larco 1");
+    assert.equal(msg?.lat, -12.12);
+    assert.equal(msg?.lng, -77.03);
   });
 });
 

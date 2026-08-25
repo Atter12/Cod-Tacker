@@ -4,6 +4,11 @@ import {
   FLIPY_DEFAULT_MAPPINGS,
   resolveFlipyExternalStatusCode,
 } from "@/lib/integrations/flipy/map-status";
+import {
+  flipyEscenarioOptionsForUi,
+  initialFlipyEscenarioForUi,
+  isFlipyPrepaidFreight,
+} from "@/lib/integrations/flipy/labels";
 import { resolveShopifyFlipyPayment } from "@/lib/integrations/flipy/resolve-payment";
 
 describe("resolveShopifyFlipyPayment — F0-1 cases", () => {
@@ -241,6 +246,74 @@ describe("resolveShopifyFlipyPayment — edge cases", () => {
       pickup_keywords: ["click and collect"],
     });
     assert.equal(r.fulfillmentMode, "pickup");
+  });
+});
+
+describe("flipy modalidad UI — prepaid vs COD options", () => {
+  it("prepago + flete → lock 1A, sin radios COD", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "prepaid",
+      subtotal_amount: 75,
+      shipping_amount: 18,
+      total_amount: 93,
+      shipping_lines: [{ title: "Envío" }],
+    });
+    assert.equal(isFlipyPrepaidFreight(r), true);
+    assert.equal(initialFlipyEscenarioForUi(r), "1A");
+    assert.deepEqual(
+      flipyEscenarioOptionsForUi(r).map((o) => o.value),
+      [],
+    );
+  });
+
+  it("prepago sin flete en checkout → lock 1A (no consulta modalidad)", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "prepaid",
+      subtotal_amount: 55,
+      shipping_amount: 0,
+      total_amount: 55,
+    });
+    assert.equal(r.productPaidAtCheckout, true);
+    assert.equal(isFlipyPrepaidFreight(r), true);
+    assert.equal(initialFlipyEscenarioForUi(r), "1A");
+    assert.equal(flipyEscenarioOptionsForUi(r).length, 0);
+  });
+
+  it("COD sin prepago → solo 1C, 1E, 1D (nunca 1A)", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "cod",
+      subtotal_amount: 89,
+      shipping_amount: 15,
+      total_amount: 104,
+      expected_cod_amount: 104,
+      shipping_lines: [{ title: "Envío Lima" }],
+    });
+    assert.equal(isFlipyPrepaidFreight(r), false);
+    assert.equal(initialFlipyEscenarioForUi(r), "1E");
+    assert.deepEqual(
+      flipyEscenarioOptionsForUi(r).map((o) => o.value),
+      ["1C", "1E", "1D"],
+    );
+  });
+
+  it("sugerencia 1A por note en pedido COD → UI igual solo ofrece 1C/1E/1D", () => {
+    const r = resolveShopifyFlipyPayment({
+      payment_kind: "cod",
+      subtotal_amount: 89,
+      shipping_amount: 15,
+      total_amount: 104,
+      expected_cod_amount: 104,
+      shipping_lines: [{ title: "Envío" }],
+      note_attributes: [{ name: "flipy_escenario", value: "1A" }],
+    });
+    assert.equal(r.suggestedEscenario, "1A");
+    assert.equal(r.productPaidAtCheckout, false);
+    assert.equal(isFlipyPrepaidFreight(r), false);
+    assert.equal(initialFlipyEscenarioForUi(r), "1E");
+    assert.deepEqual(
+      flipyEscenarioOptionsForUi(r).map((o) => o.value),
+      ["1C", "1E", "1D"],
+    );
   });
 });
 

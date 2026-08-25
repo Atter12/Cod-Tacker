@@ -10,7 +10,10 @@ import {
   formatCoordsLabel,
   isWeakLocationAddress,
 } from "@/lib/integrations/flipy/destination-consistency";
-import { isAllowedFlipyPostMessageOrigin } from "@/lib/integrations/flipy/embed-urls";
+import {
+  isAllowedFlipyPostMessageOrigin,
+  withFlipyLocationClientParams,
+} from "@/lib/integrations/flipy/embed-urls";
 import { parseFlipyLocationMessage } from "@/lib/integrations/flipy/post-message";
 
 export type FlipyDestination = {
@@ -26,17 +29,15 @@ type Props = {
   storeSlug: string;
   prefillAddress?: string | null;
   prefillCoords?: { lat: number; lng: number } | null;
-  /** Visual height of the map shell (Flipy-tienda-like). */
   mapHeightClassName?: string;
-  /** Copy + iframe title for recojo vs entrega. */
   purpose?: "pickup" | "delivery";
   onConfirmed: (destination: FlipyDestination) => void;
 };
 
 /**
  * Host for Flipy `/partner/ubicacion`.
- * On confirm: always sync lat/lng (+ best address) to the parent; reverse-geocode
- * when the embed returns a weak address like "Perú".
+ * Syncs CT form fields whenever the embed posts location confirm/update.
+ * Fallback: paste pin lat/lng from the iframe and reverse-geocode.
  */
 export function FlipyLocationEmbed({
   embedUrl,
@@ -55,6 +56,12 @@ export function FlipyLocationEmbed({
   const [manualAddress, setManualAddress] = useState("");
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>(
+    "Esperando “Confirmar ubicación” del mapa…",
+  );
+  const [fallbackLat, setFallbackLat] = useState("");
+  const [fallbackLng, setFallbackLng] = useState("");
+  const [parentOrigin, setParentOrigin] = useState<string | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const onConfirmedRef = useRef(onConfirmed);
   onConfirmedRef.current = onConfirmed;
@@ -63,28 +70,41 @@ export function FlipyLocationEmbed({
   prefillAddressRef.current = prefillAddress;
   prefillCoordsRef.current = prefillCoords;
 
+  useEffect(() => {
+    setParentOrigin(window.location.origin);
+  }, []);
+
   function emitConfirmed(destination: FlipyDestination) {
     setPendingCoords(null);
     setWarning(null);
     setError(null);
-    setHint(`Ubicación aplicada: ${destination.address || formatCoordsLabel(destination.lat, destination.lng)}`);
+    setHint(`Dirección actualizada: ${destination.address || formatCoordsLabel(destination.lat, destination.lng)}`);
+    setSyncStatus(
+      `Sincronizado ${formatCoordsLabel(destination.lat, destination.lng)} → formulario`,
+    );
+    setFallbackLat(String(destination.lat));
+    setFallbackLng(String(destination.lng));
     onConfirmedRef.current(destination);
   }
 
-  async function enrichAndEmit(input: { address: string; lat: number; lng: number; reasons: string[] }) {
-    // Always push pin to parent first so recojo/entrega fields track the map.
+  async function enrichAndEmit(input: {
+    address: string;
+    lat: number;
+    lng: number;
+    reasons: string[];
+  }) {
     emitConfirmed({
       address: input.address.trim() || `Pin ${formatCoordsLabel(input.lat, input.lng)}`,
       lat: input.lat,
       lng: input.lng,
     });
 
+    if (!input.reasons.length && !isWeakLocationAddress(input.address)) {
+      return;
+    }
+
     setResolving(true);
-    setWarning(
-      input.reasons.length
-        ? `Mejorando dirección del pin (${input.reasons.join(", ")})…`
-        : "Obteniendo dirección del pin…",
-    );
+    setWarning("Obteniendo dirección textual del pin…");
     try {
       const reversed = await reverseGeocodeFlipyLocationAction({
         agencySlug,
@@ -105,45 +125,83 @@ export function FlipyLocationEmbed({
       setPendingCoords({ lat: input.lat, lng: input.lng });
       setManualAddress(input.address.trim());
       setWarning(
-        `Pin en ${formatCoordsLabel(input.lat, input.lng)} aplicado, pero el texto del mapa no es confiable` +
+        `Pin aplicado (${formatCoordsLabel(input.lat, input.lng)}), pero el texto del mapa no es confiable` +
           (input.address ? ` (“${input.address}”).` : ".") +
-          " Edita la dirección abajo o escribe una más precisa.",
+          " Edita la dirección abajo.",
       );
     } finally {
       setResolving(false);
     }
   }
 
+  function handleLocationFromEmbed(confirmed: {
+    address: string;
+    lat: number;
+    lng: number;
+    provisional?: boolean;
+  }) {
+    setFallbackLat(String(confirmed.lat));
+    setFallbackLng(String(confirmed.lng));
+    const consistency = evaluateDestinationConsistency({
+      address: confirmed.address,
+      lat: confirmed.lat,
+      lng: confirmed.lng,
+      prefillAddress: prefillAddressRef.current,
+      prefillCoords: prefillCoordsRef.current,
+    });
+    const weak = isWeakLocationAddress(confirmed.address);
+    if (weak || !consistency.ok) {
+      void enrichAndEmit({
+        address: confirmed.address,
+        lat: confirmed.lat,
+        lng: confirmed.lng,
+        reasons: [
+          ...(weak ? ["address_too_generic"] : []),
+          ...consistency.reasons.filter((r) => r !== "address_too_generic"),
+        ],
+      });
+      return;
+    }
+    emitConfirmed({
+      address: confirmed.address,
+      lat: confirmed.lat,
+      lng: confirmed.lng,
+    });
+  }
+
+  async function applyFallbackCoords() {
+    const lat = Number.parseFloat(fallbackLat.replace(",", "."));
+    const lng = Number.parseFloat(fallbackLng.replace(",", "."));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setError("Ingresa lat y lng numéricos del pin (como en “Pin: …” del mapa).");
+      return;
+    }
+    setError(null);
+    await enrichAndEmit({
+      address: "",
+      lat,
+      lng,
+      reasons: ["manual_pin_apply"],
+    });
+  }
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      if (!isAllowedFlipyPostMessageOrigin(event.origin, embedOrigin)) return;
+      if (!isAllowedFlipyPostMessageOrigin(event.origin, embedOrigin)) {
+        // Help diagnose silent drops (wrong host / parentOrigin).
+        if (
+          event.data &&
+          typeof event.data === "object" &&
+          typeof (event.data as { type?: string }).type === "string" &&
+          String((event.data as { type: string }).type).includes("location")
+        ) {
+          setSyncStatus(`Mensaje de mapa ignorado (origin ${event.origin})`);
+        }
+        return;
+      }
       const confirmed = parseFlipyLocationMessage(event.data);
       if (confirmed) {
-        const consistency = evaluateDestinationConsistency({
-          address: confirmed.address,
-          lat: confirmed.lat,
-          lng: confirmed.lng,
-          prefillAddress: prefillAddressRef.current,
-          prefillCoords: prefillCoordsRef.current,
-        });
-        const weak = isWeakLocationAddress(confirmed.address);
-        if (!consistency.ok || weak) {
-          void enrichAndEmit({
-            address: confirmed.address,
-            lat: confirmed.lat,
-            lng: confirmed.lng,
-            reasons: weak
-              ? [...consistency.reasons.filter((r) => r !== "address_too_generic"), "address_too_generic"]
-              : consistency.reasons,
-          });
-          return;
-        }
-        emitConfirmed({
-          address: confirmed.address,
-          lat: confirmed.lat,
-          lng: confirmed.lng,
-        });
-        setManualAddress(confirmed.address);
+        handleLocationFromEmbed(confirmed);
         return;
       }
       if (
@@ -156,6 +214,7 @@ export function FlipyLocationEmbed({
             ? (event.data as { message: string }).message
             : "No se pudo confirmar la ubicación.";
         setError(message);
+        setSyncStatus("Error del mapa Flipy");
       }
     }
     window.addEventListener("message", onMessage);
@@ -165,15 +224,12 @@ export function FlipyLocationEmbed({
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-
     function trapWheel(event: WheelEvent) {
       event.stopPropagation();
     }
-
     function trapTouchMove(event: TouchEvent) {
       event.stopPropagation();
     }
-
     shell.addEventListener("wheel", trapWheel, { capture: true, passive: true });
     shell.addEventListener("touchmove", trapTouchMove, { capture: true, passive: true });
     return () => {
@@ -182,17 +238,18 @@ export function FlipyLocationEmbed({
     };
   }, []);
 
-  const mapSrc = withMapInteractionParams(embedUrl);
+  const mapSrc = withFlipyLocationClientParams(embedUrl, parentOrigin);
   const intro =
     purpose === "pickup"
-      ? "Mueve el pin y pulsa “Confirmar ubicación” en el mapa para actualizar la dirección de recojo abajo."
+      ? "Mueve el pin y pulsa el botón verde “Confirmar ubicación” dentro del mapa. Eso actualiza “Dirección de recojo” abajo (mover el pin solo no alcanza)."
       : "Mueve el pin y pulsa “Confirmar ubicación” en el mapa para actualizar la dirección de entrega abajo.";
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-text-secondary">
-        {intro} Sobre el mapa, la rueda/trackpad hace zoom — no hace scroll del modal.
-      </p>
+      <Alert variant="info" title="Cómo actualizar la dirección">
+        {intro}
+      </Alert>
+      <p className="text-xs text-text-secondary">{syncStatus}</p>
       <div
         ref={shellRef}
         className="relative isolate overflow-hidden rounded-lg border border-border bg-zinc-950 overscroll-none"
@@ -209,6 +266,36 @@ export function FlipyLocationEmbed({
       </div>
       {resolving ? <p className="text-xs text-text-secondary">Actualizando dirección desde el pin…</p> : null}
       {hint ? <p className="text-xs text-emerald-600">{hint}</p> : null}
+
+      <div className="rounded-lg border border-dashed border-border p-3 space-y-2">
+        <p className="text-xs font-medium text-text-primary">
+          Si el mapa no sincroniza: copia lat/lng de “Pin: …” y aplica aquí
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <FormField label="Lat" htmlFor="flipy-fallback-lat">
+            <Input
+              id="flipy-fallback-lat"
+              inputMode="decimal"
+              value={fallbackLat}
+              onChange={(e) => setFallbackLat(e.target.value)}
+              placeholder="-12.11741"
+            />
+          </FormField>
+          <FormField label="Lng" htmlFor="flipy-fallback-lng">
+            <Input
+              id="flipy-fallback-lng"
+              inputMode="decimal"
+              value={fallbackLng}
+              onChange={(e) => setFallbackLng(e.target.value)}
+              placeholder="-77.01239"
+            />
+          </FormField>
+        </div>
+        <Button size="sm" disabled={resolving} onClick={() => void applyFallbackCoords()}>
+          {resolving ? "Geocodificando…" : "Aplicar pin → actualizar dirección"}
+        </Button>
+      </div>
+
       {warning ? (
         <Alert variant="warning" title="Dirección vs pin">
           <div className="space-y-2">
@@ -216,7 +303,11 @@ export function FlipyLocationEmbed({
             {pendingCoords ? (
               <>
                 <FormField
-                  label={purpose === "pickup" ? "Dirección de recojo (edición manual)" : "Dirección de entrega (edición manual)"}
+                  label={
+                    purpose === "pickup"
+                      ? "Dirección de recojo (edición manual)"
+                      : "Dirección de entrega (edición manual)"
+                  }
                   htmlFor="flipy-manual-dest"
                 >
                   <Input
@@ -251,19 +342,4 @@ export function FlipyLocationEmbed({
       ) : null}
     </div>
   );
-}
-
-function withMapInteractionParams(embedUrl: string): string {
-  try {
-    const url = new URL(embedUrl);
-    if (!url.searchParams.has("gestureHandling")) {
-      url.searchParams.set("gestureHandling", "greedy");
-    }
-    if (!url.searchParams.has("mapWheel")) {
-      url.searchParams.set("mapWheel", "zoom");
-    }
-    return url.toString();
-  } catch {
-    return embedUrl;
-  }
 }

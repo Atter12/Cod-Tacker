@@ -2,6 +2,7 @@
 
 export const FLIPY_MESSAGE_TYPES = {
   LOCATION_CONFIRMED: "flipy-location-confirmed",
+  LOCATION_UPDATED: "flipy-location-updated",
   LOCATION_ERROR: "flipy-location-error",
   WALLET_TOPPED_UP: "flipy-wallet-topped-up",
   WALLET_ERROR: "flipy-wallet-error",
@@ -11,10 +12,12 @@ export const FLIPY_MESSAGE_TYPES = {
 } as const;
 
 export type FlipyLocationConfirmedMessage = {
-  type: typeof FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED;
+  type: typeof FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED | typeof FLIPY_MESSAGE_TYPES.LOCATION_UPDATED;
   address: string;
   lat: number;
   lng: number;
+  /** true when this is a live pin drag (not final confirm). */
+  provisional?: boolean;
 };
 
 export type FlipyLocationErrorMessage = {
@@ -22,6 +25,43 @@ export type FlipyLocationErrorMessage = {
   code: string;
   message: string;
 };
+
+const LOCATION_TYPES = new Set([
+  FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED,
+  FLIPY_MESSAGE_TYPES.LOCATION_UPDATED,
+  "location-confirmed",
+  "location-updated",
+  "flipy_location_confirmed",
+  "flipy_location_updated",
+]);
+
+function readLocationCoords(msg: Record<string, unknown>): { lat: number; lng: number } | null {
+  const nested =
+    msg.payload && typeof msg.payload === "object" && !Array.isArray(msg.payload)
+      ? (msg.payload as Record<string, unknown>)
+      : msg.location && typeof msg.location === "object" && !Array.isArray(msg.location)
+        ? (msg.location as Record<string, unknown>)
+        : msg.coords && typeof msg.coords === "object" && !Array.isArray(msg.coords)
+          ? (msg.coords as Record<string, unknown>)
+          : msg;
+  const lat = Number(nested.lat ?? nested.latitude);
+  const lng = Number(nested.lng ?? nested.longitude ?? nested.lon ?? nested.long);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+function readLocationAddress(msg: Record<string, unknown>): string {
+  const nested =
+    msg.payload && typeof msg.payload === "object" && !Array.isArray(msg.payload)
+      ? (msg.payload as Record<string, unknown>)
+      : msg;
+  for (const key of ["address", "direccion", "formattedAddress", "formatted_address", "label"]) {
+    const value = nested[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
 
 export function parseFlipyLocationMessage(data: unknown): FlipyLocationConfirmedMessage | null {
   if (typeof data === "string") {
@@ -33,18 +73,23 @@ export function parseFlipyLocationMessage(data: unknown): FlipyLocationConfirmed
   }
   if (!data || typeof data !== "object") return null;
   const msg = data as Record<string, unknown>;
-  if (msg.type !== FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED) return null;
-  const lat = Number(msg.lat);
-  const lng = Number(msg.lng);
-  // Address may be empty when the pin moved but reverse-geocode failed — CT must still receive coords.
-  const address = typeof msg.address === "string" ? msg.address.trim() : "";
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  const typeRaw = typeof msg.type === "string" ? msg.type.trim() : "";
+  if (!typeRaw || !LOCATION_TYPES.has(typeRaw)) return null;
+  const coords = readLocationCoords(msg);
+  if (!coords) return null;
+  const provisional =
+    typeRaw === FLIPY_MESSAGE_TYPES.LOCATION_UPDATED ||
+    typeRaw === "location-updated" ||
+    typeRaw === "flipy_location_updated" ||
+    msg.provisional === true;
   return {
-    type: FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED,
-    address,
-    lat,
-    lng,
+    type: provisional
+      ? FLIPY_MESSAGE_TYPES.LOCATION_UPDATED
+      : FLIPY_MESSAGE_TYPES.LOCATION_CONFIRMED,
+    address: readLocationAddress(msg),
+    lat: coords.lat,
+    lng: coords.lng,
+    provisional,
   };
 }
 

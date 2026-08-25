@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createFlipyShipmentFromOrder } from "@/app/actions/flipy-shipments";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
@@ -23,7 +23,12 @@ import {
   initialFleteInputValue,
   validateFlipyFletePrice,
 } from "@/lib/integrations/flipy/flete-rules";
-import { FLIPY_ESCENARIO_OPTIONS } from "@/lib/integrations/flipy/labels";
+import {
+  flipyEscenarioOptionsForUi,
+  initialFlipyEscenarioForUi,
+  isFlipyPrepaidFreight,
+  labelFlipyEscenario,
+} from "@/lib/integrations/flipy/labels";
 import type { FlipyEscenarioPago, FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
 
 type Destination = { address: string; lat: number; lng: number };
@@ -86,14 +91,18 @@ export function FlipyCreateShipmentModal({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const prepaidFreight = isFlipyPrepaidFreight(paymentResolution);
+  const escenarioOptions = useMemo(
+    () => flipyEscenarioOptionsForUi(paymentResolution),
+    [paymentResolution],
+  );
+  const skippedPrepaidPaymentRef = useRef(false);
   const [step, setStep] = useState<Step>("payment");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
-  const [escenario, setEscenario] = useState<FlipyEscenarioPago>(
-    paymentResolution.suggestedEscenario && paymentResolution.suggestedEscenario !== "GRATIS"
-      ? paymentResolution.suggestedEscenario
-      : "1E",
+  const [escenario, setEscenario] = useState<FlipyEscenarioPago>(() =>
+    initialFlipyEscenarioForUi(paymentResolution),
   );
 
   const [originAddress, setOriginAddress] = useState(storeOrigin?.address ?? "");
@@ -113,14 +122,10 @@ export function FlipyCreateShipmentModal({
   const [originPinConfirmed, setOriginPinConfirmed] = useState(false);
   const [pickupMapNonce, setPickupMapNonce] = useState(0);
 
-  const [fletePrice, setFletePrice] = useState<string>(
-    initialFleteInputValue(
-      paymentResolution.suggestedEscenario && paymentResolution.suggestedEscenario !== "GRATIS"
-        ? paymentResolution.suggestedEscenario
-        : "1E",
-      paymentResolution.suggestedFlete,
-    ),
-  );
+  const [fletePrice, setFletePrice] = useState<string>(() => {
+    const next = initialFlipyEscenarioForUi(paymentResolution);
+    return initialFleteInputValue(next, paymentResolution.suggestedFlete);
+  });
   const [notes, setNotes] = useState("");
 
   const [result, setResult] = useState<{
@@ -195,6 +200,7 @@ export function FlipyCreateShipmentModal({
   }
 
   function resetFlow() {
+    skippedPrepaidPaymentRef.current = false;
     setStep("payment");
     setError(null);
     setErrorCode(null);
@@ -207,10 +213,7 @@ export function FlipyCreateShipmentModal({
     setPickupMapNonce(0);
     setResult(null);
     setNotes("");
-    const nextEscenario =
-      paymentResolution.suggestedEscenario && paymentResolution.suggestedEscenario !== "GRATIS"
-        ? paymentResolution.suggestedEscenario
-        : "1E";
+    const nextEscenario = initialFlipyEscenarioForUi(paymentResolution);
     setEscenario(nextEscenario);
     setFletePrice(initialFleteInputValue(nextEscenario, paymentResolution.suggestedFlete));
     setOriginAddress(storeOrigin?.address ?? "");
@@ -258,6 +261,7 @@ export function FlipyCreateShipmentModal({
 
   function loadPickupEmbed() {
     setError(null);
+    setEscenario((prev) => (prepaidFreight ? "1A" : prev));
     startTransition(async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
         agencySlug,
@@ -276,6 +280,22 @@ export function FlipyCreateShipmentModal({
       setStep("pickup");
     });
   }
+
+  /** Flete ya pagado en Shopify → 1A sin preguntar modalidad; salta a recojo. */
+  useEffect(() => {
+    if (!open) {
+      skippedPrepaidPaymentRef.current = false;
+      return;
+    }
+    if (!prepaidFreight || skippedPrepaidPaymentRef.current) return;
+    if (step !== "payment") return;
+    skippedPrepaidPaymentRef.current = true;
+    setEscenario("1A");
+    setFletePrice(initialFleteInputValue("1A", paymentResolution.suggestedFlete));
+    loadPickupEmbed();
+    // Intentionally only when the modal opens on prepaid freight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot skip on open
+  }, [open, prepaidFreight]);
 
   function loadDeliveryEmbed() {
     const pickupError = validatePickup();
@@ -427,8 +447,7 @@ export function FlipyCreateShipmentModal({
       })
     : null;
 
-  const escenarioLabel =
-    FLIPY_ESCENARIO_OPTIONS.find((o) => o.value === escenario)?.label ?? escenario;
+  const escenarioLabel = labelFlipyEscenario(escenario);
 
   return (
     <Dialog open={open} onOpenChange={closeModal} title={title} className="max-w-3xl">
@@ -455,41 +474,55 @@ export function FlipyCreateShipmentModal({
 
         {step === "payment" ? (
           <div className="space-y-3">
-            <Alert variant="info" title="Modalidad de pago">
-              Esto define COD vs prepago; el flete se fija después como oferta a los motorizados.
-            </Alert>
-            {paymentResolution.suggestedEscenario ? (
-              <p className="text-xs text-text-secondary">
-                Sugerido según Shopify:{" "}
-                <span className="font-medium text-text-primary">
-                  {paymentResolution.suggestedEscenario}
-                </span>
-              </p>
-            ) : null}
-            <fieldset className="space-y-2">
-              {FLIPY_ESCENARIO_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  className="flex cursor-pointer gap-3 rounded-lg border border-border p-3 hover:bg-muted/40"
-                >
-                  <input
-                    type="radio"
-                    name="flipy-escenario"
-                    value={opt.value}
-                    checked={escenario === opt.value}
-                    onChange={() => {
-                      setEscenario(opt.value);
-                      setFletePrice(initialFleteInputValue(opt.value, paymentResolution.suggestedFlete));
-                    }}
-                    className="mt-1"
-                  />
-                  <span>
-                    <span className="font-medium">{opt.label}</span>
-                    <span className="mt-0.5 block text-xs text-text-secondary">{opt.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+            {prepaidFreight ? (
+              <Alert variant="info" title="Prepago en Shopify">
+                Modalidad 1A aplicada automáticamente (pedido/flete ya pagado). No se consulta cobro al
+                cliente.
+              </Alert>
+            ) : (
+              <>
+                <Alert variant="info" title="Modalidad de pago">
+                  El pedido no viene prepago desde Shopify. Elige cómo cobrará el motorizado (solo 1C,
+                  1E o 1D).
+                </Alert>
+                {paymentResolution.suggestedEscenario === "1C" ||
+                paymentResolution.suggestedEscenario === "1E" ||
+                paymentResolution.suggestedEscenario === "1D" ? (
+                  <p className="text-xs text-text-secondary">
+                    Sugerido según Shopify:{" "}
+                    <span className="font-medium text-text-primary">
+                      {paymentResolution.suggestedEscenario}
+                    </span>
+                  </p>
+                ) : null}
+                <fieldset className="space-y-2">
+                  {escenarioOptions.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className="flex cursor-pointer gap-3 rounded-lg border border-border p-3 hover:bg-muted/40"
+                    >
+                      <input
+                        type="radio"
+                        name="flipy-escenario"
+                        value={opt.value}
+                        checked={escenario === opt.value}
+                        onChange={() => {
+                          setEscenario(opt.value);
+                          setFletePrice(
+                            initialFleteInputValue(opt.value, paymentResolution.suggestedFlete),
+                          );
+                        }}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="font-medium">{opt.label}</span>
+                        <span className="mt-0.5 block text-xs text-text-secondary">{opt.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              </>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => closeModal(false)}>
                 Cancelar

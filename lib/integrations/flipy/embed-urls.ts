@@ -130,10 +130,34 @@ export function ensureFlipyMapWheelZoomParams(embedUrl: string): string {
 }
 
 export function isAllowedFlipyPostMessageOrigin(origin: string, embedOrigin: string): boolean {
+  const candidates = [
+    embedOrigin,
+    FLIPY_DEFAULT_EMBED_ORIGIN,
+    FLIPY_DEFAULT_APP_ORIGIN,
+  ];
+  return candidates.some((entry) => {
+    try {
+      return (
+        new URL(origin).origin === new URL(normalizeFlipyEmbedOrigin(entry)).origin
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Append map UX + parentOrigin so Flipy can postMessage back to this host. */
+export function withFlipyLocationClientParams(embedUrl: string, parentOrigin?: string | null): string {
   try {
-    return new URL(origin).origin === new URL(normalizeFlipyEmbedOrigin(embedOrigin)).origin;
+    const url = new URL(embedUrl);
+    if (!url.pathname.includes("/partner/ubicacion")) return embedUrl;
+    url.searchParams.set("gestureHandling", "greedy");
+    url.searchParams.set("mapWheel", "zoom");
+    const parent = parentOrigin?.trim();
+    if (parent) url.searchParams.set("parentOrigin", parent);
+    return url.toString();
   } catch {
-    return false;
+    return embedUrl;
   }
 }
 
