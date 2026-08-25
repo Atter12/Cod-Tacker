@@ -7,7 +7,7 @@ import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, resolveFlipyScopedEmbedUrl } from "@/lib/integrations/flipy/embed-urls";
+import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -168,6 +168,9 @@ export async function issueFlipyWidgetTokenAction(input: {
                     prefillLng: input.prefillLng,
                   }),
               });
+      if (scope === "location_picker") {
+        embedUrl = ensureFlipyMapWheelZoomParams(embedUrl);
+      }
     } catch (error) {
       throw new IntegrationError(
         error instanceof Error ? error.message : "No se pudo resolver la URL del embed Flipy.",

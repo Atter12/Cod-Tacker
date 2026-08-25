@@ -101,6 +101,9 @@ export function buildFlipyLocationEmbedUrl(input: FlipyLocationEmbedParams): str
   const base = normalizeFlipyEmbedOrigin(input.embedOrigin);
   const url = new URL(`${base}/partner/ubicacion`);
   url.searchParams.set("token", input.token);
+  // Partner map UX: wheel/trackpad zooms like Flipy tienda (greedy), not page scroll.
+  url.searchParams.set("gestureHandling", "greedy");
+  url.searchParams.set("mapWheel", "zoom");
   if (input.prefillAddress?.trim()) {
     url.searchParams.set("prefillAddress", input.prefillAddress.trim());
   }
@@ -111,6 +114,19 @@ export function buildFlipyLocationEmbedUrl(input: FlipyLocationEmbedParams): str
     url.searchParams.set("lng", String(input.prefillLng));
   }
   return url.toString();
+}
+
+/** Ensure API-returned ubicacion URLs also request greedy map wheel zoom. */
+export function ensureFlipyMapWheelZoomParams(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl);
+    if (!url.pathname.includes("/partner/ubicacion")) return embedUrl;
+    url.searchParams.set("gestureHandling", "greedy");
+    url.searchParams.set("mapWheel", "zoom");
+    return url.toString();
+  } catch {
+    return embedUrl;
+  }
 }
 
 export function isAllowedFlipyPostMessageOrigin(origin: string, embedOrigin: string): boolean {

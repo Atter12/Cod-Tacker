@@ -5,6 +5,7 @@ import {
   buildFlipyWalletEmbedUrl,
   buildFlipyOperationWebUrl,
   buildFlipyBidsEmbedUrl,
+  ensureFlipyMapWheelZoomParams,
   isAllowedFlipyPostMessageOrigin,
   resolveFlipyScopedEmbedUrl,
   FLIPY_DEFAULT_APP_ORIGIN,
@@ -29,6 +30,8 @@ describe("flipy embed-urls", () => {
     assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/ubicacion\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /prefillAddress=Miraflores/);
+    assert.match(url, /gestureHandling=greedy/);
+    assert.match(url, /mapWheel=zoom/);
   });
 
   it("builds partner recarga iframe URL", () => {
@@ -98,6 +101,14 @@ describe("flipy embed-urls", () => {
       url,
       `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc&lat=-12.1`,
     );
+  });
+
+  it("ensures greedy map wheel params on ubicacion URLs", () => {
+    const url = ensureFlipyMapWheelZoomParams(
+      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
+    );
+    assert.match(url, /gestureHandling=greedy/);
+    assert.match(url, /mapWheel=zoom/);
   });
 });
 

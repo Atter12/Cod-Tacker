@@ -369,7 +369,7 @@ export function FlipyCreateShipmentModal({
     FLIPY_ESCENARIO_OPTIONS.find((o) => o.value === escenario)?.label ?? escenario;
 
   return (
-    <Dialog open={open} onOpenChange={closeModal} title={title} className="max-w-2xl">
+    <Dialog open={open} onOpenChange={closeModal} title={title} className="max-w-3xl">
       <div className="space-y-4 text-sm">
         <p className="text-text-secondary">
           Pedido <span className="font-medium text-text-primary">{orderNumber}</span>
@@ -510,6 +510,7 @@ export function FlipyCreateShipmentModal({
               storeSlug={storeSlug}
               prefillAddress={prefillAddress}
               prefillCoords={prefillCoords}
+              mapHeightClassName="h-[min(64vh,580px)]"
               onConfirmed={(next) => {
                 setDestination(next);
                 setError(null);

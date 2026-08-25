@@ -25,9 +25,16 @@ type Props = {
   storeSlug: string;
   prefillAddress?: string | null;
   prefillCoords?: { lat: number; lng: number } | null;
+  /** Visual height of the map shell (Flipy-tienda-like). */
+  mapHeightClassName?: string;
   onConfirmed: (destination: FlipyDestination) => void;
 };
 
+/**
+ * Host for Flipy `/partner/ubicacion`.
+ * Keeps wheel/trackpad over the map from scrolling the CT dialog; tall shell
+ * reduces nested scroll inside the iframe (which steals zoom from Google Maps).
+ */
 export function FlipyLocationEmbed({
   embedUrl,
   embedOrigin,
@@ -35,6 +42,7 @@ export function FlipyLocationEmbed({
   storeSlug,
   prefillAddress,
   prefillCoords,
+  mapHeightClassName = "h-[min(62vh,560px)]",
   onConfirmed,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +51,7 @@ export function FlipyLocationEmbed({
   const [manualAddress, setManualAddress] = useState("");
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [resolving, setResolving] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
   const onConfirmedRef = useRef(onConfirmed);
   onConfirmedRef.current = onConfirmed;
 
@@ -139,18 +148,49 @@ export function FlipyLocationEmbed({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- resolve uses latest prefill via closure on each message
   }, [embedOrigin, prefillAddress, prefillCoords, agencySlug, storeSlug]);
 
+  // Stop the CT dialog from scrolling when the pointer is over the map shell.
+  // (Cross-origin iframe zoom still needs Flipy Maps gestureHandling=greedy;
+  //  we also pass that hint on the embed URL.)
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    function trapWheel(event: WheelEvent) {
+      event.stopPropagation();
+    }
+
+    function trapTouchMove(event: TouchEvent) {
+      event.stopPropagation();
+    }
+
+    shell.addEventListener("wheel", trapWheel, { capture: true, passive: true });
+    shell.addEventListener("touchmove", trapTouchMove, { capture: true, passive: true });
+    return () => {
+      shell.removeEventListener("wheel", trapWheel, true);
+      shell.removeEventListener("touchmove", trapTouchMove, true);
+    };
+  }, []);
+
+  const mapSrc = withMapInteractionParams(embedUrl);
+
   return (
     <div className="space-y-2">
       <p className="text-xs text-text-secondary">
-        Arrastra el pin en el mapa y confirma la dirección. Debe reflejar el punto exacto que el
-        cliente indicó, no solo el geocode de Shopify.
+        Arrastra el pin y confirma la dirección exacta del cliente (no solo el geocode de Shopify).
+        Sobre el mapa, la rueda/trackpad hace zoom — no hace scroll del modal.
       </p>
-      <div className="overflow-hidden rounded-lg border border-border bg-zinc-950">
+      <div
+        ref={shellRef}
+        className="relative isolate overflow-hidden rounded-lg border border-border bg-zinc-950 overscroll-none"
+        data-flipy-map-shell
+      >
         <iframe
           title="Mapa Flipy"
-          src={embedUrl}
-          className="h-[min(52vh,420px)] w-full border-0"
+          src={mapSrc}
+          className={`block w-full border-0 ${mapHeightClassName}`}
           allow="geolocation"
+          // Keep focusable so keyboard/trackpad gestures prefer the map frame.
+          tabIndex={0}
         />
       </div>
       {hint ? <p className="text-xs text-emerald-600">{hint}</p> : null}
@@ -193,4 +233,20 @@ export function FlipyLocationEmbed({
       ) : null}
     </div>
   );
+}
+
+/** Hint Flipy partner page to use greedy map wheel zoom (ignored if unsupported). */
+function withMapInteractionParams(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl);
+    if (!url.searchParams.has("gestureHandling")) {
+      url.searchParams.set("gestureHandling", "greedy");
+    }
+    if (!url.searchParams.has("mapWheel")) {
+      url.searchParams.set("mapWheel", "zoom");
+    }
+    return url.toString();
+  } catch {
+    return embedUrl;
+  }
 }
