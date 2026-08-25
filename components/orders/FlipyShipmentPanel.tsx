@@ -7,6 +7,8 @@ import {
 } from "@/components/flipy/FlipyCreateShipmentModal";
 import { buildFlipyOperationWebUrl } from "@/lib/integrations/flipy/embed-urls";
 import { labelFlipyEscenario } from "@/lib/integrations/flipy/labels";
+import type { FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
+import type { FlipyPackageSize } from "@/lib/integrations/flipy/map-package-size";
 import type { FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +25,8 @@ type Props = {
   appOrigin: string;
   paymentResolution: FlipyPaymentResolution;
   storeOrigin?: FlipyStoreOriginDefaults | null;
+  defaultPackageSize?: FlipyPackageSize;
+  defaultPackageCare?: FlipyPackageCareId[];
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
@@ -44,6 +48,8 @@ export function FlipyShipmentPanel({
   appOrigin,
   paymentResolution,
   storeOrigin = null,
+  defaultPackageSize = "mediano",
+  defaultPackageCare = [],
   customerName = null,
   customerPhone = null,
   customerEmail = null,
@@ -107,7 +113,7 @@ export function FlipyShipmentPanel({
       <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
         <h2 className="text-sm font-semibold">Flipy</h2>
         <p className="text-[12.5px] text-text-secondary">
-          Crea un envío con escenario, recojo, entrega confirmada en mapa y oferta de flete.
+          Crea un envío: paso 1 ruta (recojo + entrega + paquete + flete), confirmar y listo.
           {paymentResolution.suggestedEscenario ? (
             <>
               {" "}
@@ -132,6 +138,8 @@ export function FlipyShipmentPanel({
         appOrigin={appOrigin}
         paymentResolution={paymentResolution}
         storeOrigin={storeOrigin}
+        defaultPackageSize={defaultPackageSize}
+        defaultPackageCare={defaultPackageCare}
         customerName={customerName}
         customerPhone={customerPhone}
         customerEmail={customerEmail}

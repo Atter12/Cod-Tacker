@@ -5,6 +5,11 @@ import {
   readFlipyWebhookSecretRef,
   unpackFlipyWebhookSecret,
 } from "@/lib/integrations/flipy/credentials";
+import {
+  isFlipyLifecycleWebhookEvent,
+  mapFlipyLifecycleWebhookToJobPayload,
+  readFlipyWebhookEventType,
+} from "@/lib/integrations/flipy/map-lifecycle-webhook";
 import { mapFlipyWebhookToJobPayload } from "@/lib/integrations/flipy/map-webhook";
 import { verifyFlipyWebhookSignature } from "@/lib/integrations/flipy/webhook-auth";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
@@ -68,6 +73,50 @@ export async function handleFlipyWebhookIngress(input: {
     json = input.rawBody.trim() ? (JSON.parse(input.rawBody) as unknown) : {};
   } catch {
     return { status: 400, body: { error: "JSON inválido" } };
+  }
+
+  const eventType = readFlipyWebhookEventType(json);
+
+  if (isFlipyLifecycleWebhookEvent(eventType)) {
+    const lifecycle = mapFlipyLifecycleWebhookToJobPayload(json, {
+      eventId: input.eventIdHeader,
+    });
+    if (!lifecycle.ok) {
+      return { status: 400, body: { error: lifecycle.error } };
+    }
+
+    const idempotencyKey = `flipy:wh:lifecycle:${lifecycle.payload.external_event_id}`;
+    const enqueued = await enqueueRawEventAndJob(admin, {
+      agencyId: resolved.agencyId,
+      storeId: resolved.storeId,
+      provider: "flipy",
+      integrationId: resolved.integrationId,
+      eventType: lifecycle.payload.event_type,
+      jobType: "flipy.shipment.lifecycle",
+      idempotencyKey,
+      externalEventId: lifecycle.payload.external_event_id,
+      payload: lifecycle.payload as unknown as Json,
+    });
+
+    logger.info("flipy.webhook.lifecycle_enqueued", {
+      store_id: resolved.storeId,
+      job_id: enqueued.jobId,
+      event_type: lifecycle.payload.event_type,
+      envio_id: lifecycle.payload.envio_id,
+    });
+
+    return {
+      status: 200,
+      enqueued: true,
+      body: {
+        ok: true,
+        enqueued: true,
+        lifecycle: true,
+        eventType: lifecycle.payload.event_type,
+        jobId: enqueued.jobId,
+        envioId: lifecycle.payload.envio_id,
+      },
+    };
   }
 
   const mapped = mapFlipyWebhookToJobPayload(json, { eventId: input.eventIdHeader });

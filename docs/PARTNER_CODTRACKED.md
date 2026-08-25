@@ -1,10 +1,11 @@
 # Partner API — Flipy × COD-tracked
 
-**Versión contrato:** 0.1.1 (freeze F1)  
+**Versión contrato:** 0.2.0 (freeze Fase C — coordinar Flipy A4)  
 **Copia canónica:** `COD-tracked/docs/PARTNER_CODTRACKED.md`  
 **Espejo en Flipy:** `flipy/docs/PARTNER_CODTRACKED.md` (mantener sincronizado)
 
 Maestro de integración: `FLIPY_CODTRACKED_INTEGRATION_MASTER.md`  
+Alineación v0.2: `FLIPY_CODTRACKED_ALIGNMENT_V0.2.md`  
 Gates: `FLIPY_INTEGRATION_GATES.md`
 
 ---
@@ -22,80 +23,130 @@ X-Idempotency-Key: codtracked:store:<storeId> | codtracked:order:<orderId>
 
 ## POST /api/partner/tiendas — Provision
 
-**CT envía (v0.1.1):**
-
-```json
-{
-  "externalStoreId": "uuid-store-ct",
-  "nombre": "Mi Tienda",
-  "contactEmail": "ops@tienda.pe",
-  "telefono": "51999888777",
-  "contactPhone": "51999888777",
-  "ruc": "20123456789",
-  "direccion": "Av. Larco 123, Miraflores",
-  "originLocation": {
-    "address": "Av. Larco 123, Miraflores",
-    "lat": -12.119,
-    "lng": -77.029
-  },
-  "webhookUrl": "https://app.codtracked.com/api/webhooks/flipy/{agency}/{store}"
-}
-```
-
-| Campo | Requerido | Notas |
-| --- | --- | --- |
-| `externalStoreId` | sí | UUID tienda CT |
-| `nombre` | sí | Display tienda |
-| `contactEmail` | sí | **422 si falta** |
-| `originLocation` | sí | `{ address, lat, lng }` |
-| `direccion` | recomendado | Alias texto; CT = `originLocation.address` |
-| `telefono` / `contactPhone` | opcional | CT duplica en ambos |
-| `ruc` | opcional | |
-| `webhookUrl` | opcional | CT también registra vía PUT webhook |
-
-**Respuesta mínima:**
-
-```json
-{
-  "tiendaId": "clxx...",
-  "saldo": { "billeteraOperaciones": 0, "billeteraReservado": 0 }
-}
-```
-
-**Aliases saldo aceptados por CT:** `billeteraOperaciones` (canónico Flipy), `saldoOperaciones`, `operaciones`.
+Sin cambios v0.1.1 — CT envía `contactEmail` + `originLocation`.
 
 ---
 
 ## GET /api/partner/tiendas/:id/saldo
 
-**Respuesta Flipy (canónico):**
-
-```json
-{
-  "billeteraOperaciones": 150.0,
-  "billeteraReservado": 12.0,
-  "warningBajo": false
-}
-```
-
-CT parsea `billeteraOperaciones` / `billeteraReservado` y aliases legacy.
+Sin cambios v0.1.1 — CT parsea `billeteraOperaciones` / aliases.
 
 ---
 
 ## PUT /api/partner/tiendas/:id/webhook
 
-```json
-{
-  "webhookUrl": "https://app.codtracked.com/api/webhooks/flipy/agency/store",
-  "webhookSecret": "<hex-64>"
-}
-```
+Sin cambios v0.1.1.
 
 ---
 
-## POST /api/partner/envios
+## POST /api/partner/envios/cotizar (v0.2)
 
-Ver maestro §9.2. CT envía `externalStoreId`, `externalOrderId` (`shopify:<id>`), `escenarioPago`, coords origen/destino, `shopifyPayment` audit.
+**Request:**
+
+```json
+{
+  "originLat": -12.119,
+  "originLng": -77.029,
+  "destinationLat": -12.096,
+  "destinationLng": -77.028,
+  "packageSize": "mediano",
+  "typeMode": "express"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "fleteQuote": {
+    "version": 2,
+    "recommendedFare": 14.5,
+    "marketLow": 12.25,
+    "marketHigh": 17.4,
+    "minOffer": 10.15,
+    "maxOffer": 43.5,
+    "distanceKm": 3.2,
+    "durationMinutes": 12,
+    "packageSize": "mediano",
+    "typeMode": "express",
+    "source": "directions"
+  }
+}
+```
+
+Obligatorio antes de create **smart** (D4). Recomendado en **bid**.
+
+---
+
+## POST /api/partner/envios (v0.2)
+
+### Campos requeridos v0.2
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `externalOrderId` | string | `shopify:{id}` |
+| `price` | number | Smart: = `fleteQuote.recommendedFare` |
+| `destinationAddress` | string | |
+| `originLat/Lng`, `destinationLat/Lng` | number | Perú |
+| `packageSize` | enum | `pequeno` \| `mediano` \| `grande` |
+| `shopifyPayment` | object | Ver abajo |
+| `fleteQuote` | object | **Obligatorio si smart** |
+
+### Campos nuevos v0.2
+
+| Campo | Tipo | Default | Notas |
+| --- | --- | --- | --- |
+| `fulfillmentMode` | `smart` \| `bid` | derivado D4 | Bifurcación operativa |
+| `priceLocked` | boolean | `true` si smart | |
+| `packageCare` | string[] | `[]` | `fragil`, `vidrio`, … |
+| `packageCareNote` | string | `""` | max 120 |
+| `typeMode` | enum | `express` | |
+| `destinationEmail` | string | — | |
+| `title` | string | orderNumber | |
+
+### `shopifyPayment` (obligatorio v0.2)
+
+```json
+{
+  "productPaidAtCheckout": false,
+  "shippingPaidAtCheckout": false,
+  "shopifySubtotal": 70.85,
+  "shopifyShippingAmount": 15.0,
+  "expectedCodProduct": 70.85,
+  "expectedCodShipping": 15.0,
+  "paymentKind": "cod",
+  "confirmedEscenario": "1E",
+  "noteAttributes": []
+}
+```
+
+### Matriz D3 — casos parciales
+
+| P pagado | F pagado | `fulfillmentMode` | `codAmount` | Flete |
+| --- | --- | --- | --- | --- |
+| ✅ | ✅ | **smart** | 0 | fijo (= quote) |
+| ✅ | ❌ | **bid** | 0 | editable |
+| ❌ | ✅ | **bid** | P | fijo (= shipping) |
+| ❌ | ❌ | **bid** | P | editable |
+
+### Response create v0.2
+
+```json
+{
+  "success": true,
+  "contractVersion": "0.2.0",
+  "envioId": "clenv...",
+  "estado": "ASIGNADO",
+  "fulfillmentMode": "smart",
+  "assignedMotorizado": { "id": "...", "displayName": "Juan M.", "etaMinutes": 12 },
+  "trackingUrl": "https://app.flipy.pe/rastreo/...",
+  "pujasWebUrl": null,
+  "fleteQuote": { "recommendedFare": 14.5 }
+}
+```
+
+Bid: `estado: PENDIENTE_PUJAS`, `pujasWebUrl` presente, `assignedMotorizado: null`.
 
 ---
 
@@ -110,82 +161,61 @@ X-Flipy-Signature: sha256=<hmac-sha256-hex-body>
 X-Flipy-Event-Id: <unique>
 ```
 
-**Payload ejemplo:**
+### Eventos v0.2
+
+| Evento | Cuándo | Job CT |
+| --- | --- | --- |
+| `shipment.created` | Post-create | `flipy.shipment.lifecycle` |
+| `shipment.assigned` | Smart auto-assign o bid accept | `flipy.shipment.lifecycle` + carrier sync |
+| `shipment.smart_fallback_to_bid` | Timeout D1 sin motorizado | `flipy.shipment.lifecycle` + alerta CT |
+| `shipment.status.updated` | Cambio estado (legacy) | `carrier.shipment.updated` |
+
+**Payload lifecycle ejemplo (`shipment.assigned`):**
 
 ```json
 {
-  "type": "shipment.status.updated",
+  "type": "shipment.assigned",
   "data": {
     "envioId": "clenv...",
     "externalOrderId": "shopify:7123456789",
-    "estado": "EN_CURSO",
+    "estado": "ASIGNADO",
     "trackingToken": "cltk...",
     "trackingUrl": "https://app.flipy.pe/rastreo/cltk...",
-    "escenarioPago": "1E"
+    "fulfillmentMode": "smart",
+    "assignedMotorizado": {
+      "id": "clmoto...",
+      "displayName": "Juan M.",
+      "etaMinutes": 12
+    }
   }
 }
 ```
 
-CT normaliza `externalOrderId` → dígitos Shopify para link `orders.external_order_id`.
+CT actualiza `orders.metadata`: `flipy_envio_id`, `flipy_tracking_*`, `shopify_flipy_payment`, `flipy_assigned_motorizado`.
 
 ---
 
-## Env COD-tracked (Vercel CT / local)
+## Env COD-tracked
 
-| Variable | Valor prod | Notas |
-| --- | --- | --- |
-| `FLIPY_EMBED_ORIGIN` | `https://flipy-panel.vercel.app` | Host de iframes partner (`/partner/ubicacion`, `/partner/recarga`, `/partner/pujas`). **No** usar la app tienda. |
-| `FLIPY_APP_ORIGIN` | `https://tienda.flipyexpress.com` | Deep links / abrir envío en Flipy tienda |
-| `FLIPY_API_BASE_URL` | `https://flipy-backend.vercel.app` | Partner API |
-| `FLIPY_PARTNER_API_KEY` | (secret) | Mismo secret que Flipy `PARTNER_CODTRACKED_API_KEY` |
-| `FLIPY_PARTNER_ID` | `codtracked` | Header `X-Partner-Id` |
+| Variable | Notas |
+| --- | --- |
+| `FLIPY_V02_ENABLED` | default global; override `settings.flipy_v02` por tienda |
+| `FLIPY_PARTNER_API_KEY` | secret compartido |
+| `FLIPY_API_BASE_URL` | Partner API |
+| `FLIPY_EMBED_ORIGIN` | panel partner iframes |
+| `FLIPY_APP_ORIGIN` | app tienda / deep links |
 
-Si `FLIPY_EMBED_ORIGIN` apunta a tienda, CT reescribe embeds partner al panel host (path + query).
+Sin `flipy_v02` → create body v0.1.1 (retrocompat).
 
 ---
 
-## Smoke F1 (local)
-
-Script: `scripts/flipy-f1-smoke.ts`
+## Smoke scripts
 
 ```bash
-FLIPY_PARTNER_API_KEY=... \
-FLIPY_API_BASE_URL=http://localhost:4000 \
-CT_APP_URL=http://localhost:3000 \
-AGENCY_SLUG=demo \
-STORE_SLUG=tienda \
-STORE_ID=<uuid> \
-CONTACT_EMAIL=ops@test.pe \
-FLIPY_WEBHOOK_SECRET=<from integration settings after connect> \
-npx tsx scripts/flipy-f1-smoke.ts
+npm run smoke:v02    # espejo flipy-v0.2-smoke.js
+npm run e2e:v02      # checklist manual D3 + metadata
+npm run jobs:process # tras webhooks CT
 ```
-
-Pasos: provision → saldo → create envío 1E → webhook EN_CURSO + ENTREGADO → `npm run jobs:process`.
-
----
-
-## Smoke F3/F4 (prod)
-
-Script: `scripts/flipy-f3-f4-smoke.ts` (espejo de `flipy/backend/scripts/flipy-f3-f4-smoke.js`)
-
-```bash
-FLIPY_PARTNER_API_KEY=... \
-FLIPY_API_BASE_URL=https://flipy-backend.vercel.app \
-STORE_ID=60db8866-b5ff-4ca9-84c7-eacddaa72bd2 \
-TIENDA_ID=cmt7pgzdl0003bgtxm020y9nx \
-ORDER_EXTERNAL_ID=f3f4-smoke-001 \
-npm run smoke:f3f4
-```
-
-Cubre: widget recarga + embed wallet saldo, ubicación, saldo health, deep links, `noteAttributes` → `1C`, create con `originAddress`/`destinationAddress` + coords, panel pujas (`envioId` en token + URL) + embed API, conciliación `csv`/`json`/`settlement`.
-
-**Prod (2026-08-24):** 17/17 PASS desde Flipy repo. CT espejo valida los mismos endpoints Partner API (sin top-up Prisma — asegurar saldo operaciones ≥ S/50 en tienda gate).
-
-### Checklist E2E manual (tienda gate — 1A y 1E)
-
-1. **1A (prepago):** pedido Shopify paid + shipping → Crear envío → modalidad 1A → recojo tienda → pin Lima → oferta flete **requerida (> 0)**, label no dice “opcional” → Confirmar muestra dirección + lat/lng → create → panel pujas carga `/partner/pujas?token=…&envioId=…` (no ícono roto).
-2. **1E (COD):** pedido cash_on_delivery → mismo flujo; flete requerido; destino never Berlin+Lima silently.
-3. Pin movido lejos del prefill Shopify → warning o reverse-geocode; no crear con texto DE + coords PE.
 
 ---
 
@@ -194,4 +224,5 @@ Cubre: widget recarga + embed wallet saldo, ubicación, saldo health, deep links
 | Versión | Cambio |
 | --- | --- |
 | 0.1.0 | Draft inicial |
-| 0.1.1 | Freeze F1: `contactEmail` + `originLocation`; saldo `billeteraOperaciones` |
+| 0.1.1 | Freeze F1 |
+| 0.2.0 | Cotizar, smart/bid, shopifyPayment, lifecycle WH, packageSize/Care, flipy_v02 |

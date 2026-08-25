@@ -3,10 +3,35 @@ import "server-only";
 import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
 import {
+  buildFlipyCreateEnvioRequestBody,
+  buildFlipyCotizarRequestBody,
   buildFlipyProvisionRequestBody,
+  readFlipyCreateEnvioResult,
+  readFlipyCotizarEnvioResult,
   readFlipySaldoOperaciones,
   readFlipySaldoReservado,
   readFlipySaldoWarningBajo,
+  type FlipyCotizarEnvioInput,
+  type FlipyCotizarEnvioResult,
+  type FlipyCreateEnvioPartnerInput,
+  type FlipyFleteQuote,
+  type FlipyAssignedMotorizado,
+  type FlipyOperationalFulfillmentMode,
+  type FlipyPackageCareId,
+  type FlipyPackageSize,
+  type FlipyShopifyPaymentInput,
+  type FlipyTypeMode,
+} from "@/lib/integrations/flipy/partner-contract";
+
+export type {
+  FlipyCotizarEnvioInput,
+  FlipyCotizarEnvioResult,
+  FlipyFleteQuote,
+  FlipyOperationalFulfillmentMode,
+  FlipyPackageCareId,
+  FlipyPackageSize,
+  FlipyShopifyPaymentInput,
+  FlipyTypeMode,
 } from "@/lib/integrations/flipy/partner-contract";
 
 export type FlipyPartnerClientConfig = {
@@ -33,29 +58,13 @@ export type FlipyProvisionResult = {
   saldoReservado?: number | null;
 };
 
-export type FlipyCreateEnvioInput = {
-  externalOrderId: string;
-  orderNumber?: string | null;
-  escenarioPago: FlipyEscenarioPago;
-  codAmount?: number | null;
-  price?: number | null;
-  originAddress: string;
-  originLat: number;
-  originLng: number;
-  originContact?: string | null;
-  originPhone?: string | null;
-  destinationAddress: string;
-  destinationLat: number;
-  destinationLng: number;
-  destinationContact?: string | null;
-  destinationPhone?: string | null;
-  shopifyPayment?: Record<string, unknown>;
-  noteAttributes?: Array<{ name?: string | null; value?: string | null } | null> | null;
-};
+export type FlipyCreateEnvioInput = Omit<FlipyCreateEnvioPartnerInput, "externalStoreId">;
 
 export type FlipyCreateEnvioResult = {
   envioId: string;
   estado: string;
+  contractVersion?: string | null;
+  fulfillmentMode?: FlipyOperationalFulfillmentMode | null;
   trackingToken?: string | null;
   trackingUrl?: string | null;
   escenarioPago?: string | null;
@@ -63,6 +72,8 @@ export type FlipyCreateEnvioResult = {
   appWebUrl?: string | null;
   pujasDeepLink?: string | null;
   pujasWebUrl?: string | null;
+  fleteQuote?: FlipyFleteQuote | null;
+  assignedMotorizado?: FlipyAssignedMotorizado | null;
 };
 
 export type FlipySaldoResult = {
@@ -234,6 +245,18 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       };
     },
 
+    async cotizarEnvio(input: FlipyCotizarEnvioInput): Promise<FlipyCotizarEnvioResult> {
+      const raw = await request<unknown>("/api/partner/envios/cotizar", {
+        method: "POST",
+        body: buildFlipyCotizarRequestBody(input),
+      });
+      const parsed = readFlipyCotizarEnvioResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió fleteQuote", 502);
+      }
+      return parsed;
+    },
+
     async geocodeAddress(input: string): Promise<{ address: string; lat: number; lng: number } | null> {
       const query = input.trim();
       if (query.length < 4) return null;
@@ -281,43 +304,19 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       const raw = await request<unknown>("/api/partner/envios", {
         method: "POST",
         idempotencyKey,
-        body: {
+        body: buildFlipyCreateEnvioRequestBody({
+          ...input,
           externalStoreId: config.externalStoreId,
-          externalOrderId: input.externalOrderId,
-          orderNumber: input.orderNumber ?? undefined,
-          escenarioPago: input.escenarioPago,
-          codAmount: input.codAmount ?? undefined,
-          price: input.price ?? undefined,
-          originAddress: input.originAddress,
-          originLat: input.originLat,
-          originLng: input.originLng,
-          originContact: input.originContact ?? undefined,
-          originPhone: input.originPhone ?? undefined,
-          destinationAddress: input.destinationAddress,
-          destinationLat: input.destinationLat,
-          destinationLng: input.destinationLng,
-          destinationContact: input.destinationContact ?? undefined,
-          destinationPhone: input.destinationPhone ?? undefined,
-          shopifyPayment: input.shopifyPayment ?? undefined,
-          noteAttributes: input.noteAttributes ?? undefined,
-        },
+        }),
       });
-      const bag = asRecord(raw) ?? {};
-      const envioId = readString(bag, "envioId", "envio_id", "id");
-      if (!envioId) {
+      const parsed = readFlipyCreateEnvioResult(raw);
+      if (!parsed) {
         throw new FlipyPartnerApiError("Flipy no devolvió envioId", 502);
       }
-      return {
-        envioId,
-        estado: readString(bag, "estado", "status") ?? "PENDIENTE_PUJAS",
-        trackingToken: readString(bag, "trackingToken", "tracking_token"),
-        trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
-        escenarioPago: readString(bag, "escenarioPago", "escenario_pago"),
-        appDeepLink: readString(bag, "appDeepLink", "app_deep_link"),
-        appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
-        pujasDeepLink: readString(bag, "pujasDeepLink", "pujas_deep_link"),
-        pujasWebUrl: readString(bag, "pujasWebUrl", "pujas_web_url"),
-      };
+      return parsed;
     },
   };
 }
+
+// Re-export for callers that need escenario typing alongside client helpers.
+export type { FlipyEscenarioPago };

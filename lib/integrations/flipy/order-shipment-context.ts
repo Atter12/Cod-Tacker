@@ -7,6 +7,11 @@ import {
   type FlipyEscenarioPago,
   type FlipyPaymentResolution,
 } from "@/lib/integrations/flipy/resolve-payment";
+import { mapShopifyPackageCare, type FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
+import {
+  mapShopifyPackageSize,
+  type FlipyPackageSize,
+} from "@/lib/integrations/flipy/map-package-size";
 import { readFlipyPickupKeywords } from "@/lib/integrations/flipy/settings";
 import type { Json } from "@/types/database.generated";
 
@@ -27,6 +32,8 @@ export type FlipyOrderShipmentContext = {
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
+  defaultPackageSize: FlipyPackageSize;
+  defaultPackageCare: FlipyPackageCareId[];
 };
 
 function readMeta(metadata: Json): Record<string, unknown> {
@@ -101,6 +108,7 @@ export function buildFlipyOrderShipmentContext(
     phone?: string | null;
     email?: string | null;
   } | null,
+  lineItems?: Array<{ title: string; quantity?: number | null }> | null,
 ): FlipyOrderShipmentContext {
   const meta = readMeta(order.metadata);
   const payment = resolveShopifyFlipyPayment({
@@ -130,6 +138,18 @@ export function buildFlipyOrderShipmentContext(
     ? [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() || null
     : null;
 
+  const lineTitles = (lineItems ?? []).map((line) => line.title);
+  const defaultPackageSize = mapShopifyPackageSize(
+    (lineItems ?? []).map((line) => ({
+      title: line.title,
+      quantity: line.quantity ?? 1,
+    })),
+  );
+  const defaultPackageCare = mapShopifyPackageCare({
+    tags: order.tags,
+    lineTitles,
+  });
+
   return {
     flipyEnvioId: typeof meta.flipy_envio_id === "string" ? meta.flipy_envio_id : null,
     flipyTrackingUrl: typeof meta.flipy_tracking_url === "string" ? meta.flipy_tracking_url : null,
@@ -148,5 +168,7 @@ export function buildFlipyOrderShipmentContext(
     customerName,
     customerPhone: customer?.phone?.trim() || metaContact.phone,
     customerEmail: customer?.email?.trim() || metaContact.email,
+    defaultPackageSize,
+    defaultPackageCare,
   };
 }

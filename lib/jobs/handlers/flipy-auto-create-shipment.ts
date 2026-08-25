@@ -4,18 +4,7 @@ import {
   evaluateFlipyAutoCreate,
   readOrderDestinationCoords,
 } from "@/lib/integrations/flipy/auto-create";
-import { createFlipyShipmentForOrder } from "@/lib/integrations/flipy/create-shipment-service";
-import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
-import { resolveFlipyPartnerKeyFromIntegration } from "@/lib/integrations/flipy/credentials";
-import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { flipyErrorUserHint, readFlipyErrorCode } from "@/lib/integrations/flipy/errors";
-import { buildFlipyOrderShipmentContext } from "@/lib/integrations/flipy/order-shipment-context";
-import {
-  readFlipyAutoCreateEnabled,
-  readFlipyAutoCreateMinConfidence,
-} from "@/lib/integrations/flipy/settings";
-import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
-import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
 import type { JobHandler } from "@/lib/jobs/types";
 import type { Json } from "@/types/database.generated";
 import { z } from "zod";
@@ -80,6 +69,28 @@ async function createAutoCreateAlert(input: {
 }
 
 export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, payload }) => {
+  const [
+    { getIntegrationRuntimeMode },
+    { createFlipyShipmentForOrder },
+    { createFlipyPartnerClient },
+    { resolveFlipyPartnerKeyFromIntegration },
+    { getFlipyEnv },
+    { buildFlipyOrderShipmentContext },
+    { cotizarFlipyFleteForRoute },
+    { readFlipyAutoCreateEnabled, readFlipyAutoCreateMinConfidence, readFlipyV02Enabled },
+    { readFlipyOriginFromSettings, resolveFlipyIntegrationForStore },
+  ] = await Promise.all([
+    import("@/lib/integrations/registry"),
+    import("@/lib/integrations/flipy/create-shipment-service"),
+    import("@/lib/integrations/flipy/client"),
+    import("@/lib/integrations/flipy/credentials"),
+    import("@/lib/integrations/flipy/env"),
+    import("@/lib/integrations/flipy/order-shipment-context"),
+    import("@/lib/integrations/flipy/quote-flete"),
+    import("@/lib/integrations/flipy/settings"),
+    import("@/lib/integrations/flipy/webhook-ingress"),
+  ]);
+
   if (!job.store_id) {
     throw new PermanentJobError("MISSING_STORE", "El trabajo Flipy auto-create requiere store_id.");
   }
@@ -137,6 +148,8 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
   }
 
   const ctx = buildFlipyOrderShipmentContext(order, integration.settings);
+  const v02Enabled = readFlipyV02Enabled(integration.settings);
+  const originDefaults = readFlipyOriginFromSettings(integration.settings);
   const destinationAddress = buildOrderShippingAddress({
     ...order,
     shippingAddress1: ctx.shippingAddress1,
@@ -207,6 +220,72 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
     destinationCoords = { lat: geocoded.lat, lng: geocoded.lng };
   }
 
+  const partnerKey = resolveFlipyPartnerKeyFromIntegration(integration);
+  if (!partnerKey) {
+    throw new PermanentJobError("MISSING_CONFIG", "FLIPY_PARTNER_API_KEY no configurada.");
+  }
+  const env = getFlipyEnv();
+  const client = createFlipyPartnerClient({
+    baseUrl: env.apiBaseUrl,
+    partnerKey,
+    partnerId: env.partnerId,
+    externalStoreId: job.store_id,
+  });
+
+  const packageSize = "mediano" as const;
+  let fleteQuote = null;
+  let fletePrice: number | null = null;
+
+  if (v02Enabled && originDefaults.lat != null && originDefaults.lng != null) {
+    try {
+      fleteQuote = await cotizarFlipyFleteForRoute(client, {
+        originLat: originDefaults.lat,
+        originLng: originDefaults.lng,
+        destinationLat: destinationCoords.lat,
+        destinationLng: destinationCoords.lng,
+        packageSize,
+      });
+      fletePrice = fleteQuote.recommendedFare;
+    } catch {
+      await patchAutoCreateMeta(admin, order.id, job.store_id, {
+        source: "auto_create",
+        status: "skipped",
+        reason: "cotizar_failed",
+      });
+      await createAutoCreateAlert({
+        admin,
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        orderId: order.id,
+        title: "Flipy: auto-create requiere cotización",
+        body: "No se pudo cotizar el flete para auto-create v0.2. Crea el envío manualmente.",
+        severity: "warning",
+      });
+      return {
+        ok: true,
+        action: "skipped",
+        entityType: "order",
+        entityId: order.id,
+        detail: "cotizar_failed",
+      };
+    }
+  } else if (!v02Enabled) {
+    fletePrice = ctx.payment.suggestedFlete ?? (order.shipping_amount > 0 ? order.shipping_amount : null);
+  } else {
+    await patchAutoCreateMeta(admin, order.id, job.store_id, {
+      source: "auto_create",
+      status: "skipped",
+      reason: "missing_origin_for_cotizar",
+    });
+    return {
+      ok: true,
+      action: "skipped",
+      entityType: "order",
+      entityId: order.id,
+      detail: "missing_origin_for_cotizar",
+    };
+  }
+
   try {
     const created = await createFlipyShipmentForOrder({
       admin,
@@ -219,6 +298,9 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
         lat: destinationCoords.lat,
         lng: destinationCoords.lng,
       },
+      fletePrice,
+      fleteQuote,
+      packageSize: v02Enabled ? packageSize : undefined,
       source: "auto_create",
     });
 
@@ -250,4 +332,4 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
     throw error;
   }
 };
-
+

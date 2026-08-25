@@ -130,9 +130,12 @@ export function evaluateFlipyAutoCreate(input: {
   }
 
   reasons.push(...input.payment.reasons);
+  const escenarioPago = input.payment.smartEligible
+    ? "1A"
+    : input.payment.suggestedEscenario;
   return {
     eligible: true,
-    escenarioPago: input.payment.suggestedEscenario,
+    escenarioPago,
     skipReason: null,
     reasons,
   };

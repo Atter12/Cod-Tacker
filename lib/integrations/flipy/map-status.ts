@@ -22,6 +22,14 @@ export const FLIPY_DEFAULT_MAPPINGS: readonly CarrierMappingRule[] = [
     priority: 0,
   },
   {
+    external_status_code: "ASIGNANDO_SMART",
+    external_status_label: "Asignando motorizado",
+    normalized_status: "created",
+    is_rto: false,
+    is_terminal: false,
+    priority: 0,
+  },
+  {
     external_status_code: "ASIGNADO",
     external_status_label: "Asignado",
     normalized_status: "label_generated",

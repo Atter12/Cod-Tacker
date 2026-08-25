@@ -1,5 +1,3 @@
-import "server-only";
-
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import type { JobsAdminClient } from "@/lib/jobs/types";
 import type { Json } from "@/types/database.generated";

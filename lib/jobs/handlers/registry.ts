@@ -12,6 +12,7 @@ import { handleWhatsappStatusUpdated } from "@/lib/jobs/handlers/whatsapp-status
 import { handleWhatsappConfirmationRequest } from "@/lib/jobs/handlers/whatsapp-confirmation-request";
 import { handleFlipyBidStaleCheck } from "@/lib/jobs/handlers/flipy-bid-stale-check";
 import { handleFlipyAutoCreateShipment } from "@/lib/jobs/handlers/flipy-auto-create-shipment";
+import { handleFlipyShipmentLifecycle } from "@/lib/jobs/handlers/flipy-shipment-lifecycle";
 import { handlePrivacyDataExport } from "@/lib/jobs/handlers/privacy-data-export";
 import type { JobHandler } from "@/lib/jobs/types";
 
@@ -39,6 +40,7 @@ export const JOB_TYPES = [
   "billing.invoice.upserted",
   "flipy.bid_stale.check",
   "flipy.auto_create.shipment",
+  "flipy.shipment.lifecycle",
 ] as const;
 
 export type KnownJobType = (typeof JOB_TYPES)[number];
@@ -67,6 +69,7 @@ const registry: Record<KnownJobType, JobHandler> = {
   "billing.invoice.upserted": handleBillingInvoiceUpserted,
   "flipy.bid_stale.check": handleFlipyBidStaleCheck,
   "flipy.auto_create.shipment": handleFlipyAutoCreateShipment,
+  "flipy.shipment.lifecycle": handleFlipyShipmentLifecycle,
 };
 
 export function getJobHandler(jobType: string): JobHandler | null {

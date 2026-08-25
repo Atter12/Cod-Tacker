@@ -9,14 +9,14 @@ export const FLIPY_USER_ESCENARIOS = ["1A", "1C", "1E", "1D"] as const satisfies
 export const FLIPY_COD_ESCENARIOS = ["1C", "1E", "1D"] as const satisfies readonly FlipyEscenarioPago[];
 
 const ESCENARIO_LABELS: Record<(typeof FLIPY_USER_ESCENARIOS)[number], string> = {
-  "1A": "1A — Prepago total",
+  "1A": "1A — Prepago total (asignación automática si flete prepagado)",
   "1C": "1C — COD producto",
   "1E": "1E — COD producto + envío",
   "1D": "1D — COD envío",
 };
 
 const ESCENARIO_HINTS: Record<(typeof FLIPY_USER_ESCENARIOS)[number], string> = {
-  "1A": "Producto y envío pagados en Shopify. Define COD vs prepago; el flete se fija después como oferta a motorizados.",
+  "1A": "Producto y envío pagados en Shopify. Con flete prepagado: asignación automática Flipy (sin puja).",
   "1C": "Cliente paga el producto contra entrega. El flete se fija después como oferta.",
   "1E": "Cliente paga producto y envío contra entrega (típico COD). El flete se fija después como oferta.",
   "1D": "Producto prepago; solo el envío se cobra contra entrega. El flete se fija después como oferta.",
@@ -35,13 +35,13 @@ export const FLIPY_COD_ESCENARIO_OPTIONS = FLIPY_COD_ESCENARIOS.map((value) => (
 }));
 
 /**
- * Pedido prepago en Shopify (producto/flete online) → bloquear 1A.
- * Si no está prepago (COD), el modal solo ofrece 1C / 1E / 1D.
+ * Flete prepagado en checkout Shopify (D4) → smart eligible, skip paso modalidad COD.
+ * Solo `shippingPaidAtCheckout`; producto prepago sin flete no cuenta.
  */
 export function isFlipyPrepaidFreight(
-  resolution: Pick<FlipyPaymentResolution, "productPaidAtCheckout" | "shippingPaidAtCheckout">,
+  resolution: Pick<FlipyPaymentResolution, "shippingPaidAtCheckout">,
 ): boolean {
-  return resolution.productPaidAtCheckout === true || resolution.shippingPaidAtCheckout === true;
+  return resolution.shippingPaidAtCheckout === true;
 }
 
 /**

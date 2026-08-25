@@ -162,6 +162,17 @@ describe("flipy map-webhook", () => {
   });
 });
 
+describe("flipy lifecycle webhook ingress types", () => {
+  it("routes lifecycle event type strings", async () => {
+    const { readFlipyWebhookEventType, isFlipyLifecycleWebhookEvent } = await import(
+      "@/lib/integrations/flipy/map-lifecycle-webhook"
+    );
+    assert.equal(readFlipyWebhookEventType({ type: "shipment.created" }), "shipment.created");
+    assert.equal(isFlipyLifecycleWebhookEvent("shipment.smart_fallback_to_bid"), true);
+    assert.equal(isFlipyLifecycleWebhookEvent("shipment.status.updated"), false);
+  });
+});
+
 describe("flipy webhook-auth", () => {
   it("verifies sha256 HMAC signature", () => {
     const body = JSON.stringify({ test: true });

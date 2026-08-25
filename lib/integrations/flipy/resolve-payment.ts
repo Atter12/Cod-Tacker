@@ -5,10 +5,22 @@ import {
 
 export type FlipyEscenarioPago = "1A" | "1C" | "1E" | "1D" | "GRATIS";
 
+export type FlipyShippingFulfillmentMode = "delivery" | "pickup" | "unknown";
+
+/** Smart vs bid bifurcation for Flipy Partner API v0.2 (D3/D4). */
+export type FlipyOperationalFulfillmentMode = "smart" | "bid";
+
 export type FlipyPaymentResolution = {
-  fulfillmentMode: "delivery" | "pickup" | "unknown";
+  /** Recojo vs envío a domicilio (unchanged v0.1). */
+  fulfillmentMode: FlipyShippingFulfillmentMode;
   productPaidAtCheckout: boolean;
   shippingPaidAtCheckout: boolean;
+  /** D4: necessary condition for smart — shipping prepaid at checkout only. */
+  smartEligible: boolean;
+  /** Derived from D4: smart when smartEligible, else bid. Null for pickup. */
+  flipyFulfillmentMode: FlipyOperationalFulfillmentMode | null;
+  expectedCodProduct: number;
+  expectedCodShipping: number;
   suggestedEscenario: FlipyEscenarioPago | null;
   codAmount: number | null;
   suggestedFlete: number | null;
@@ -75,10 +87,10 @@ function isPickupShippingLine(
   });
 }
 
-function detectFulfillmentMode(
+function detectShippingFulfillmentMode(
   shippingLines: Array<FlipyShippingLineInput | null> | null | undefined,
   extraKeywords: string[],
-): "delivery" | "pickup" | "unknown" {
+): FlipyShippingFulfillmentMode {
   if (!Array.isArray(shippingLines) || shippingLines.length === 0) return "unknown";
   if (shippingLines.some((line) => isPickupShippingLine(line, extraKeywords))) return "pickup";
   return "delivery";
@@ -125,14 +137,180 @@ function resolvePaymentKind(input: FlipyOrderPaymentInput): ShopifyPaymentKind {
   return mapped.payment_kind;
 }
 
+type PartialPaymentSignals = {
+  productPaidAtCheckout: boolean;
+  shippingPaidAtCheckout: boolean;
+  reasons: string[];
+};
+
+/**
+ * D3 partial-payment detection — product and shipping paid independently.
+ * See docs/FLIPY_CODTRACKED_ALIGNMENT_V0.2.md §1 (D3 matrix).
+ */
+function resolvePartialPaymentSignals(
+  input: FlipyOrderPaymentInput,
+  paymentKind: ShopifyPaymentKind,
+): PartialPaymentSignals {
+  const reasons: string[] = [];
+  const subtotal = finiteAmount(input.subtotal_amount);
+  const shipping = finiteAmount(input.shipping_amount);
+  const total = finiteAmount(input.total_amount);
+  const expected =
+    input.expected_cod_amount != null ? finiteAmount(input.expected_cod_amount) : total;
+
+  const expectedMatchesSubtotal = amountsApprox(expected, subtotal);
+  const expectedMatchesSubtotalPlusShipping = amountsApprox(expected, subtotal + shipping);
+  const totalMatchesSubtotal = amountsApprox(total, subtotal);
+  const totalMatchesSubtotalPlusShipping = amountsApprox(total, subtotal + shipping);
+  const totalMatchesShippingOnly = shipping > 0 && amountsApprox(total, shipping);
+
+  if (paymentKind === "prepaid") {
+    reasons.push("payment_kind_prepaid");
+    const productPaidAtCheckout = true;
+
+    if (shipping <= 0) {
+      reasons.push("prepaid_zero_shipping");
+      return {
+        productPaidAtCheckout,
+        shippingPaidAtCheckout: false,
+        reasons,
+      };
+    }
+
+    if (totalMatchesSubtotalPlusShipping) {
+      reasons.push("shipping_paid_at_checkout");
+      return {
+        productPaidAtCheckout,
+        shippingPaidAtCheckout: true,
+        reasons,
+      };
+    }
+
+    if (totalMatchesSubtotal) {
+      reasons.push("prepaid_product_only_shipping_cod");
+      return {
+        productPaidAtCheckout,
+        shippingPaidAtCheckout: false,
+        reasons,
+      };
+    }
+
+    reasons.push("prepaid_shipping_ambiguous");
+    return {
+      productPaidAtCheckout,
+      shippingPaidAtCheckout: false,
+      reasons,
+    };
+  }
+
+  reasons.push("payment_kind_cod");
+  const productPaidAtCheckout = false;
+
+  if (shipping <= 0) {
+    return {
+      productPaidAtCheckout,
+      shippingPaidAtCheckout: false,
+      reasons,
+    };
+  }
+
+  if (totalMatchesShippingOnly && expectedMatchesSubtotal) {
+    reasons.push("shipping_prepaid_product_cod");
+    return {
+      productPaidAtCheckout,
+      shippingPaidAtCheckout: true,
+      reasons,
+    };
+  }
+
+  if (expectedMatchesSubtotal && !expectedMatchesSubtotalPlusShipping) {
+    reasons.push("cod_product_only_shipping_unpaid");
+  } else if (expectedMatchesSubtotalPlusShipping || amountsApprox(expected, total)) {
+    reasons.push("cod_product_and_shipping_unpaid");
+  }
+
+  return {
+    productPaidAtCheckout,
+    shippingPaidAtCheckout: false,
+    reasons,
+  };
+}
+
+function deriveExpectedCodAmounts(
+  productPaidAtCheckout: boolean,
+  shippingPaidAtCheckout: boolean,
+  subtotal: number,
+  shipping: number,
+): { expectedCodProduct: number; expectedCodShipping: number } {
+  return {
+    expectedCodProduct: productPaidAtCheckout ? 0 : subtotal,
+    expectedCodShipping: shippingPaidAtCheckout ? 0 : shipping,
+  };
+}
+
+function deriveCodAmount(
+  productPaidAtCheckout: boolean,
+  subtotal: number,
+  expected: number,
+  ambiguous: boolean,
+): number | null {
+  if (productPaidAtCheckout) return null;
+  if (ambiguous) {
+    const inferred =
+      expected > 0 && expected <= subtotal + AMOUNT_TOLERANCE ? expected : subtotal > 0 ? subtotal : expected;
+    return inferred > 0 ? inferred : null;
+  }
+  return subtotal > 0 ? subtotal : null;
+}
+
+function deriveSuggestedFlete(
+  shippingPaidAtCheckout: boolean,
+  shipping: number,
+  expectedMatchesSubtotal: boolean,
+): number | null {
+  if (shippingPaidAtCheckout && shipping > 0) return shipping;
+  if (expectedMatchesSubtotal) return null;
+  if (shipping > 0) return shipping;
+  return null;
+}
+
+function deriveSuggestedEscenario(
+  smartEligible: boolean,
+  productPaidAtCheckout: boolean,
+  escenarioOverride: FlipyEscenarioPago | null,
+): FlipyEscenarioPago | null {
+  if (escenarioOverride) return escenarioOverride;
+  if (smartEligible && productPaidAtCheckout) return "1A";
+  return "1E";
+}
+
+function deriveConfidence(
+  paymentKind: ShopifyPaymentKind,
+  shippingPaidAtCheckout: boolean,
+  expectedMatchesSubtotal: boolean,
+  expectedMatchesSubtotalPlusShipping: boolean,
+  escenarioOverride: FlipyEscenarioPago | null,
+  ambiguous: boolean,
+): "high" | "medium" | "low" {
+  if (ambiguous) return escenarioOverride ? "medium" : "low";
+  if (paymentKind === "prepaid" && shippingPaidAtCheckout) return "high";
+  if (paymentKind === "prepaid" && !shippingPaidAtCheckout) {
+    return escenarioOverride ? "high" : "medium";
+  }
+  if (expectedMatchesSubtotalPlusShipping || expectedMatchesSubtotal) {
+    return escenarioOverride ? "high" : expectedMatchesSubtotal ? "medium" : "high";
+  }
+  return escenarioOverride ? "medium" : "low";
+}
+
 /**
  * Map Shopify order amounts + payment signals → suggested Flipy escenario.
- * See docs/FLIPY_CODTRACKED_INTEGRATION_MASTER.md §6 and docs/FLIPY_F0_SHOPIFY_PAYMENT_CASES.md.
+ * See docs/FLIPY_CODTRACKED_ALIGNMENT_V0.2.md (D3/D4) and docs/FLIPY_F0_SHOPIFY_PAYMENT_CASES.md.
  */
 export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): FlipyPaymentResolution {
   const reasons: string[] = [];
   const pickupKeywords = (input.pickup_keywords ?? []).map((entry) => entry.trim()).filter(Boolean);
-  const fulfillmentMode = detectFulfillmentMode(input.shipping_lines, pickupKeywords);
+  const fulfillmentMode = detectShippingFulfillmentMode(input.shipping_lines, pickupKeywords);
   const escenarioOverride = parseEscenarioOverride(input.note_attributes);
 
   if (fulfillmentMode === "pickup") {
@@ -141,6 +319,10 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
       fulfillmentMode: "pickup",
       productPaidAtCheckout: false,
       shippingPaidAtCheckout: false,
+      smartEligible: false,
+      flipyFulfillmentMode: null,
+      expectedCodProduct: 0,
+      expectedCodShipping: 0,
       suggestedEscenario: null,
       codAmount: null,
       suggestedFlete: null,
@@ -157,95 +339,79 @@ export function resolveShopifyFlipyPayment(input: FlipyOrderPaymentInput): Flipy
     input.expected_cod_amount != null ? finiteAmount(input.expected_cod_amount) : total;
 
   const paymentKind = resolvePaymentKind(input);
-  const productPaidAtCheckout = paymentKind === "prepaid";
-  const shippingPaidAtCheckout = productPaidAtCheckout && shipping > 0;
+  const partial = resolvePartialPaymentSignals(input, paymentKind);
+  reasons.push(...partial.reasons);
 
-  if (paymentKind === "prepaid") {
-    reasons.push("payment_kind_prepaid");
+  const { productPaidAtCheckout, shippingPaidAtCheckout } = partial;
+  const smartEligible = shippingPaidAtCheckout === true;
+  const flipyFulfillmentMode: FlipyOperationalFulfillmentMode = smartEligible ? "smart" : "bid";
 
-    if (shipping > 0) {
-      reasons.push("shipping_paid_at_checkout");
-      const resolution: FlipyPaymentResolution = {
-        fulfillmentMode,
-        productPaidAtCheckout: true,
-        shippingPaidAtCheckout: true,
-        suggestedEscenario: escenarioOverride ?? "1A",
-        codAmount: null,
-        suggestedFlete: shipping,
-        confidence: escenarioOverride ? "high" : "high",
-        requiresUserConfirmation: escenarioOverride ? false : false,
-        reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
-      };
-      return resolution;
-    }
+  const { expectedCodProduct, expectedCodShipping } = deriveExpectedCodAmounts(
+    productPaidAtCheckout,
+    shippingPaidAtCheckout,
+    subtotal,
+    shipping,
+  );
 
-    reasons.push("prepaid_zero_shipping_confirm_flete");
-    return {
-      fulfillmentMode,
-      productPaidAtCheckout: true,
-      shippingPaidAtCheckout: false,
-      suggestedEscenario: escenarioOverride ?? "1A",
-      codAmount: null,
-      suggestedFlete: null,
-      confidence: escenarioOverride ? "high" : "medium",
-      requiresUserConfirmation: escenarioOverride ? false : true,
-      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
-    };
-  }
-
-  reasons.push("payment_kind_cod");
-
-  const expectedMatchesTotal = amountsApprox(expected, total);
   const expectedMatchesSubtotal = amountsApprox(expected, subtotal);
   const expectedMatchesSubtotalPlusShipping = amountsApprox(expected, subtotal + shipping);
+  const ambiguous =
+    paymentKind === "cod" &&
+    !expectedMatchesSubtotal &&
+    !expectedMatchesSubtotalPlusShipping &&
+    !amountsApprox(expected, total);
 
-  if (expectedMatchesSubtotalPlusShipping || expectedMatchesTotal) {
-    reasons.push(
-      expectedMatchesSubtotalPlusShipping
-        ? "expected_matches_subtotal_plus_shipping"
-        : "expected_matches_total",
-    );
-    return {
-      fulfillmentMode,
-      productPaidAtCheckout: false,
-      shippingPaidAtCheckout: false,
-      suggestedEscenario: escenarioOverride ?? "1E",
-      codAmount: subtotal > 0 ? subtotal : null,
-      suggestedFlete: shipping > 0 ? shipping : null,
-      confidence: escenarioOverride ? "high" : "high",
-      requiresUserConfirmation: escenarioOverride ? false : true,
-      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
-    };
-  }
+  const suggestedEscenario = deriveSuggestedEscenario(
+    smartEligible,
+    productPaidAtCheckout,
+    escenarioOverride,
+  );
+  const codAmount = deriveCodAmount(
+    productPaidAtCheckout,
+    subtotal,
+    expected,
+    ambiguous,
+  );
+  const suggestedFlete = deriveSuggestedFlete(
+    shippingPaidAtCheckout,
+    shipping,
+    expectedMatchesSubtotal,
+  );
+  const confidence = deriveConfidence(
+    paymentKind,
+    shippingPaidAtCheckout,
+    expectedMatchesSubtotal,
+    expectedMatchesSubtotalPlusShipping,
+    escenarioOverride,
+    ambiguous,
+  );
 
-  if (expectedMatchesSubtotal) {
-    reasons.push("expected_matches_subtotal_only");
-    return {
-      fulfillmentMode,
-      productPaidAtCheckout: false,
-      shippingPaidAtCheckout: false,
-      suggestedEscenario: escenarioOverride ?? "1E",
-      codAmount: subtotal,
-      suggestedFlete: null,
-      confidence: escenarioOverride ? "high" : "medium",
-      requiresUserConfirmation: escenarioOverride ? false : true,
-      reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
-    };
-  }
+  if (escenarioOverride) reasons.push("note_attribute_escenario_override");
+  if (ambiguous) reasons.push("amounts_ambiguous_confirm_required");
+  if (smartEligible) reasons.push("smart_eligible_shipping_prepaid");
+  else reasons.push("bid_mode_shipping_not_prepaid");
 
-  reasons.push("amounts_ambiguous_confirm_required");
-  const inferredCod =
-    expected > 0 && expected <= subtotal ? expected : subtotal > 0 ? subtotal : expected;
+  const requiresUserConfirmation =
+    escenarioOverride != null
+      ? false
+      : ambiguous ||
+        confidence !== "high" ||
+        paymentKind === "cod" ||
+        (paymentKind === "prepaid" && !shippingPaidAtCheckout);
 
   return {
     fulfillmentMode,
-    productPaidAtCheckout: false,
-    shippingPaidAtCheckout: false,
-    suggestedEscenario: escenarioOverride ?? "1E",
-    codAmount: inferredCod > 0 ? inferredCod : null,
-    suggestedFlete: shipping > 0 ? shipping : null,
-    confidence: escenarioOverride ? "medium" : "low",
-    requiresUserConfirmation: escenarioOverride ? false : true,
-    reasons: escenarioOverride ? [...reasons, "note_attribute_escenario_override"] : reasons,
+    productPaidAtCheckout,
+    shippingPaidAtCheckout,
+    smartEligible,
+    flipyFulfillmentMode,
+    expectedCodProduct,
+    expectedCodShipping,
+    suggestedEscenario,
+    codAmount,
+    suggestedFlete,
+    confidence,
+    requiresUserConfirmation,
+    reasons,
   };
 }

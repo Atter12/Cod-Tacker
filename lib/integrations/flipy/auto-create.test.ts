@@ -11,6 +11,10 @@ const basePayment: FlipyPaymentResolution = {
   fulfillmentMode: "delivery",
   productPaidAtCheckout: false,
   shippingPaidAtCheckout: false,
+  smartEligible: false,
+  flipyFulfillmentMode: "bid",
+  expectedCodProduct: 89,
+  expectedCodShipping: 15,
   suggestedEscenario: "1E",
   codAmount: 89,
   suggestedFlete: 15,
@@ -68,6 +72,29 @@ describe("flipy auto-create rules", () => {
     });
     assert.equal(result.eligible, true);
     assert.equal(result.escenarioPago, "1E");
+  });
+
+  it("auto-create smart uses escenario 1A when shipping prepaid (v0.2)", () => {
+    const result = evaluateFlipyAutoCreate({
+      enabled: true,
+      minConfidence: "high",
+      flipyEnvioId: null,
+      payment: {
+        ...basePayment,
+        productPaidAtCheckout: true,
+        shippingPaidAtCheckout: true,
+        smartEligible: true,
+        flipyFulfillmentMode: "smart",
+        suggestedEscenario: "1A",
+        codAmount: null,
+        requiresUserConfirmation: false,
+        confidence: "high",
+      },
+      destinationCoords: { lat: -12.1, lng: -77.0 },
+      destinationAddress: "Miraflores, Lima",
+    });
+    assert.equal(result.eligible, true);
+    assert.equal(result.escenarioPago, "1A");
   });
 
   it("builds shipping address from order fields", () => {

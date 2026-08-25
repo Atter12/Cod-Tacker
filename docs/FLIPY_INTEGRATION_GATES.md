@@ -2,7 +2,7 @@
 
 > **Documentos relacionados:**  
 > - Maestro: `FLIPY_CODTRACKED_INTEGRATION_MASTER.md`  
-> - **Contrato API canónico:** `PARTNER_CODTRACKED.md` (v0.1.1 freeze)  
+> - **Contrato API canónico:** `PARTNER_CODTRACKED.md` (v0.2.0 draft Fase C)  
 > - Backlog PRs: `FLIPY_INTEGRATION_BACKLOG.md`  
 > - Casos F0-1: `FLIPY_F0_SHOPIFY_PAYMENT_CASES.md`  
 > - Smoke F1: `scripts/flipy-f1-smoke.ts`
@@ -140,6 +140,27 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 
 ---
 
+## Fase C — Integración E2E v0.2 (COD-tracked)
+
+| # | Criterio | Código CT | E2E |
+| --- | --- | --- | --- |
+| 1 | Webhooks `shipment.created` / `assigned` / `smart_fallback_to_bid` | ✅ `flipy.shipment.lifecycle` | ⏳ `smoke:v02` + staging |
+| 2 | Matriz D3 — 4 casos pago parcial | ✅ resolve-payment + create v0.2 | ⏳ `e2e:v02` manual |
+| 3 | Auto-create v0.2 smart + cotizar server-side | ✅ `flipy-auto-create-shipment` | ⏳ |
+| 4 | Regresión v0.1.1 sin `flipy_v02` | ✅ `v02-create-extensions` gate | ⏳ |
+| 5 | Smoke CT espejo Flipy A4 | ✅ `scripts/flipy-v0.2-smoke.ts` | ⏳ coordinar A4 |
+| 6 | Freeze `PARTNER_CODTRACKED.md` 0.2.0 | ✅ draft CT | ⏳ espejo Flipy post-A4 |
+
+**Gate Fase C (DoD revelación v0.2):**
+
+- [ ] `npm run smoke:v02` green contra staging Flipy (A4)
+- [ ] 4 casos D3 verificados en wizard + metadata `shopify_flipy_payment`
+- [ ] D1 fallback probado (`smart_fallback_to_bid` → alerta + pujas)
+- [ ] Tienda sin `flipy_v02` sigue create v0.1.1
+- [ ] `PARTNER_CODTRACKED.md` 0.2.0 sincronizado ambos repos
+
+---
+
 ## Definition of Done — integración v1
 
 1. Tienda conecta Flipy en COD-tracked.
@@ -161,3 +182,4 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | 1.3 | 2026-08-24 | F2/F3 código CT; F3 alineado con Flipy (`FLIPY_APP_ORIGIN`, `noteAttributes`, deep links) |
 | 1.4 | 2026-08-24 | **F4 código** — auto-create, conciliación CSV, embed pujas evaluación |
 | 1.5 | 2026-08-24 | Smoke F3/F4 API `scripts/flipy-f3-f4-smoke.ts` |
+| 1.6 | 2026-08-25 | **Fase C v0.2** — lifecycle webhooks, D3, `smoke:v02`, PARTNER 0.2.0 draft |

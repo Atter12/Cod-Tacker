@@ -9,10 +9,20 @@ import {
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { validateFlipyFletePrice } from "@/lib/integrations/flipy/flete-rules";
 import {
+  mapShopifyPackageCare,
+  type FlipyPackageCareId,
+} from "@/lib/integrations/flipy/map-package-care";
+import {
+  mapShopifyPackageSize,
+  type FlipyPackageSize,
+} from "@/lib/integrations/flipy/map-package-size";
+import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
+import {
   resolveShopifyFlipyPayment,
   type FlipyEscenarioPago,
 } from "@/lib/integrations/flipy/resolve-payment";
-import { readFlipyPickupKeywords } from "@/lib/integrations/flipy/settings";
+import { readFlipyPickupKeywords, readFlipyV02Enabled } from "@/lib/integrations/flipy/settings";
+import { buildFlipyV02CreateExtensions } from "@/lib/integrations/flipy/v02-create-extensions";
 import {
   readFlipyOriginFromSettings,
   resolveFlipyIntegrationForStore,
@@ -26,9 +36,16 @@ export type FlipyShipmentCreateResult = {
   trackingUrl?: string | null;
   trackingToken?: string | null;
   estado: string;
+  fulfillmentMode?: "smart" | "bid" | null;
+  assignedMotorizado?: {
+    id: string;
+    displayName?: string | null;
+    etaMinutes?: number | null;
+  } | null;
   appWebUrl?: string | null;
   appDeepLink?: string | null;
   pujasWebUrl?: string | null;
+  fleteQuote?: FlipyFleteQuote | null;
 };
 
 type OrderRow = {
@@ -43,11 +60,17 @@ type OrderRow = {
   expected_cod_amount: number | null;
   payment_status: string;
   metadata: Json;
+  tags: string[] | null;
   shipping_district: string | null;
   shipping_city: string | null;
   shipping_region: string | null;
   shipping_country_code: string | null;
   customer_id: string | null;
+};
+
+type OrderItemRow = {
+  title: string;
+  quantity: number;
 };
 
 function readMeta(metadata: Json): Record<string, unknown> {
@@ -86,6 +109,11 @@ export async function createFlipyShipmentForOrder(input: {
   escenarioPago: FlipyEscenarioPago;
   destination: { address: string; lat: number; lng: number };
   fletePrice?: number | null;
+  fleteQuote?: FlipyFleteQuote | null;
+  packageSize?: FlipyPackageSize | null;
+  packageCare?: FlipyPackageCareId[] | null;
+  packageCareNote?: string | null;
+  destinationEmail?: string | null;
   origin?: {
     address?: string | null;
     lat?: number | null;
@@ -108,7 +136,7 @@ export async function createFlipyShipmentForOrder(input: {
   const orderRes = await input.admin
     .from("orders")
     .select(
-      "id, store_id, agency_id, external_order_id, order_number, subtotal_amount, shipping_amount, total_amount, expected_cod_amount, payment_status, metadata, shipping_district, shipping_city, shipping_region, shipping_country_code, customer_id",
+      "id, store_id, agency_id, external_order_id, order_number, subtotal_amount, shipping_amount, total_amount, expected_cod_amount, payment_status, metadata, tags, shipping_district, shipping_city, shipping_region, shipping_country_code, customer_id",
     )
     .eq("id", input.orderId)
     .eq("store_id", input.storeId)
@@ -125,6 +153,8 @@ export async function createFlipyShipmentForOrder(input: {
   if (!integration || integration.status === "disconnected") {
     throw new IntegrationError("Conecta Flipy en Integraciones antes de crear envíos.");
   }
+
+  const v02Enabled = readFlipyV02Enabled(integration.settings);
 
   const flipyTiendaId = readFlipyTiendaId(integration.settings) ?? integration.external_account_id;
   if (!flipyTiendaId) {
@@ -153,7 +183,7 @@ export async function createFlipyShipmentForOrder(input: {
     shipping_lines: readShippingLines(meta),
     note_attributes: readNoteAttributes(meta),
     pickup_keywords: readFlipyPickupKeywords(integration.settings),
-    tags: [],
+    tags: order.tags,
   });
   if (paymentResolution.fulfillmentMode === "pickup") {
     throw new ValidationError("Pedido de recojo en tienda — no se crea envío Flipy.");
@@ -166,10 +196,11 @@ export async function createFlipyShipmentForOrder(input: {
 
   let customerName = "Cliente";
   let customerPhone: string | null = null;
+  let customerEmail: string | null = null;
   if (order.customer_id) {
     const customerRes = await input.admin
       .from("customers")
-      .select("first_name, last_name, phone")
+      .select("first_name, last_name, phone, email")
       .eq("id", order.customer_id)
       .maybeSingle();
     if (customerRes.data) {
@@ -179,12 +210,22 @@ export async function createFlipyShipmentForOrder(input: {
         .trim();
       if (name) customerName = name;
       customerPhone = customerRes.data.phone ?? null;
+      customerEmail = customerRes.data.email ?? null;
     }
   }
+
+  const itemsRes = await input.admin
+    .from("order_items")
+    .select("title, quantity")
+    .eq("order_id", order.id)
+    .eq("store_id", input.storeId);
+  const lineItems = (itemsRes.data ?? []) as OrderItemRow[];
 
   const destinationContactName = input.destinationContact?.name?.trim() || customerName;
   const destinationContactPhone =
     input.destinationContact?.phone?.trim() || customerPhone || undefined;
+  const destinationEmail =
+    input.destinationEmail?.trim() || customerEmail?.trim() || undefined;
   const originContact =
     input.origin?.contactName?.trim() ||
     originDefaults.contactName ||
@@ -192,6 +233,22 @@ export async function createFlipyShipmentForOrder(input: {
     "Tienda";
   const originPhone =
     input.origin?.phone?.trim() || originDefaults.phone || undefined;
+
+  const packageSize =
+    input.packageSize ??
+    mapShopifyPackageSize(
+      lineItems.map((line) => ({
+        title: line.title,
+        quantity: line.quantity,
+      })),
+    );
+  const packageCare =
+    input.packageCare ??
+    mapShopifyPackageCare({
+      tags: order.tags,
+      lineTitles: lineItems.map((line) => line.title),
+    });
+  const packageCareNote = input.packageCareNote?.trim() || undefined;
 
   const env = getFlipyEnv();
   const client = createFlipyPartnerClient({
@@ -202,6 +259,10 @@ export async function createFlipyShipmentForOrder(input: {
   });
 
   const externalOrderId = `shopify:${order.external_order_id}`;
+  const smartEligible = paymentResolution.smartEligible;
+  const operationalMode = paymentResolution.flipyFulfillmentMode ?? (smartEligible ? "smart" : "bid");
+  const fleteQuote = input.fleteQuote ?? null;
+
   const codAmount =
     input.escenarioPago === "1A"
       ? null
@@ -214,48 +275,65 @@ export async function createFlipyShipmentForOrder(input: {
       ? input.fletePrice
       : paymentResolution.suggestedFlete ??
           (order.shipping_amount > 0 ? order.shipping_amount : null),
+    { smartEligible, fleteQuote },
   );
   if (!fleteValidation.ok || fleteValidation.value == null) {
     throw new ValidationError(fleteValidation.error ?? "Oferta de flete inválida.");
   }
   const flete = fleteValidation.value;
 
+  if (v02Enabled && smartEligible && !fleteQuote) {
+    throw new ValidationError("Cotización de flete requerida para asignación automática (smart).");
+  }
+
   const noteAttributes = readNoteAttributes(meta);
   const notes = input.notes?.trim();
+  const paymentKind = paymentKindFromOrder(order) ?? "cod";
 
-  const created = await client.createEnvio(
-    {
-      externalOrderId,
-      orderNumber: order.order_number,
-      escenarioPago: input.escenarioPago,
-      codAmount,
-      price: flete,
-      originAddress,
-      originLat,
-      originLng,
-      originContact,
-      originPhone,
-      destinationAddress,
-      destinationLat: input.destination.lat,
-      destinationLng: input.destination.lng,
-      destinationContact: destinationContactName,
-      destinationPhone: destinationContactPhone,
-      noteAttributes: notes
-        ? [...(noteAttributes ?? []), { name: "flipy_notas_motorizado", value: notes }]
-        : noteAttributes,
-      shopifyPayment: {
-        productPaidAtCheckout: paymentResolution.productPaidAtCheckout,
-        shippingPaidAtCheckout: paymentResolution.shippingPaidAtCheckout,
-        shopifyShippingAmount: order.shipping_amount,
-        shopifySubtotal: order.subtotal_amount,
-        expectedCodProduct: order.expected_cod_amount,
-        paymentKind: paymentKindFromOrder(order) ?? "cod",
-        confirmedEscenario: input.escenarioPago,
-        ...(noteAttributes?.length ? { noteAttributes } : {}),
-      },
+  const createInput = {
+    externalOrderId,
+    orderNumber: order.order_number,
+    title: order.order_number ? `#${order.order_number.replace(/^#/, "")}` : undefined,
+    escenarioPago: input.escenarioPago,
+    codAmount,
+    price: flete,
+    originAddress,
+    originLat,
+    originLng,
+    originContact,
+    originPhone,
+    destinationAddress,
+    destinationLat: input.destination.lat,
+    destinationLng: input.destination.lng,
+    destinationContact: destinationContactName,
+    destinationPhone: destinationContactPhone,
+    destinationEmail,
+    noteAttributes: notes
+      ? [...(noteAttributes ?? []), { name: "flipy_notas_motorizado", value: notes }]
+      : noteAttributes,
+    shopifyPayment: {
+      productPaidAtCheckout: paymentResolution.productPaidAtCheckout,
+      shippingPaidAtCheckout: paymentResolution.shippingPaidAtCheckout,
+      shopifyShippingAmount: order.shipping_amount ?? 0,
+      shopifySubtotal: order.subtotal_amount ?? 0,
+      expectedCodProduct: paymentResolution.expectedCodProduct,
+      expectedCodShipping: paymentResolution.expectedCodShipping,
+      paymentKind,
+      confirmedEscenario: input.escenarioPago,
+      ...(noteAttributes?.length ? { noteAttributes } : {}),
     },
-    `codtracked:order:${order.id}`,
-  );
+    ...buildFlipyV02CreateExtensions({
+      v02Enabled,
+      smartEligible,
+      operationalMode,
+      packageSize,
+      packageCare,
+      packageCareNote,
+      fleteQuote,
+    }),
+  };
+
+  const created = await client.createEnvio(createInput, `codtracked:order:${order.id}`);
 
   const now = new Date().toISOString();
   const nextMeta = {
@@ -274,6 +352,10 @@ export async function createFlipyShipmentForOrder(input: {
       confirmedEscenario: input.escenarioPago,
       codAmount,
       fletePrice: flete,
+      smartEligible: paymentResolution.smartEligible,
+      fulfillmentMode: created.fulfillmentMode ?? operationalMode,
+      fleteQuote: created.fleteQuote ?? fleteQuote ?? null,
+      packageSize: v02Enabled ? packageSize : undefined,
       confirmedAt: now,
       confirmedBy: input.confirmedByUserId ?? null,
     },
@@ -290,9 +372,11 @@ export async function createFlipyShipmentForOrder(input: {
     trackingUrl: created.trackingUrl,
     trackingToken: created.trackingToken,
     estado: created.estado,
+    fulfillmentMode: created.fulfillmentMode ?? operationalMode,
+    assignedMotorizado: created.assignedMotorizado ?? null,
     appWebUrl: created.appWebUrl,
     appDeepLink: created.appDeepLink,
     pujasWebUrl: created.pujasWebUrl,
+    fleteQuote: created.fleteQuote ?? fleteQuote,
   };
 }
-

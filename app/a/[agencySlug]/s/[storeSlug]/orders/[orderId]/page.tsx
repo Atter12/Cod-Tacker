@@ -153,7 +153,12 @@ export default async function OrderDetailPage({
   const pendingConversions = conversionItems.filter(
     (item) => item.releaseStatus === "pending_review",
   ).length;
-  const flipyCtx = buildFlipyOrderShipmentContext(order, flipyIntegration?.settings, customer);
+  const flipyCtx = buildFlipyOrderShipmentContext(
+    order,
+    flipyIntegration?.settings,
+    customer,
+    detail.items.map((item) => ({ title: item.title, quantity: item.quantity })),
+  );
   const flipyConnected =
     !!flipyIntegration &&
     flipyIntegration.status !== "disconnected" &&
@@ -221,6 +226,8 @@ export default async function OrderDetailPage({
               appOrigin={flipyAppOrigin}
               paymentResolution={flipyCtx.payment}
               storeOrigin={flipyStoreOrigin}
+              defaultPackageSize={flipyCtx.defaultPackageSize}
+              defaultPackageCare={flipyCtx.defaultPackageCare}
               customerName={flipyCtx.customerName}
               customerPhone={flipyCtx.customerPhone}
               customerEmail={flipyCtx.customerEmail}
