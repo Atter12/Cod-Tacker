@@ -115,6 +115,8 @@ export function evaluateDestinationConsistency(
 
   if (!address) {
     reasons.push("address_empty");
+  } else if (isWeakLocationAddress(address)) {
+    reasons.push("address_too_generic");
   }
 
   if (pinCountry && addressCountry && pinCountry !== addressCountry) {
@@ -127,6 +129,16 @@ export function evaluateDestinationConsistency(
     movedFromPrefillM > threshold
   ) {
     reasons.push(`prefill_reused_after_pin_move_${Math.round(movedFromPrefillM)}m`);
+  }
+
+  // Pin moved far from known prefill but embed kept a thin address → force refresh.
+  if (
+    !reusedPrefillText &&
+    movedFromPrefillM != null &&
+    movedFromPrefillM > threshold &&
+    isWeakLocationAddress(address)
+  ) {
+    if (!reasons.includes("address_too_generic")) reasons.push("address_too_generic");
   }
 
   // Absurd: address claims a country far from pin even without exact bbox hit on both.
@@ -148,6 +160,41 @@ export function evaluateDestinationConsistency(
 
 export function formatCoordsLabel(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+/** Country-only or too vague to trust as a street address (e.g. Flipy embed "Perú"). */
+export function isWeakLocationAddress(address: string): boolean {
+  const trimmed = address.trim();
+  if (!trimmed) return true;
+  const key = normalizeAddressKey(trimmed);
+  if (!key) return true;
+  if (key.length < 8) return true;
+  const countryOnly = new Set([
+    "pe",
+    "peru",
+    "perú",
+    "de",
+    "germany",
+    "deutschland",
+    "cl",
+    "chile",
+    "co",
+    "colombia",
+    "mx",
+    "mexico",
+    "méxico",
+    "us",
+    "usa",
+    "united states",
+    "es",
+    "spain",
+    "espana",
+    "españa",
+  ]);
+  if (countryOnly.has(key)) return true;
+  // Single token that is only a country code / name
+  if (/^(pe|peru|de|germany|cl|chile)$/i.test(trimmed) && !/,/.test(trimmed)) return true;
+  return false;
 }
 
 export function buildPrefillShippingAddress(input: {

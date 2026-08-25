@@ -6,6 +6,7 @@ import {
   haversineDistanceMeters,
   inferCountryFromAddressText,
   inferCountryFromCoords,
+  isWeakLocationAddress,
 } from "@/lib/integrations/flipy/destination-consistency";
 
 describe("destination-consistency", () => {
@@ -60,5 +61,23 @@ describe("destination-consistency", () => {
     assert.ok(haversineDistanceMeters({ lat: 0, lng: 0 }, { lat: 0, lng: 0.01 }) > 1000);
     assert.equal(inferCountryFromCoords(-12.1, -77.0), "PE");
     assert.equal(inferCountryFromAddressText("Berlin, DE"), "DE");
+  });
+
+  it("flags weak country-only addresses like Perú", () => {
+    assert.equal(isWeakLocationAddress("Perú"), true);
+    assert.equal(isWeakLocationAddress("PE"), true);
+    assert.equal(isWeakLocationAddress("Av. Larco 123, Miraflores, Lima"), false);
+  });
+
+  it("rejects weak address even when country matches pin", () => {
+    const result = evaluateDestinationConsistency({
+      address: "Perú",
+      lat: -12.12782,
+      lng: -76.9856,
+      prefillAddress: "Av. Gate 123, Lima",
+      prefillCoords: { lat: -12.119, lng: -77.029 },
+    });
+    assert.equal(result.ok, false);
+    assert.ok(result.reasons.includes("address_too_generic"));
   });
 });

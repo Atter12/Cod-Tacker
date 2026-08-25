@@ -109,7 +109,9 @@ export function FlipyCreateShipmentModal({
   const [pickupEmbedUrl, setPickupEmbedUrl] = useState<string | null>(null);
   const [deliveryEmbedUrl, setDeliveryEmbedUrl] = useState<string | null>(null);
   const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
-  const [originPinConfirmed, setOriginPinConfirmed] = useState(Boolean(storeOrigin));
+  /** False until map confirm or “Usar dirección de mi tienda”. */
+  const [originPinConfirmed, setOriginPinConfirmed] = useState(false);
+  const [pickupMapNonce, setPickupMapNonce] = useState(0);
 
   const [fletePrice, setFletePrice] = useState<string>(
     initialFleteInputValue(
@@ -147,19 +149,49 @@ export function FlipyCreateShipmentModal({
   }, [destination, prefillAddress, prefillCoords]);
 
   function applyStoreOrigin() {
-    if (!storeOrigin) return;
+    if (!storeOrigin) {
+      setError("No hay origen de tienda Flipy configurado. Reconecta la integración con dirección completa.");
+      return;
+    }
+    setError(null);
     setOriginAddress(storeOrigin.address);
     setOriginLat(storeOrigin.lat);
     setOriginLng(storeOrigin.lng);
     setOriginContactName(storeOrigin.contactName);
     setOriginPhone(storeOrigin.phone);
     setOriginPinConfirmed(true);
+    // Reload map iframe centered on store origin so pin matches the fields.
+    setPickupEmbedUrl(null);
+    startTransition(async () => {
+      const tokenResult = await issueFlipyWidgetTokenAction({
+        agencySlug,
+        storeSlug,
+        orderId,
+        prefillAddress: storeOrigin.address,
+        prefillLat: storeOrigin.lat,
+        prefillLng: storeOrigin.lng,
+      });
+      if (tokenResult.error || !tokenResult.embedUrl) {
+        setError(
+          tokenResult.error ??
+            "Dirección de tienda aplicada en el formulario, pero no se pudo recargar el mapa.",
+        );
+        return;
+      }
+      setPickupEmbedUrl(tokenResult.embedUrl);
+      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
+      setPickupMapNonce((n) => n + 1);
+    });
   }
 
   function applyStoreContact() {
-    if (!storeOrigin) return;
+    if (!storeOrigin) {
+      setError("No hay datos de contacto de tienda Flipy.");
+      return;
+    }
     setOriginContactName(storeOrigin.contactName);
     setOriginPhone(storeOrigin.phone);
+    setError(null);
   }
 
   function resetFlow() {
@@ -171,7 +203,8 @@ export function FlipyCreateShipmentModal({
     setPickupEmbedUrl(null);
     setDeliveryEmbedUrl(null);
     setResolvedEmbedOrigin(embedOrigin);
-    setOriginPinConfirmed(Boolean(storeOrigin));
+    setOriginPinConfirmed(false);
+    setPickupMapNonce(0);
     setResult(null);
     setNotes("");
     const nextEscenario =
@@ -490,6 +523,7 @@ export function FlipyCreateShipmentModal({
             </div>
             {pickupEmbedUrl ? (
               <FlipyLocationEmbed
+                key={`pickup-map-${pickupMapNonce}`}
                 embedUrl={pickupEmbedUrl}
                 embedOrigin={resolvedEmbedOrigin}
                 agencySlug={agencySlug}
@@ -515,29 +549,29 @@ export function FlipyCreateShipmentModal({
             ) : (
               <Alert variant="info" title="Mapa de recojo">
                 <div className="space-y-2">
-                  <p>Cargando mapa Flipy…</p>
+                  <p>{pending ? "Cargando mapa Flipy…" : "El mapa aún no está listo."}</p>
                   <Button size="sm" variant="outline" disabled={pending} onClick={() => loadPickupEmbed()}>
                     Reintentar mapa
                   </Button>
                 </div>
               </Alert>
             )}
-            {originPinConfirmed && originAddress ? (
-              <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-text-secondary">Recojo — dirección</p>
-                  <p className="font-medium">{originAddress}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-secondary">Recojo — pin</p>
-                  <p className="font-mono text-xs">
-                    {Number.isFinite(originLat) && Number.isFinite(originLng)
-                      ? formatCoordsLabel(originLat, originLng)
-                      : "—"}
-                  </p>
-                </div>
+            <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-text-secondary">
+                  Recojo — dirección{originPinConfirmed ? " (confirmada)" : " (pendiente de confirmar en mapa)"}
+                </p>
+                <p className="font-medium">{originAddress || "—"}</p>
               </div>
-            ) : null}
+              <div>
+                <p className="text-xs text-text-secondary">Recojo — pin</p>
+                <p className="font-mono text-xs">
+                  {Number.isFinite(originLat) && Number.isFinite(originLng)
+                    ? formatCoordsLabel(originLat, originLng)
+                    : "—"}
+                </p>
+              </div>
+            </div>
             <FormField label="Dirección de recojo (editable)" htmlFor="flipy-origin-address">
               <Input
                 id="flipy-origin-address"
