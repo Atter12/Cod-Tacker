@@ -215,6 +215,7 @@ export const handleShopifyOrderCreated: JobHandler = async ({
         ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
         ...(data.shipping_lines?.length ? { shopify_shipping_lines: data.shipping_lines } : {}),
         ...(data.note_attributes?.length ? { shopify_note_attributes: data.note_attributes } : {}),
+        ...(shipping?.address1 ? { shopify_shipping_address1: shipping.address1 } : {}),
         ...orderContactMetadataPatch(data.customer),
       } as Json,
       tags: live ? ["jobs", "shopify", "live"] : ["jobs", "shopify", "mock"],

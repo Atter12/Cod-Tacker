@@ -309,13 +309,21 @@ async function main() {
   const created = createdRes.json;
   const envioId = String(created.envioId ?? "");
   const createOk = createdRes.res.ok && Boolean(envioId);
-  if (!createOk) {
-    record(
-      "F3-create-envio",
-      false,
-      `${String(created.code ?? createdRes.res.status)}: ${String(created.message ?? JSON.stringify(created).slice(0, 200))}`,
-    );
-  }
+  record(
+    "F3-create-envio",
+    createOk,
+    createOk
+      ? `envioId=${envioId} origin=${createBody.originAddress} dest=${createBody.destinationAddress}`
+      : `${String(created.code ?? createdRes.res.status)}: ${String(created.message ?? JSON.stringify(created).slice(0, 200))}`,
+  );
+  record(
+    "F3-create-origin-destination",
+    createOk
+      && Boolean(createBody.originLat && createBody.originLng && createBody.destinationLat && createBody.destinationLng)
+      && Boolean(createBody.originAddress)
+      && Boolean(createBody.destinationAddress),
+    `originContact=${createBody.originContact} destContact=${createBody.destinationContact}`,
+  );
   record(
     "F3-03-deep-links",
     createOk
@@ -359,10 +367,12 @@ async function main() {
     const bidsToken = String(bidsTokenRes.json.token ?? "");
     const pujasEmbedUrl = String(bidsTokenRes.json.pujasEmbedUrl ?? "");
     const claims = decodeJwtPayload(bidsToken);
+    const pujasHasEnvio =
+      !pujasEmbedUrl || pujasEmbedUrl.includes(encodeURIComponent(bidsEnvioId)) || pujasEmbedUrl.includes(`envioId=${bidsEnvioId}`);
     record(
       "F4-03-widget-bids",
-      bidsTokenRes.res.ok && Boolean(bidsToken) && Boolean(pujasEmbedUrl),
-      `pujasEmbedUrl=${Boolean(pujasEmbedUrl)} envioIdClaim=${String(claims?.envioId ?? "missing")}`,
+      bidsTokenRes.res.ok && Boolean(bidsToken) && Boolean(pujasEmbedUrl) && pujasHasEnvio,
+      `pujasEmbedUrl=${Boolean(pujasEmbedUrl)} envioIdClaim=${String(claims?.envioId ?? "missing")} urlHasEnvio=${pujasHasEnvio}`,
     );
     if (bidsToken) {
       const bidsPanel = await widgetRequest(

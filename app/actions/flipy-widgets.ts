@@ -76,6 +76,10 @@ export async function issueFlipyWidgetTokenAction(input: {
       throw new ValidationError("El mapa Flipy requiere un pedido.");
     }
 
+    if (scope === "bids_panel" && !flipyEnvioId) {
+      throw new ValidationError("El panel de pujas requiere un envío Flipy (envioId).");
+    }
+
     const widgetScope =
       scope === "wallet_topup"
         ? ["wallet_topup"]
@@ -147,6 +151,7 @@ export async function issueFlipyWidgetTokenAction(input: {
                   buildFlipyBidsEmbedUrl({
                     embedOrigin: env.embedOrigin,
                     token: issued.token,
+                    envioId: flipyEnvioId,
                   }),
               })
             : resolveFlipyScopedEmbedUrl({
@@ -176,11 +181,75 @@ export async function issueFlipyWidgetTokenAction(input: {
       // keep env default
     }
 
+    // Ensure bids iframe always carries envioId (API URL may omit it).
+    if (scope === "bids_panel" && flipyEnvioId) {
+      try {
+        const parsed = new URL(embedUrl);
+        if (!parsed.searchParams.get("envioId")) {
+          parsed.searchParams.set("envioId", flipyEnvioId);
+          embedUrl = parsed.toString();
+        }
+      } catch {
+        // keep resolved URL
+      }
+    }
+
     return actionOk({
       token: issued.token,
       embedUrl,
       embedOrigin: resolvedEmbedOrigin,
     });
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+export async function reverseGeocodeFlipyLocationAction(input: {
+  agencySlug: string;
+  storeSlug: string;
+  lat: number;
+  lng: number;
+}): Promise<ActionResult<{ address: string; lat: number; lng: number }>> {
+  try {
+    if (getIntegrationRuntimeMode() !== "live") {
+      throw new ValidationError("Reverse geocode Flipy requiere INTEGRATION_MODE=live.");
+    }
+    await requireUser();
+    const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    assertCanManageOrders(can(membership.roles, "orders.manage"));
+    if (!membership.storeId) throw new ValidationError("Tienda inválida.");
+    if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
+      throw new ValidationError("Coordenadas inválidas.");
+    }
+
+    const admin = createAdminClient();
+    const integration = await resolveFlipyIntegrationForStore(
+      admin,
+      membership.agencyId,
+      membership.storeId,
+    );
+    if (!integration || integration.status === "disconnected") {
+      throw new IntegrationError("Conecta Flipy en Integraciones antes de geocodificar.");
+    }
+    const partnerKey = resolveFlipyPartnerKeyFromIntegration(integration);
+    if (!partnerKey) {
+      throw new IntegrationError("FLIPY_PARTNER_API_KEY no configurada.");
+    }
+
+    const env = getFlipyEnv();
+    const client = createFlipyPartnerClient({
+      baseUrl: env.apiBaseUrl,
+      partnerKey,
+      partnerId: env.partnerId,
+      externalStoreId: membership.storeId,
+    });
+    const resolved = await client.reverseGeocode(input.lat, input.lng);
+    if (!resolved?.address) {
+      throw new ValidationError(
+        "No se pudo obtener dirección para el pin. Edítala manualmente.",
+      );
+    }
+    return actionOk(resolved);
   } catch (error) {
     return actionFail(error);
   }

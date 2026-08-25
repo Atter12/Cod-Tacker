@@ -306,6 +306,7 @@ describe("shopify order mapping", () => {
         first_name: "Ana",
         last_name: "Ruiz",
         phone: "+51 999 111 222",
+        address1: "Av. Larco 123",
         city: "Lima",
         province: "Lima",
         zip: "15001",
@@ -325,6 +326,7 @@ describe("shopify order mapping", () => {
       postal_code: "15001",
     });
     assert.deepEqual(payload.shipping, {
+      address1: "Av. Larco 123",
       country_code: "PE",
       region: "Lima",
       city: "Lima",

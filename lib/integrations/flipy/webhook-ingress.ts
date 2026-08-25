@@ -179,6 +179,8 @@ export function readFlipyOriginFromSettings(settings: unknown): {
   address?: string;
   lat?: number;
   lng?: number;
+  contactName?: string;
+  phone?: string;
 } {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) return {};
   const bag = settings as Record<string, unknown>;
@@ -200,7 +202,27 @@ export function readFlipyOriginFromSettings(settings: unknown): {
       : typeof bag.originLng === "number"
         ? bag.originLng
         : undefined;
-  return { address, lat, lng };
+  const contactName =
+    typeof bag.origin_contact === "string"
+      ? bag.origin_contact
+      : typeof bag.originContact === "string"
+        ? bag.originContact
+        : typeof bag.contact_name === "string"
+          ? bag.contact_name
+          : undefined;
+  const phone =
+    typeof bag.origin_phone === "string"
+      ? bag.origin_phone
+      : typeof bag.originPhone === "string"
+        ? bag.originPhone
+        : typeof bag.telefono === "string"
+          ? bag.telefono
+          : typeof bag.contact_phone === "string"
+            ? bag.contact_phone
+            : typeof bag.contactPhone === "string"
+              ? bag.contactPhone
+              : undefined;
+  return { address, lat, lng, contactName, phone };
 }
 
 export function hasFlipyTiendaLinked(settings: unknown): boolean {

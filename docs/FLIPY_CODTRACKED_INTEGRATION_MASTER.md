@@ -908,6 +908,8 @@ GOOGLE_MAPS_API_KEY=          # maps proxy (existente)
 FLIPY_PARTNER_API_KEY=        # mismo secret que Flipy valida
 FLIPY_API_BASE_URL=https://api.flipy.pe
 FLIPY_EMBED_ORIGIN=https://flipy-panel.vercel.app
+FLIPY_APP_ORIGIN=https://tienda.flipyexpress.com
+FLIPY_API_BASE_URL=https://flipy-backend.vercel.app
 INTEGRATION_MODE=live         # cuando flipy live adapter activo
 ```
 

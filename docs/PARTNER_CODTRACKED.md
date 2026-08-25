@@ -130,6 +130,20 @@ CT normaliza `externalOrderId` → dígitos Shopify para link `orders.external_o
 
 ---
 
+## Env COD-tracked (Vercel CT / local)
+
+| Variable | Valor prod | Notas |
+| --- | --- | --- |
+| `FLIPY_EMBED_ORIGIN` | `https://flipy-panel.vercel.app` | Host de iframes partner (`/partner/ubicacion`, `/partner/recarga`, `/partner/pujas`). **No** usar la app tienda. |
+| `FLIPY_APP_ORIGIN` | `https://tienda.flipyexpress.com` | Deep links / abrir envío en Flipy tienda |
+| `FLIPY_API_BASE_URL` | `https://flipy-backend.vercel.app` | Partner API |
+| `FLIPY_PARTNER_API_KEY` | (secret) | Mismo secret que Flipy `PARTNER_CODTRACKED_API_KEY` |
+| `FLIPY_PARTNER_ID` | `codtracked` | Header `X-Partner-Id` |
+
+Si `FLIPY_EMBED_ORIGIN` apunta a tienda, CT reescribe embeds partner al panel host (path + query).
+
+---
+
 ## Smoke F1 (local)
 
 Script: `scripts/flipy-f1-smoke.ts`
@@ -163,9 +177,15 @@ ORDER_EXTERNAL_ID=f3f4-smoke-001 \
 npm run smoke:f3f4
 ```
 
-Cubre: widget recarga + embed wallet saldo, ubicación, saldo health, deep links, `noteAttributes` → `1C`, panel pujas + embed API, conciliación `csv`/`json`/`settlement`.
+Cubre: widget recarga + embed wallet saldo, ubicación, saldo health, deep links, `noteAttributes` → `1C`, create con `originAddress`/`destinationAddress` + coords, panel pujas (`envioId` en token + URL) + embed API, conciliación `csv`/`json`/`settlement`.
 
 **Prod (2026-08-24):** 17/17 PASS desde Flipy repo. CT espejo valida los mismos endpoints Partner API (sin top-up Prisma — asegurar saldo operaciones ≥ S/50 en tienda gate).
+
+### Checklist E2E manual (tienda gate — 1A y 1E)
+
+1. **1A (prepago):** pedido Shopify paid + shipping → Crear envío → modalidad 1A → recojo tienda → pin Lima → oferta flete **requerida (> 0)**, label no dice “opcional” → Confirmar muestra dirección + lat/lng → create → panel pujas carga `/partner/pujas?token=…&envioId=…` (no ícono roto).
+2. **1E (COD):** pedido cash_on_delivery → mismo flujo; flete requerido; destino never Berlin+Lima silently.
+3. Pin movido lejos del prefill Shopify → warning o reverse-geocode; no crear con texto DE + coords PE.
 
 ---
 

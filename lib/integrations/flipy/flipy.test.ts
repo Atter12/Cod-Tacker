@@ -86,17 +86,17 @@ describe("flipy embed-urls", () => {
     assert.equal(url, `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`);
   });
 
-  it("rejects tienda app host for partner embeds", () => {
-    assert.throws(
-      () =>
-        resolveFlipyScopedEmbedUrl({
-          scope: "location_picker",
-          apiEmbedUrl: "https://tienda.flipyexpress.com/partner/ubicacion?token=abc",
-          embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
-          appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
-          buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=fallback`,
-        }),
-      /app tienda/,
+  it("rewrites tienda app host embeds onto FLIPY_EMBED_ORIGIN", () => {
+    const url = resolveFlipyScopedEmbedUrl({
+      scope: "location_picker",
+      apiEmbedUrl: `${FLIPY_DEFAULT_APP_ORIGIN}/partner/ubicacion?token=abc&lat=-12.1`,
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
+      appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+      buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=fallback`,
+    });
+    assert.equal(
+      url,
+      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc&lat=-12.1`,
     );
   });
 });

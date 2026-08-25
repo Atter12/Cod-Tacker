@@ -19,8 +19,10 @@ export type ShopifyMappedCustomer = {
   postal_code?: string;
 };
 
-/** Shipping fields written onto `orders.shipping_*`. */
+/** Shipping fields written onto `orders.shipping_*` (+ address1 in metadata). */
 export type ShopifyMappedShipping = {
+  /** Street line (Shopify `address1`) — stored in order metadata for Flipy prefill. */
+  address1?: string;
   country_code?: string;
   region?: string;
   city?: string;
@@ -47,11 +49,12 @@ export type ShopifyRestShippingAddress = {
   first_name?: string | null;
   last_name?: string | null;
   phone?: string | null;
+  address1?: string | null;
   city?: string | null;
   province?: string | null;
   zip?: string | null;
   country_code?: string | null;
-  /** Sometimes present on COD checkouts. */
+  /** Often district / apartment; PE COD checkouts. */
   address2?: string | null;
 };
 
@@ -67,6 +70,8 @@ export type ShopifyGraphqlMailingAddress = {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  address1?: string | null;
+  address2?: string | null;
   city?: string | null;
   province?: string | null;
   zip?: string | null;
@@ -150,13 +155,17 @@ export function mapRestCustomerFields(input: {
         }
       : undefined;
 
+  const address1 = cleanText(ship?.address1);
+  const district = cleanText(ship?.address2);
+
   const shipping: ShopifyMappedShipping | undefined =
-    country_code || region || city || postal_code || cleanText(ship?.address2)
+    country_code || region || city || postal_code || address1 || district
       ? {
+          ...(address1 ? { address1 } : {}),
           ...(country_code ? { country_code } : {}),
           ...(region ? { region } : {}),
           ...(city ? { city } : {}),
-          ...(cleanText(ship?.address2) ? { district: cleanText(ship?.address2) } : {}),
+          ...(district ? { district } : {}),
           ...(postal_code ? { postal_code } : {}),
         }
       : undefined;
@@ -183,6 +192,8 @@ export function mapGraphqlCustomerFields(input: {
   const region = cleanText(ship?.province);
   const postal_code = cleanText(ship?.zip);
   const country_code = cleanCountry(ship?.countryCodeV2);
+  const address1 = cleanText(ship?.address1);
+  const district = cleanText(ship?.address2);
 
   const external_customer_id = c?.id ? shopifyGidToExternalId(c.id) : undefined;
 
@@ -202,11 +213,13 @@ export function mapGraphqlCustomerFields(input: {
       : undefined;
 
   const shipping: ShopifyMappedShipping | undefined =
-    country_code || region || city || postal_code
+    country_code || region || city || postal_code || address1 || district
       ? {
+          ...(address1 ? { address1 } : {}),
           ...(country_code ? { country_code } : {}),
           ...(region ? { region } : {}),
           ...(city ? { city } : {}),
+          ...(district ? { district } : {}),
           ...(postal_code ? { postal_code } : {}),
         }
       : undefined;

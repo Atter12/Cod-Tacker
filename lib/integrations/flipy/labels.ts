@@ -10,10 +10,10 @@ const ESCENARIO_LABELS: Record<(typeof FLIPY_USER_ESCENARIOS)[number], string> =
 };
 
 const ESCENARIO_HINTS: Record<(typeof FLIPY_USER_ESCENARIOS)[number], string> = {
-  "1A": "Producto y envío pagados en Shopify. Solo flete al motorizado si aplica.",
-  "1C": "Cliente paga el producto contra entrega.",
-  "1E": "Cliente paga producto y envío contra entrega (típico COD).",
-  "1D": "Producto prepago; solo el envío se cobra contra entrega.",
+  "1A": "Producto y envío pagados en Shopify. Define COD vs prepago; el flete se fija después como oferta a motorizados.",
+  "1C": "Cliente paga el producto contra entrega. El flete se fija después como oferta.",
+  "1E": "Cliente paga producto y envío contra entrega (típico COD). El flete se fija después como oferta.",
+  "1D": "Producto prepago; solo el envío se cobra contra entrega. El flete se fija después como oferta.",
 };
 
 export const FLIPY_ESCENARIO_OPTIONS = FLIPY_USER_ESCENARIOS.map((value) => ({

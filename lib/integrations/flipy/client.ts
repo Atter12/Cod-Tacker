@@ -257,6 +257,26 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       return { address, lat: place.lat, lng: place.lng };
     },
 
+    async reverseGeocode(
+      lat: number,
+      lng: number,
+    ): Promise<{ address: string; lat: number; lng: number } | null> {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      const raw = await request<unknown>(
+        `/api/partner/maps/reverse-geocode?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
+        { method: "GET" },
+      );
+      const bag = asRecord(raw) ?? {};
+      const place = asRecord(bag.place) ?? bag;
+      const address =
+        readString(place, "address", "formattedAddress", "formatted_address", "displayName") ??
+        readString(bag, "address", "formattedAddress");
+      const outLat = typeof place.lat === "number" ? place.lat : typeof bag.lat === "number" ? bag.lat : lat;
+      const outLng = typeof place.lng === "number" ? place.lng : typeof bag.lng === "number" ? bag.lng : lng;
+      if (!address) return null;
+      return { address, lat: outLat, lng: outLng };
+    },
+
     async createEnvio(input: FlipyCreateEnvioInput, idempotencyKey: string): Promise<FlipyCreateEnvioResult> {
       const raw = await request<unknown>("/api/partner/envios", {
         method: "POST",

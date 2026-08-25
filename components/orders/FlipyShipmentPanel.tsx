@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { FlipyCreateShipmentModal } from "@/components/flipy/FlipyCreateShipmentModal";
+import {
+  FlipyCreateShipmentModal,
+  type FlipyStoreOriginDefaults,
+} from "@/components/flipy/FlipyCreateShipmentModal";
 import { buildFlipyOperationWebUrl } from "@/lib/integrations/flipy/embed-urls";
 import { labelFlipyEscenario } from "@/lib/integrations/flipy/labels";
 import type { FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
@@ -15,9 +18,14 @@ type Props = {
   orderNumber: string;
   currencyCode: string;
   prefillAddress: string;
+  prefillCoords?: { lat: number; lng: number } | null;
   embedOrigin: string;
   appOrigin: string;
   paymentResolution: FlipyPaymentResolution;
+  storeOrigin?: FlipyStoreOriginDefaults | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
   flipyEnvioId?: string | null;
   flipyTrackingUrl?: string | null;
   canCreate: boolean;
@@ -31,9 +39,14 @@ export function FlipyShipmentPanel({
   orderNumber,
   currencyCode,
   prefillAddress,
+  prefillCoords = null,
   embedOrigin,
   appOrigin,
   paymentResolution,
+  storeOrigin = null,
+  customerName = null,
+  customerPhone = null,
+  customerEmail = null,
   flipyEnvioId = null,
   flipyTrackingUrl = null,
   canCreate,
@@ -94,7 +107,7 @@ export function FlipyShipmentPanel({
       <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
         <h2 className="text-sm font-semibold">Flipy</h2>
         <p className="text-[12.5px] text-text-secondary">
-          Crea un envío con escenario de pago y ubicación confirmada en el mapa embed.
+          Crea un envío con escenario, recojo, entrega confirmada en mapa y oferta de flete.
           {paymentResolution.suggestedEscenario ? (
             <>
               {" "}
@@ -114,9 +127,14 @@ export function FlipyShipmentPanel({
         orderNumber={orderNumber}
         currencyCode={currencyCode}
         prefillAddress={prefillAddress}
+        prefillCoords={prefillCoords}
         embedOrigin={embedOrigin}
         appOrigin={appOrigin}
         paymentResolution={paymentResolution}
+        storeOrigin={storeOrigin}
+        customerName={customerName}
+        customerPhone={customerPhone}
+        customerEmail={customerEmail}
         open={open}
         onOpenChange={setOpen}
       />

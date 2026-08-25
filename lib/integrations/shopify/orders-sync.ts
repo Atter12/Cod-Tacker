@@ -148,6 +148,8 @@ export async function fetchShopifyOrdersForSync(input: {
                   firstName
                   lastName
                   phone
+                  address1
+                  address2
                   city
                   province
                   zip

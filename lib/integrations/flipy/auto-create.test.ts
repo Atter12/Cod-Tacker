@@ -82,6 +82,18 @@ describe("flipy auto-create rules", () => {
     assert.match(address, /15074/);
   });
 
+  it("prefers address1 in shipping prefill", () => {
+    const address = buildOrderShippingAddress({
+      shippingAddress1: "Calle Falsa 123",
+      shipping_district: "Miraflores",
+      shipping_city: "Lima",
+      shipping_region: "LIM",
+      shipping_country_code: "PE",
+      shipping_postal_code: "15074",
+    });
+    assert.match(address, /^Calle Falsa 123/);
+  });
+
   it("reads destination coords when present", () => {
     const coords = readOrderDestinationCoords({
       shipping_latitude: -12.12,

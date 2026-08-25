@@ -43,6 +43,7 @@ import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { buildFlipyOrderShipmentContext } from "@/lib/integrations/flipy/order-shipment-context";
 import { readFlipyEmbedBidsEvalEnabled } from "@/lib/integrations/flipy/settings";
+import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { can } from "@/lib/permissions/can";
@@ -152,7 +153,7 @@ export default async function OrderDetailPage({
   const pendingConversions = conversionItems.filter(
     (item) => item.releaseStatus === "pending_review",
   ).length;
-  const flipyCtx = buildFlipyOrderShipmentContext(order, flipyIntegration?.settings);
+  const flipyCtx = buildFlipyOrderShipmentContext(order, flipyIntegration?.settings, customer);
   const flipyConnected =
     !!flipyIntegration &&
     flipyIntegration.status !== "disconnected" &&
@@ -166,6 +167,24 @@ export default async function OrderDetailPage({
     showFlipyPanel &&
     flipyCtx.flipyEnvioId &&
     readFlipyEmbedBidsEvalEnabled(flipyIntegration?.settings);
+  const flipyOriginSettings = flipyIntegration
+    ? readFlipyOriginFromSettings(flipyIntegration.settings)
+    : null;
+  const flipyStoreOrigin =
+    flipyOriginSettings?.address &&
+    flipyOriginSettings.lat != null &&
+    flipyOriginSettings.lng != null
+      ? {
+          address: flipyOriginSettings.address,
+          lat: flipyOriginSettings.lat,
+          lng: flipyOriginSettings.lng,
+          contactName:
+            flipyOriginSettings.contactName?.trim() ||
+            flipyIntegration?.display_name?.trim() ||
+            "Tienda",
+          phone: flipyOriginSettings.phone?.trim() || "",
+        }
+      : null;
 
   return (
     <section className="min-w-0 space-y-5">
@@ -197,9 +216,14 @@ export default async function OrderDetailPage({
               orderNumber={order.order_number ?? order.external_order_id}
               currencyCode={order.currency_code}
               prefillAddress={flipyCtx.prefillAddress}
+              prefillCoords={flipyCtx.shippingCoords}
               embedOrigin={flipyEmbedOrigin}
               appOrigin={flipyAppOrigin}
               paymentResolution={flipyCtx.payment}
+              storeOrigin={flipyStoreOrigin}
+              customerName={flipyCtx.customerName}
+              customerPhone={flipyCtx.customerPhone}
+              customerEmail={flipyCtx.customerEmail}
               flipyEnvioId={flipyCtx.flipyEnvioId}
               flipyTrackingUrl={flipyCtx.flipyTrackingUrl}
               canCreate={flipyCanCreate}

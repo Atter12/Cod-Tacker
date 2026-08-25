@@ -34,6 +34,7 @@ export const shopifyMappedCustomerSchema = z
 
 export const shopifyMappedShippingSchema = z
   .object({
+    address1: z.string().min(1).max(500).optional(),
     country_code: z.string().length(2).optional(),
     region: z.string().min(1).max(200).optional(),
     city: z.string().min(1).max(200).optional(),

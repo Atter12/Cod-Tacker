@@ -105,8 +105,12 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | --- | --- |
 | Embed host | `FLIPY_EMBED_ORIGIN` → `https://flipy-panel.vercel.app` (`/partner/ubicacion`, `/partner/recarga`, `/partner/pujas`) |
 | App tienda (pujas) | `FLIPY_APP_ORIGIN` → `https://tienda.flipyexpress.com` (o Expo web) |
+| API base | `FLIPY_API_BASE_URL` → `https://flipy-backend.vercel.app` |
 | postMessage recarga | `flipy-wallet-topped-up` `{ newBalance }` · error `flipy-wallet-error` |
-| Create envío | CT envía `noteAttributes`; Flipy devuelve `appWebUrl`, `appDeepLink`, `pujasWebUrl` |
+| postMessage pujas | `flipy-bids-updated` · `flipy-bid-accepted` · `flipy-bids-error` |
+| Create envío | CT envía `noteAttributes`, origin/destination contacts; Flipy devuelve `appWebUrl`, `appDeepLink`, `pujasWebUrl` |
+| Destino texto↔pin | Umbral ~200 m + país; reverse-geocode o edición manual si inconsistente |
+| Flete UI | 1A/1C/1E/1D: oferta requerida (> 0); label “Oferta de flete (S/)” — nunca “opcional” genérico |
 
 **Probar E2E F3** (tienda `holistic-ecommerce/flipy`):
 
