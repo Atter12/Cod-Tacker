@@ -8,6 +8,7 @@ import {
   ensureFlipyMapWheelZoomParams,
   isAllowedFlipyPostMessageOrigin,
   resolveFlipyScopedEmbedUrl,
+  withFlipyLocationClientParams,
   FLIPY_DEFAULT_APP_ORIGIN,
   FLIPY_DEFAULT_EMBED_ORIGIN,
 } from "@/lib/integrations/flipy/embed-urls";
@@ -110,6 +111,15 @@ describe("flipy embed-urls", () => {
     assert.match(url, /gestureHandling=greedy/);
     assert.match(url, /mapWheel=zoom/);
   });
+
+  it("requests live pin sync + parentOrigin on ubicacion iframe", () => {
+    const url = withFlipyLocationClientParams(
+      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
+      "https://app.codtracked.com",
+    );
+    assert.match(url, /liveLocationSync=1/);
+    assert.match(url, /parentOrigin=https%3A%2F%2Fapp\.codtracked\.com/);
+  });
 });
 
 describe("flipy post-message", () => {
@@ -131,6 +141,18 @@ describe("flipy post-message", () => {
     assert.equal(msg?.address, "Av. Larco 1");
     assert.equal(msg?.lat, -12.12);
     assert.equal(msg?.lng, -77.03);
+  });
+
+  it("parses live pin drag as provisional location-updated", () => {
+    const msg = parseFlipyLocationMessage({
+      type: "flipy-location-updated",
+      address: "Perú",
+      lat: -12.1226,
+      lng: -77.01936,
+    });
+    assert.ok(msg);
+    assert.equal(msg?.provisional, true);
+    assert.equal(msg?.address, "Perú");
   });
 });
 

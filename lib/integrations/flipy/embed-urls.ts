@@ -153,6 +153,8 @@ export function withFlipyLocationClientParams(embedUrl: string, parentOrigin?: s
     if (!url.pathname.includes("/partner/ubicacion")) return embedUrl;
     url.searchParams.set("gestureHandling", "greedy");
     url.searchParams.set("mapWheel", "zoom");
+    // Ask Flipy embed to post flipy-location-updated while the pin moves (not only on confirm).
+    url.searchParams.set("liveLocationSync", "1");
     const parent = parentOrigin?.trim();
     if (parent) url.searchParams.set("parentOrigin", parent);
     return url.toString();

@@ -377,16 +377,16 @@ export function FlipyCreateShipmentModal({
   function validateRuta(): string | null {
     if (!originAddress.trim()) return "Confirma o edita la dirección de recojo en el mapa.";
     if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
-      return "Confirma el pin de recojo en el mapa Flipy (o usa la dirección de tu tienda).";
+      return "Mueve el pin de recojo en el mapa (o usa la dirección de tu tienda).";
     }
     if (!originPinConfirmed) {
-      return "Confirma el pin de recojo en el mapa (o pulsa “Usar dirección de mi tienda”).";
+      return "Mueve el pin de recojo en el mapa (o pulsa “Usar dirección de mi tienda”).";
     }
     if (!originContactName.trim()) return "Indica quién entrega (nombre).";
     if (!isValidPeMobile(originPhone)) {
       return "Celular de quién entrega: 9 dígitos PE (empieza en 9).";
     }
-    if (!destination) return "Confirma la ubicación de entrega en el mapa Flipy.";
+    if (!destination) return "Mueve el pin de entrega en el mapa.";
     if (!destination.address.trim()) return "La dirección de entrega está vacía — edítala.";
     if (destinationConsistency && !destinationConsistency.ok) {
       return "La dirección textual no coincide con el pin. Corrígela antes de continuar.";
@@ -684,7 +684,7 @@ export function FlipyCreateShipmentModal({
                         ? { lat: originLat, lng: originLng }
                         : null
                   }
-                  mapHeightClassName="h-[min(48vh,420px)]"
+                  mapHeightClassName="h-[min(58vh,520px)]"
                   onConfirmed={(next) => {
                     setOriginAddress(next.address);
                     setOriginLat(next.lat);
@@ -727,7 +727,7 @@ export function FlipyCreateShipmentModal({
                   purpose="delivery"
                   prefillAddress={prefillAddress}
                   prefillCoords={prefillCoords}
-                  mapHeightClassName="h-[min(48vh,420px)]"
+                  mapHeightClassName="h-[min(58vh,520px)]"
                   onConfirmed={(next) => {
                     setDestination(next);
                     setError(null);

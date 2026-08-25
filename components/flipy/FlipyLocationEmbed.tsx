@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { reverseGeocodeFlipyLocationAction } from "@/app/actions/flipy-widgets";
 import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
 import {
   evaluateDestinationConsistency,
@@ -34,10 +33,11 @@ type Props = {
   onConfirmed: (destination: FlipyDestination) => void;
 };
 
+const PIN_SYNC_DEBOUNCE_MS = 450;
+
 /**
  * Host for Flipy `/partner/ubicacion`.
- * Syncs CT form fields whenever the embed posts location confirm/update.
- * Fallback: paste pin lat/lng from the iframe and reverse-geocode.
+ * Syncs CT fields on pin move (postMessage) + reverse-geocode when the embed text is weak ("Perú").
  */
 export function FlipyLocationEmbed({
   embedUrl,
@@ -46,27 +46,26 @@ export function FlipyLocationEmbed({
   storeSlug,
   prefillAddress,
   prefillCoords,
-  mapHeightClassName = "h-[min(62vh,560px)]",
+  mapHeightClassName = "h-[min(58vh,520px)]",
   purpose = "delivery",
   onConfirmed,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
-  const [hint, setHint] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [manualAddress, setManualAddress] = useState("");
-  const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [resolving, setResolving] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string>(
-    "Esperando “Confirmar ubicación” del mapa…",
+  const [liveAddress, setLiveAddress] = useState(prefillAddress?.trim() ?? "");
+  const [liveCoords, setLiveCoords] = useState<{ lat: number; lng: number } | null>(
+    prefillCoords ?? null,
   );
-  const [fallbackLat, setFallbackLat] = useState("");
-  const [fallbackLng, setFallbackLng] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>("Mueve el pin en el mapa para elegir la ubicación.");
   const [parentOrigin, setParentOrigin] = useState<string | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const onConfirmedRef = useRef(onConfirmed);
-  onConfirmedRef.current = onConfirmed;
   const prefillAddressRef = useRef(prefillAddress);
   const prefillCoordsRef = useRef(prefillCoords);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeRequestRef = useRef(0);
+  onConfirmedRef.current = onConfirmed;
   prefillAddressRef.current = prefillAddress;
   prefillCoordsRef.current = prefillCoords;
 
@@ -74,134 +73,120 @@ export function FlipyLocationEmbed({
     setParentOrigin(window.location.origin);
   }, []);
 
-  function emitConfirmed(destination: FlipyDestination) {
-    setPendingCoords(null);
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const emitConfirmed = useCallback((destination: FlipyDestination) => {
     setWarning(null);
     setError(null);
-    setHint(`Dirección actualizada: ${destination.address || formatCoordsLabel(destination.lat, destination.lng)}`);
+    setLiveAddress(destination.address);
+    setLiveCoords({ lat: destination.lat, lng: destination.lng });
     setSyncStatus(
-      `Sincronizado ${formatCoordsLabel(destination.lat, destination.lng)} → formulario`,
+      `Ubicación sincronizada · ${formatCoordsLabel(destination.lat, destination.lng)}`,
     );
-    setFallbackLat(String(destination.lat));
-    setFallbackLng(String(destination.lng));
     onConfirmedRef.current(destination);
-  }
+  }, []);
 
-  async function enrichAndEmit(input: {
-    address: string;
-    lat: number;
-    lng: number;
-    reasons: string[];
-  }) {
-    emitConfirmed({
-      address: input.address.trim() || `Pin ${formatCoordsLabel(input.lat, input.lng)}`,
-      lat: input.lat,
-      lng: input.lng,
-    });
-
-    if (!input.reasons.length && !isWeakLocationAddress(input.address)) {
-      return;
-    }
-
-    setResolving(true);
-    setWarning("Obteniendo dirección textual del pin…");
-    try {
-      const reversed = await reverseGeocodeFlipyLocationAction({
-        agencySlug,
-        storeSlug,
-        lat: input.lat,
-        lng: input.lng,
-      });
-      if (!reversed.error && reversed.address) {
-        emitConfirmed({
-          address: reversed.address,
-          lat: reversed.lat ?? input.lat,
-          lng: reversed.lng ?? input.lng,
+  const resolveAddressFromPin = useCallback(
+    async (input: { lat: number; lng: number; fallbackAddress?: string }) => {
+      const requestId = ++geocodeRequestRef.current;
+      setResolving(true);
+      setSyncStatus(`Obteniendo dirección para ${formatCoordsLabel(input.lat, input.lng)}…`);
+      try {
+        const reversed = await reverseGeocodeFlipyLocationAction({
+          agencySlug,
+          storeSlug,
+          lat: input.lat,
+          lng: input.lng,
         });
-        setManualAddress(reversed.address);
-        setWarning(null);
-        return;
-      }
-      setPendingCoords({ lat: input.lat, lng: input.lng });
-      setManualAddress(input.address.trim());
-      setWarning(
-        `Pin aplicado (${formatCoordsLabel(input.lat, input.lng)}), pero el texto del mapa no es confiable` +
-          (input.address ? ` (“${input.address}”).` : ".") +
-          " Edita la dirección abajo.",
-      );
-    } finally {
-      setResolving(false);
-    }
-  }
+        if (requestId !== geocodeRequestRef.current) return;
 
-  function handleLocationFromEmbed(confirmed: {
-    address: string;
-    lat: number;
-    lng: number;
-    provisional?: boolean;
-  }) {
-    setFallbackLat(String(confirmed.lat));
-    setFallbackLng(String(confirmed.lng));
-    const consistency = evaluateDestinationConsistency({
-      address: confirmed.address,
-      lat: confirmed.lat,
-      lng: confirmed.lng,
-      prefillAddress: prefillAddressRef.current,
-      prefillCoords: prefillCoordsRef.current,
-    });
-    const weak = isWeakLocationAddress(confirmed.address);
-    if (weak || !consistency.ok) {
-      void enrichAndEmit({
+        if (!reversed.error && reversed.address?.trim()) {
+          emitConfirmed({
+            address: reversed.address.trim(),
+            lat: reversed.lat ?? input.lat,
+            lng: reversed.lng ?? input.lng,
+          });
+          return;
+        }
+
+        const fallback = input.fallbackAddress?.trim();
+        if (fallback && !isWeakLocationAddress(fallback)) {
+          emitConfirmed({ address: fallback, lat: input.lat, lng: input.lng });
+          return;
+        }
+
+        emitConfirmed({
+          address: `Ubicación ${formatCoordsLabel(input.lat, input.lng)}`,
+          lat: input.lat,
+          lng: input.lng,
+        });
+        setWarning(
+          "No pudimos obtener la calle exacta. Edita la dirección abajo si hace falta.",
+        );
+      } finally {
+        if (requestId === geocodeRequestRef.current) {
+          setResolving(false);
+        }
+      }
+    },
+    [agencySlug, emitConfirmed, storeSlug],
+  );
+
+  const processLocationUpdate = useCallback(
+    (confirmed: { address: string; lat: number; lng: number; provisional?: boolean }) => {
+      const consistency = evaluateDestinationConsistency({
         address: confirmed.address,
         lat: confirmed.lat,
         lng: confirmed.lng,
-        reasons: [
-          ...(weak ? ["address_too_generic"] : []),
-          ...consistency.reasons.filter((r) => r !== "address_too_generic"),
-        ],
+        prefillAddress: prefillAddressRef.current,
+        prefillCoords: prefillCoordsRef.current,
       });
-      return;
-    }
-    emitConfirmed({
-      address: confirmed.address,
-      lat: confirmed.lat,
-      lng: confirmed.lng,
-    });
-  }
+      const weak = isWeakLocationAddress(confirmed.address);
+      const needsGeocode = weak || !consistency.ok || confirmed.provisional === true;
 
-  async function applyFallbackCoords() {
-    const lat = Number.parseFloat(fallbackLat.replace(",", "."));
-    const lng = Number.parseFloat(fallbackLng.replace(",", "."));
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setError("Ingresa lat y lng numéricos del pin (como en “Pin: …” del mapa).");
-      return;
-    }
-    setError(null);
-    await enrichAndEmit({
-      address: "",
-      lat,
-      lng,
-      reasons: ["manual_pin_apply"],
-    });
-  }
+      setLiveCoords({ lat: confirmed.lat, lng: confirmed.lng });
+
+      if (needsGeocode) {
+        void resolveAddressFromPin({
+          lat: confirmed.lat,
+          lng: confirmed.lng,
+          fallbackAddress: confirmed.address,
+        });
+        return;
+      }
+
+      emitConfirmed({
+        address: confirmed.address.trim(),
+        lat: confirmed.lat,
+        lng: confirmed.lng,
+      });
+    },
+    [emitConfirmed, resolveAddressFromPin],
+  );
+
+  const scheduleLocationUpdate = useCallback(
+    (confirmed: { address: string; lat: number; lng: number; provisional?: boolean }) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      const delay = confirmed.provisional ? PIN_SYNC_DEBOUNCE_MS : 0;
+      debounceRef.current = setTimeout(() => {
+        processLocationUpdate(confirmed);
+      }, delay);
+    },
+    [processLocationUpdate],
+  );
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (!isAllowedFlipyPostMessageOrigin(event.origin, embedOrigin)) {
-        // Help diagnose silent drops (wrong host / parentOrigin).
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          typeof (event.data as { type?: string }).type === "string" &&
-          String((event.data as { type: string }).type).includes("location")
-        ) {
-          setSyncStatus(`Mensaje de mapa ignorado (origin ${event.origin})`);
-        }
         return;
       }
       const confirmed = parseFlipyLocationMessage(event.data);
       if (confirmed) {
-        handleLocationFromEmbed(confirmed);
+        scheduleLocationUpdate(confirmed);
         return;
       }
       if (
@@ -219,7 +204,7 @@ export function FlipyLocationEmbed({
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [embedOrigin, agencySlug, storeSlug]);
+  }, [embedOrigin, scheduleLocationUpdate]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -238,21 +223,37 @@ export function FlipyLocationEmbed({
     };
   }, []);
 
+  function commitManualAddress() {
+    if (!liveCoords) {
+      setError("Primero mueve el pin en el mapa.");
+      return;
+    }
+    const trimmed = liveAddress.trim();
+    if (!trimmed) {
+      setError("Escribe una dirección válida.");
+      return;
+    }
+    setError(null);
+    emitConfirmed({
+      address: trimmed,
+      lat: liveCoords.lat,
+      lng: liveCoords.lng,
+    });
+  }
+
   const mapSrc = withFlipyLocationClientParams(embedUrl, parentOrigin);
-  const intro =
-    purpose === "pickup"
-      ? "Mueve el pin y pulsa el botón verde “Confirmar ubicación” dentro del mapa. Eso actualiza “Dirección de recojo” abajo (mover el pin solo no alcanza)."
-      : "Mueve el pin y pulsa “Confirmar ubicación” en el mapa para actualizar la dirección de entrega abajo.";
+  const addressLabel =
+    purpose === "pickup" ? "Dirección de recojo" : "Dirección de entrega";
 
   return (
-    <div className="space-y-2">
-      <Alert variant="info" title="Cómo actualizar la dirección">
-        {intro}
-      </Alert>
-      <p className="text-xs text-text-secondary">{syncStatus}</p>
+    <div className="space-y-3">
+      <p className="text-xs text-text-secondary">
+        {syncStatus}
+        {resolving ? " · actualizando dirección…" : ""}
+      </p>
       <div
         ref={shellRef}
-        className="relative isolate overflow-hidden rounded-lg border border-border bg-zinc-950 overscroll-none"
+        className="relative isolate overflow-hidden rounded-lg border border-border bg-surface-elevated shadow-sm overscroll-none"
         data-flipy-map-shell
       >
         <iframe
@@ -264,75 +265,28 @@ export function FlipyLocationEmbed({
           tabIndex={0}
         />
       </div>
-      {resolving ? <p className="text-xs text-text-secondary">Actualizando dirección desde el pin…</p> : null}
-      {hint ? <p className="text-xs text-emerald-600">{hint}</p> : null}
 
-      <div className="rounded-lg border border-dashed border-border p-3 space-y-2">
-        <p className="text-xs font-medium text-text-primary">
-          Si el mapa no sincroniza: copia lat/lng de “Pin: …” y aplica aquí
+      <FormField label={addressLabel} htmlFor={`flipy-live-address-${purpose}`}>
+        <Input
+          id={`flipy-live-address-${purpose}`}
+          value={liveAddress}
+          onChange={(e) => setLiveAddress(e.target.value)}
+          onBlur={() => {
+            if (liveAddress.trim() && liveCoords) commitManualAddress();
+          }}
+          placeholder="Se completa al mover el pin en el mapa"
+          disabled={resolving}
+        />
+      </FormField>
+      {liveCoords ? (
+        <p className="text-[11px] text-text-secondary">
+          Pin: {formatCoordsLabel(liveCoords.lat, liveCoords.lng)}
         </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <FormField label="Lat" htmlFor="flipy-fallback-lat">
-            <Input
-              id="flipy-fallback-lat"
-              inputMode="decimal"
-              value={fallbackLat}
-              onChange={(e) => setFallbackLat(e.target.value)}
-              placeholder="-12.11741"
-            />
-          </FormField>
-          <FormField label="Lng" htmlFor="flipy-fallback-lng">
-            <Input
-              id="flipy-fallback-lng"
-              inputMode="decimal"
-              value={fallbackLng}
-              onChange={(e) => setFallbackLng(e.target.value)}
-              placeholder="-77.01239"
-            />
-          </FormField>
-        </div>
-        <Button size="sm" disabled={resolving} onClick={() => void applyFallbackCoords()}>
-          {resolving ? "Geocodificando…" : "Aplicar pin → actualizar dirección"}
-        </Button>
-      </div>
+      ) : null}
 
       {warning ? (
-        <Alert variant="warning" title="Dirección vs pin">
-          <div className="space-y-2">
-            <p>{warning}</p>
-            {pendingCoords ? (
-              <>
-                <FormField
-                  label={
-                    purpose === "pickup"
-                      ? "Dirección de recojo (edición manual)"
-                      : "Dirección de entrega (edición manual)"
-                  }
-                  htmlFor="flipy-manual-dest"
-                >
-                  <Input
-                    id="flipy-manual-dest"
-                    value={manualAddress}
-                    onChange={(e) => setManualAddress(e.target.value)}
-                    placeholder="Calle, distrito, ciudad…"
-                  />
-                </FormField>
-                <Button
-                  size="sm"
-                  disabled={resolving || !manualAddress.trim()}
-                  onClick={() =>
-                    emitConfirmed({
-                      address: manualAddress.trim(),
-                      lat: pendingCoords.lat,
-                      lng: pendingCoords.lng,
-                    })
-                  }
-                >
-                  Usar esta dirección con el pin
-                </Button>
-              </>
-            ) : null}
-          </div>
+        <Alert variant="warning" title="Revisa la dirección">
+          {warning}
         </Alert>
       ) : null}
       {error ? (
