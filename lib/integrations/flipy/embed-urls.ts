@@ -308,6 +308,19 @@ export function buildFlipyAppLoginUrl(input: {
   return url.toString();
 }
 
+/** First-time password when partner activation init is unavailable on Flipy backend. */
+export function buildFlipyAppForgotPasswordUrl(input: {
+  appOrigin: string;
+  contactEmail?: string | null;
+}): string {
+  const base = normalizeFlipyEmbedOrigin(input.appOrigin);
+  const url = new URL(`${base}/olvide-contrasena`);
+  const email = input.contactEmail?.trim();
+  if (email) url.searchParams.set("email", email);
+  url.searchParams.set("source", FLIPY_APP_ACTIVATION_SOURCE);
+  return url.toString();
+}
+
 /** Deep link to Flipy tienda finanzas (retiro Yape/CCI — solo app Flipy). */
 export function buildFlipyAppFinanzasUrl(input: { appOrigin: string }): string {
   const base = normalizeFlipyEmbedOrigin(input.appOrigin);

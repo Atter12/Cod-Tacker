@@ -497,6 +497,7 @@ export function readFlipyTransferGananciasSuccessResult(
 
 export type FlipyActivateAccountInitInput = {
   contactEmail: string;
+  flipyTiendaId?: string | null;
 };
 
 export type FlipyActivateAccountInitResult = {

@@ -34,12 +34,14 @@ export function FlipyWalletRecargaPanel({
   const [open, setOpen] = useState(false);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [activationPending, startActivation] = useTransition();
 
   function openActivation() {
     if (!contactEmail?.trim()) return;
     setError(null);
+    setInfo(null);
     startActivation(async () => {
       const result = await issueFlipyActivationUrlAction({
         agencySlug,
@@ -49,6 +51,11 @@ export function FlipyWalletRecargaPanel({
       if (result.error || !result.activationUrl) {
         setError(result.error ?? "No se pudo iniciar la activación Flipy.");
         return;
+      }
+      if (result.usedPasswordRecoveryFallback) {
+        setInfo(
+          "Activación directa no disponible en Flipy. Usa recuperación de contraseña con tu correo de contacto.",
+        );
       }
       window.open(result.activationUrl, "_blank", "noopener,noreferrer");
     });
@@ -84,6 +91,13 @@ export function FlipyWalletRecargaPanel({
         <div className="mt-3">
           <Alert variant="warning" title="Recarga">
             {error}
+          </Alert>
+        </div>
+      ) : null}
+      {info ? (
+        <div className="mt-3">
+          <Alert variant="info" title="Activación Flipy">
+            {info}
           </Alert>
         </div>
       ) : null}

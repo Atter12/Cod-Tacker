@@ -3,11 +3,15 @@
 import { actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { IntegrationError, ValidationError } from "@/lib/errors";
 import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
+import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
 import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyAppActivationUrl } from "@/lib/integrations/flipy/embed-urls";
+import {
+  buildFlipyAppActivationUrl,
+  buildFlipyAppForgotPasswordUrl,
+} from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -19,7 +23,14 @@ import { toUserMessage } from "@/lib/errors/to-user-message";
 
 export type FlipyActivationUrlResult = {
   activationUrl: string;
+  usedPasswordRecoveryFallback?: boolean;
 };
+
+function isFlipyActivationRouteMissing(error: unknown): boolean {
+  if (!(error instanceof FlipyPartnerApiError)) return false;
+  if (error.status === 404 || error.code === "ACTIVATION_NOT_AVAILABLE") return true;
+  return /ruta no encontrada/i.test(error.message);
+}
 
 export async function issueFlipyActivationUrlAction(input: {
   agencySlug: string;
@@ -67,19 +78,33 @@ export async function issueFlipyActivationUrlAction(input: {
       externalStoreId: membership.storeId,
     });
 
-    const session = await client.initActivateAccount({ contactEmail });
-    const activationUrl =
-      session.activationUrl?.trim() ||
-      buildFlipyAppActivationUrl({
-        appOrigin: env.appOrigin,
-        contactEmail,
-        activationPath: env.appActivationPath,
-        externalStoreId: membership.storeId,
-        flipyTiendaId,
-        token: session.token,
-      });
+    try {
+      const session = await client.initActivateAccount({ contactEmail, flipyTiendaId });
+      const activationUrl =
+        session.activationUrl?.trim() ||
+        buildFlipyAppActivationUrl({
+          appOrigin: env.appOrigin,
+          contactEmail,
+          activationPath: env.appActivationPath,
+          externalStoreId: membership.storeId,
+          flipyTiendaId,
+          token: session.token,
+        });
 
-    return actionOk({ activationUrl });
+      return actionOk({ activationUrl });
+    } catch (error) {
+      if (!isFlipyActivationRouteMissing(error)) {
+        throw error;
+      }
+
+      return actionOk({
+        activationUrl: buildFlipyAppForgotPasswordUrl({
+          appOrigin: env.appOrigin,
+          contactEmail,
+        }),
+        usedPasswordRecoveryFallback: true,
+      });
+    }
   } catch (error) {
     return { error: toUserMessage(error) };
   }
