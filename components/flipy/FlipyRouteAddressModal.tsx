@@ -60,15 +60,15 @@ export function resolveMapPrefill(input: {
   const address =
     input.mapPrefillAddress ??
     (hasFlipyRouteLocation(input.value) ? input.value.address : null) ??
-    (input.isPickup ? input.storeOrigin?.address : null);
+    (input.isPickup ? (input.storeOrigin?.address ?? null) : null);
   const lat =
     input.mapPrefillCoords?.lat ??
     (hasFlipyRouteLocation(input.value) ? input.value.lat : null) ??
-    (input.isPickup ? input.storeOrigin?.lat : null);
+    (input.isPickup ? (input.storeOrigin?.lat ?? null) : null);
   const lng =
     input.mapPrefillCoords?.lng ??
     (hasFlipyRouteLocation(input.value) ? input.value.lng : null) ??
-    (input.isPickup ? input.storeOrigin?.lng : null);
+    (input.isPickup ? (input.storeOrigin?.lng ?? null) : null);
   return { address, lat, lng };
 }
 
