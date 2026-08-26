@@ -207,6 +207,7 @@ export const handleFlipyShipmentLifecycle: JobHandler = async ({
     lastEventType: data.event_type,
     flipy_envio_id: data.envio_id,
   };
+  if (data.estado) metaPatch.flipy_estado = data.estado;
   if (data.tracking_url) metaPatch.flipy_tracking_url = data.tracking_url;
   if (data.tracking_token) metaPatch.flipy_tracking_token = data.tracking_token;
 

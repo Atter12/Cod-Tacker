@@ -34,7 +34,7 @@ export type CotizarFlipyFleteInput = {
   typeMode?: FlipyTypeMode;
 };
 
-async function getFlipyClientForStore(agencyId: string, storeId: string) {
+export async function getFlipyClientForStore(agencyId: string, storeId: string) {
   const now = Date.now();
   const cached = clientCache.get(storeId);
   if (cached && cached.expiresAt > now) {
@@ -113,4 +113,17 @@ export async function cotizarFlipyFleteForStore(input: CotizarFlipyFleteInput): 
   } finally {
     inflightQuotes.delete(inflightKey);
   }
+}
+
+export async function geocodeFlipyAddressForStore(input: {
+  agencyId: string;
+  storeId: string;
+  address: string;
+}): Promise<{ address: string; lat: number; lng: number } | null> {
+  const query = input.address.trim();
+  if (query.length < 4) {
+    throw new ValidationError("Dirección demasiado corta para geocodificar.");
+  }
+  const client = await getFlipyClientForStore(input.agencyId, input.storeId);
+  return client.geocodeAddress(query);
 }

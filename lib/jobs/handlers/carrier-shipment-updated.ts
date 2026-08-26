@@ -6,6 +6,9 @@ import { ENVIA_DEFAULT_MAPPINGS } from "@/lib/integrations/envia/map-status";
 import { FLIPY_DEFAULT_MAPPINGS } from "@/lib/integrations/flipy/map-status";
 import { normalizeFlipyOrderExternalId } from "@/lib/integrations/flipy/map-webhook";
 import { enqueueFlipyStaleBidCheck } from "@/lib/integrations/flipy/enqueue-stale-bid-check";
+import { patchOrderFlipyEnvioMeta } from "@/lib/integrations/flipy/order-flipy-meta";
+import type { FlipyDevolucionInfo } from "@/lib/integrations/flipy/partner-contract";
+import { revalidateFlipyWalletIntegrationPages } from "@/lib/integrations/flipy/revalidate-wallet-pages";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import { applyShipmentEvent } from "@/lib/logistics/apply-shipment-event";
 import type { CarrierMappingRule } from "@/lib/logistics/normalize";
@@ -382,6 +385,34 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
     };
   }
 
+  if (isLive && carrierCode === "flipy" && orderId) {
+    try {
+      const metadata = asObject(payload).metadata;
+      const metadataBag =
+        metadata && typeof metadata === "object" && !Array.isArray(metadata)
+          ? (metadata as Record<string, unknown>)
+          : {};
+      const devolucionRaw = metadataBag.devolucion;
+      const devolucion =
+        devolucionRaw &&
+        typeof devolucionRaw === "object" &&
+        !Array.isArray(devolucionRaw)
+          ? (devolucionRaw as FlipyDevolucionInfo)
+          : undefined;
+      await patchOrderFlipyEnvioMeta(admin, {
+        orderId,
+        storeId: job.store_id,
+        estado: externalCode,
+        envioId: data.external_shipment_id ?? data.tracking_number,
+        trackingUrl:
+          typeof metadataBag.tracking_url === "string" ? metadataBag.tracking_url : null,
+        devolucion,
+      });
+    } catch {
+      // Non-blocking metadata sync from carrier webhook.
+    }
+  }
+
   if (!applied.plan.skipStatusUpdate) {
     try {
       await runAutomationsForTrigger({
@@ -446,6 +477,10 @@ export const handleCarrierShipmentUpdated: JobHandler = async ({
       capiDetail = `:capi:${purchase.conversion.deliveryStatus}:${purchase.conversion.eventId}`;
     } else if (purchase.skippedReason) {
       capiDetail = `:capi_skip:${purchase.skippedReason}`;
+    }
+
+    if (isLive && carrierCode === "flipy") {
+      await revalidateFlipyWalletIntegrationPages(admin, job.agency_id, job.store_id);
     }
   }
 

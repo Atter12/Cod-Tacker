@@ -78,7 +78,7 @@ export function FlipyConnectForm({
       setSuccess(
         connected
           ? "Flipy actualizado. Configuración guardada y webhook re-registrado."
-          : "Flipy conectado. Ya puedes crear envíos desde el detalle de pedidos.",
+          : "Flipy conectado. Activa tu acceso a la app Flipy con el correo de contacto que registraste.",
       );
       router.refresh();
     });

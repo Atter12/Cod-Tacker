@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
+import { FlipyAppAccessPanel } from "@/components/integrations/FlipyAppAccessPanel";
 import { FlipyAutoCreateSettings } from "@/components/integrations/FlipyAutoCreateSettings";
 import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
@@ -36,6 +37,7 @@ import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import {
   readFlipyAutoCreateEnabled,
   readFlipyAutoCreateMinConfidence,
+  readFlipyContactEmail,
   readFlipyEmbedBidsEvalEnabled,
   readFlipyPickupKeywords,
   readFlipyV02Enabled,
@@ -112,6 +114,9 @@ export default async function IntegrationDetailPage({
   const flipyWebhookUrl = flipyProvider
     ? buildFlipyWebhookUrl(p.agencySlug, p.storeSlug, getPublicEnv().NEXT_PUBLIC_APP_URL)
     : null;
+  const flipyEnv = flipyProvider ? getFlipyEnv() : null;
+  const flipyContactEmail =
+    flipyProvider && integration ? readFlipyContactEmail(integration.settings) : null;
   const flipyOrigin = flipyProvider ? readFlipyOriginFromSettings(integration?.settings) : null;
   const shopDomain =
     (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
@@ -278,12 +283,36 @@ export default async function IntegrationDetailPage({
 
       {flipyProvider && flipyLive && connected && integration ? (
         <>
-          <FlipySaldoCard integration={integration} storeId={member.storeId} />
+          <FlipySaldoCard
+            integration={integration}
+            storeId={member.storeId}
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
+            appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
+            canManage={canManage}
+          />
+          {flipyContactEmail && flipyEnv ? (
+            <FlipyAppAccessPanel
+              appOrigin={flipyEnv.appOrigin}
+              contactEmail={flipyContactEmail}
+              activationPath={flipyEnv.appActivationPath}
+              externalStoreId={member.storeId}
+              flipyTiendaId={
+                readFlipyTiendaId(integration.settings) ?? integration.external_account_id
+              }
+            />
+          ) : null}
           <FlipyWalletRecargaPanel
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
-            embedOrigin={getFlipyEnv().embedOrigin}
-            appOrigin={getFlipyEnv().appOrigin}
+            embedOrigin={flipyEnv?.embedOrigin ?? getFlipyEnv().embedOrigin}
+            appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
+            contactEmail={flipyContactEmail}
+            activationPath={flipyEnv?.appActivationPath}
+            externalStoreId={member.storeId}
+            flipyTiendaId={
+              readFlipyTiendaId(integration.settings) ?? integration.external_account_id
+            }
           />
           {canManage ? (
             <FlipyV02Settings
@@ -333,7 +362,14 @@ export default async function IntegrationDetailPage({
       ) : null}
 
       {flipyProvider && connected && integration && member.storeId && !flipyLive ? (
-        <FlipySaldoCard integration={integration} storeId={member.storeId} />
+        <FlipySaldoCard
+          integration={integration}
+          storeId={member.storeId}
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          appOrigin={getFlipyEnv().appOrigin}
+          canManage={canManage}
+        />
       ) : null}
 
       {whatsappLive && canManage ? (

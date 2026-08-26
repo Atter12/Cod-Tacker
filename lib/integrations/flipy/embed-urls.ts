@@ -12,6 +12,11 @@ export const FLIPY_DEFAULT_EMBED_ORIGIN = "https://flipy-panel.vercel.app";
 /** Prod tienda app (pujas / envíos). Not used for partner iframes. */
 export const FLIPY_DEFAULT_APP_ORIGIN = "https://tienda.flipyexpress.com";
 
+/** Flipy-hosted account activation (set password). Coordinated with Flipy app team. */
+export const FLIPY_DEFAULT_APP_ACTIVATION_PATH = "/activar-cuenta";
+
+export const FLIPY_APP_ACTIVATION_SOURCE = "codtracked";
+
 export function normalizeFlipyEmbedOrigin(origin: string): string {
   return origin.replace(/\/$/, "");
 }
@@ -254,4 +259,52 @@ export function buildFlipyOperationDeepLink(input: {
   appWebUrl?: string | null;
 }): string {
   return buildFlipyOperationWebUrl(input);
+}
+
+/**
+ * Redirect partner-provisioned stores to Flipy to set their app password.
+ * COD-tracked never handles passwords — only deep-links with contactEmail.
+ */
+export function buildFlipyAppActivationUrl(input: {
+  appOrigin: string;
+  contactEmail: string;
+  activationPath?: string;
+  externalStoreId?: string | null;
+  flipyTiendaId?: string | null;
+}): string {
+  const email = input.contactEmail.trim();
+  if (!email) {
+    throw new Error("contactEmail requerido para activación Flipy");
+  }
+  const base = normalizeFlipyEmbedOrigin(input.appOrigin);
+  const path = (input.activationPath ?? FLIPY_DEFAULT_APP_ACTIVATION_PATH).replace(/^\//, "");
+  const url = new URL(`${base}/${path}`);
+  url.searchParams.set("email", email);
+  url.searchParams.set("source", FLIPY_APP_ACTIVATION_SOURCE);
+  if (input.externalStoreId?.trim()) {
+    url.searchParams.set("externalStoreId", input.externalStoreId.trim());
+  }
+  if (input.flipyTiendaId?.trim()) {
+    url.searchParams.set("tiendaId", input.flipyTiendaId.trim());
+  }
+  return url.toString();
+}
+
+/** Login fallback when the user already activated their Flipy account. */
+export function buildFlipyAppLoginUrl(input: {
+  appOrigin: string;
+  contactEmail?: string | null;
+}): string {
+  const base = normalizeFlipyEmbedOrigin(input.appOrigin);
+  const url = new URL(`${base}/login`);
+  const email = input.contactEmail?.trim();
+  if (email) url.searchParams.set("email", email);
+  url.searchParams.set("source", FLIPY_APP_ACTIVATION_SOURCE);
+  return url.toString();
+}
+
+/** Deep link to Flipy tienda finanzas (retiro Yape/CCI — solo app Flipy). */
+export function buildFlipyAppFinanzasUrl(input: { appOrigin: string }): string {
+  const base = normalizeFlipyEmbedOrigin(input.appOrigin);
+  return `${base}/finanzas`;
 }

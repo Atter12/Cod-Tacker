@@ -1,4 +1,5 @@
 import { resolveFlipyExternalStatusCode } from "@/lib/integrations/flipy/map-status";
+import { readFlipyDevolucionInfo } from "@/lib/integrations/flipy/partner-contract";
 
 export type FlipyCarrierJobPayload = {
   tracking_number: string;
@@ -90,6 +91,9 @@ export function mapFlipyWebhookToJobPayload(
         ? data.collectedCodAmount
         : null;
   if (collected != null) metadataBag.collected_cod_amount = collected;
+
+  const devolucion = readFlipyDevolucionInfo(data.devolucion);
+  if (devolucion) metadataBag.devolucion = devolucion;
 
   const eventIdHeader = headers?.eventId?.trim() || null;
   const externalEventId =

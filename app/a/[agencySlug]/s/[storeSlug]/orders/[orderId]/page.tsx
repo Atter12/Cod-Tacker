@@ -222,6 +222,10 @@ export default async function OrderDetailPage({
               currencyCode={order.currency_code}
               prefillAddress={flipyCtx.prefillAddress}
               prefillCoords={flipyCtx.shippingCoords}
+              shippingAddress1={flipyCtx.shippingAddress1}
+              shippingCountryCode={order.shipping_country_code}
+              shippingCity={order.shipping_city}
+              shippingRegion={order.shipping_region}
               embedOrigin={flipyEmbedOrigin}
               appOrigin={flipyAppOrigin}
               paymentResolution={flipyCtx.payment}
@@ -232,8 +236,15 @@ export default async function OrderDetailPage({
               customerPhone={flipyCtx.customerPhone}
               customerEmail={flipyCtx.customerEmail}
               flipyEnvioId={flipyCtx.flipyEnvioId}
+              flipyEstado={flipyCtx.flipyEstado}
+              flipyDevolucion={flipyCtx.flipyDevolucion}
+              flipyDevolucionPendiente={flipyCtx.flipyDevolucionPendiente}
+              flipyTiendaResena={flipyCtx.flipyTiendaResena}
+              flipyCalificacionDisponible={flipyCtx.flipyCalificacionDisponible}
+              flipyCalificacionPeso={flipyCtx.flipyCalificacionPeso}
               flipyTrackingUrl={flipyCtx.flipyTrackingUrl}
               canCreate={flipyCanCreate}
+              canManage={canManage}
               pickupOrder={flipyCtx.isPickup}
             />
           ) : null}
@@ -405,8 +416,12 @@ export default async function OrderDetailPage({
                 </div>
                 <div className="space-y-2">
                   <h3 className="font-medium">Dirección de envío</h3>
-                  <p>{[order.shipping_district, order.shipping_city, order.shipping_region].filter(Boolean).join(", ") || "—"}</p>
-                  <p>{order.shipping_country_code ?? "—"} {order.shipping_postal_code ?? ""}</p>
+                  <p>{flipyCtx.prefillAddress || "—"}</p>
+                  {order.shipping_country_code && !flipyCtx.prefillAddress.includes(order.shipping_country_code) ? (
+                    <p className="text-text-secondary">
+                      {order.shipping_country_code} {order.shipping_postal_code ?? ""}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ),

@@ -107,3 +107,8 @@ export function mergeFlipyV02Settings(settings: unknown, enabled: boolean): Reco
   };
 }
 
+export function readFlipyContactEmail(settings: unknown): string | null {
+  const bag = readSettingsBag(settings);
+  const raw = bag.email ?? bag.contactEmail ?? bag.contact_email;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}

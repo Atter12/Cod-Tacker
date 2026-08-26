@@ -369,6 +369,132 @@ export function readFlipySaldoWarningBajo(raw: unknown): boolean {
   return Boolean(bag.warningBajo ?? bag.warning_bajo ?? bag.saldoBajo ?? bag.saldo_bajo);
 }
 
+/** Parse billeteraGanancias — COD producto acumulado al entregar. */
+export function readFlipySaldoGanancias(raw: unknown): number | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const topLevel = readFiniteNumber(
+    bag,
+    "billeteraGanancias",
+    "billetera_ganancias",
+    "ganancias",
+    "saldoGanancias",
+    "saldo_ganancias",
+  );
+  if (topLevel != null) return topLevel;
+
+  for (const nestedKey of ["billetera", "saldo", "wallet"]) {
+    const nested = asRecord(bag[nestedKey]);
+    if (!nested) continue;
+    const fromNested = readFiniteNumber(
+      nested,
+      "billeteraGanancias",
+      "billetera_ganancias",
+      "ganancias",
+    );
+    if (fromNested != null) return fromNested;
+  }
+
+  return null;
+}
+
+export type FlipyWalletSaldoResult = {
+  billeteraOperaciones: number;
+  billeteraReservado: number | null;
+  billeteraGanancias: number | null;
+  retiroMinimo?: number | null;
+  destinoRetiroConfigurado?: boolean | null;
+  transferGananciasDisponible?: boolean | null;
+  canCreateEnvio?: boolean | null;
+  warningBajo: boolean;
+  warnings?: string[];
+};
+
+export type FlipyTransferGananciasInput = {
+  monto: number;
+};
+
+export type FlipyTransferGananciasSuccessResult = {
+  success: true;
+  contractVersion?: string | null;
+  idempotent: boolean;
+  transferId?: string | null;
+  monto: number;
+  billeteraOperaciones: number;
+  billeteraGanancias: number | null;
+  billeteraReservado: number | null;
+  message?: string | null;
+};
+
+/** Full wallet saldo parse — GET /api/partner/tiendas/:id/saldo */
+export function readFlipyWalletSaldoResult(raw: unknown): FlipyWalletSaldoResult {
+  const bag = asRecord(raw) ?? {};
+  const saldoBag = asRecord(bag.saldo) ?? bag;
+
+  const warningsRaw = bag.warnings ?? saldoBag.warnings;
+  const warnings = Array.isArray(warningsRaw)
+    ? warningsRaw.filter((w): w is string => typeof w === "string" && w.trim().length > 0)
+    : undefined;
+
+  return {
+    billeteraOperaciones: readFlipySaldoOperaciones(raw),
+    billeteraReservado: readFlipySaldoReservado(raw),
+    billeteraGanancias: readFlipySaldoGanancias(raw),
+    retiroMinimo: readFiniteNumber(bag, "retiroMinimo", "retiro_minimo") ?? undefined,
+    destinoRetiroConfigurado:
+      typeof bag.destinoRetiroConfigurado === "boolean"
+        ? bag.destinoRetiroConfigurado
+        : typeof bag.destino_retiro_configurado === "boolean"
+          ? bag.destino_retiro_configurado
+          : undefined,
+    transferGananciasDisponible:
+      typeof bag.transferGananciasDisponible === "boolean"
+        ? bag.transferGananciasDisponible
+        : typeof bag.transfer_ganancias_disponible === "boolean"
+          ? bag.transfer_ganancias_disponible
+          : undefined,
+    canCreateEnvio:
+      typeof bag.canCreateEnvio === "boolean"
+        ? bag.canCreateEnvio
+        : typeof bag.can_create_envio === "boolean"
+          ? bag.can_create_envio
+          : undefined,
+    warningBajo: readFlipySaldoWarningBajo(raw),
+    warnings,
+  };
+}
+
+export function buildFlipyTransferGananciasRequestBody(
+  input: FlipyTransferGananciasInput,
+): Record<string, unknown> {
+  return { monto: input.monto };
+}
+
+export function readFlipyTransferGananciasSuccessResult(
+  raw: unknown,
+): FlipyTransferGananciasSuccessResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const monto = readFiniteNumber(bag, "monto");
+  if (monto == null || monto <= 0) return null;
+
+  const saldoBag = asRecord(bag.saldo) ?? bag;
+
+  return {
+    success: true,
+    contractVersion: readString(bag, "contractVersion", "contract_version"),
+    idempotent: Boolean(bag.idempotent),
+    transferId: readString(bag, "transferId", "transfer_id", "id"),
+    monto,
+    billeteraOperaciones: readFlipySaldoOperaciones(saldoBag) || readFlipySaldoOperaciones(bag),
+    billeteraGanancias: readFlipySaldoGanancias(saldoBag) ?? readFlipySaldoGanancias(bag),
+    billeteraReservado: readFlipySaldoReservado(saldoBag) ?? readFlipySaldoReservado(bag),
+    message: readString(bag, "message"),
+  };
+}
+
 function readString(bag: Record<string, unknown>, ...keys: string[]): string | null {
   for (const key of keys) {
     const v = bag[key];
@@ -409,6 +535,417 @@ function readAssignedMotorizado(raw: unknown): FlipyAssignedMotorizado | null {
     displayName: readString(bag, "displayName", "display_name", "nombre"),
     etaMinutes:
       readFiniteNumber(bag, "etaMinutes", "eta_minutes", "eta") ?? undefined,
+  };
+}
+
+export type FlipyCancelEnvioMotivo =
+  | "CLIENTE_CANCELADO"
+  | "PEDIDO_DUPLICADO"
+  | "ERROR_DIRECCION"
+  | "OTRO";
+
+export type FlipyCancelEnvioInput = {
+  motivo?: FlipyCancelEnvioMotivo | null;
+  motivoLabel?: string | null;
+  notas?: string | null;
+};
+
+export type FlipyDevolucionInfo = {
+  estado?: string | null;
+  motivoId?: string | null;
+  motivoLabel?: string | null;
+  iniciadaAt?: string | null;
+  confirmadaAt?: string | null;
+  confirmadaPor?: string | null;
+  pendienteConfirmacion: boolean;
+  resenaHabilitada?: boolean | null;
+};
+
+export type FlipyTiendaResena = {
+  id: string;
+  rating: number;
+  peso?: number | null;
+  comentario?: string | null;
+  createdAt?: string | null;
+  autorTipo?: string | null;
+};
+
+export type FlipyMotorizadoCalificacionStats = {
+  id: string;
+  calificacionPromedio?: number | null;
+  totalCalificaciones?: number | null;
+};
+
+export type FlipyEnvioSummaryResult = {
+  envioId: string;
+  estado: string;
+  externalOrderId?: string | null;
+  trackingUrl?: string | null;
+  appWebUrl?: string | null;
+  appDeepLink?: string | null;
+  fulfillmentMode?: FlipyOperationalFulfillmentMode | null;
+  devolucion?: FlipyDevolucionInfo | null;
+  tiendaResena?: FlipyTiendaResena | null;
+  calificacionDisponible?: boolean | null;
+  calificacionPeso?: number | null;
+};
+
+export type FlipyEnvioByExternalOrderResult = FlipyEnvioSummaryResult;
+
+export type FlipyCancelEnvioSuccessResult = {
+  success: true;
+  contractVersion?: string | null;
+  envioId: string;
+  estado: string;
+  estadoPrevio?: string | null;
+  cancelacionInmediata: boolean;
+  idempotent: boolean;
+  holdLiberado?: boolean | null;
+  message?: string | null;
+  externalOrderId?: string | null;
+  fulfillmentMode?: FlipyOperationalFulfillmentMode | null;
+  trackingUrl?: string | null;
+  appDeepLink?: string | null;
+  appWebUrl?: string | null;
+};
+
+export type FlipyCancelEnvioBlockedDetails = {
+  envioId: string;
+  externalOrderId?: string | null;
+  estado?: string | null;
+  resolution?: string | null;
+  appDeepLink?: string | null;
+  appWebUrl?: string | null;
+  trackingUrl?: string | null;
+  supportHint?: string | null;
+  devolucion?: FlipyDevolucionInfo | null;
+};
+
+export type FlipyPartnerApiErrorDetails = FlipyCancelEnvioBlockedDetails;
+
+export type FlipyConfirmarDevolucionInput = {
+  notas?: string | null;
+};
+
+export type FlipyConfirmarDevolucionSuccessResult = {
+  success: true;
+  contractVersion?: string | null;
+  envioId: string;
+  estado: string;
+  estadoPrevio?: string | null;
+  devolucionConfirmada: boolean;
+  idempotent: boolean;
+  montoLiberado?: number | null;
+  devolucion?: FlipyDevolucionInfo | null;
+  message?: string | null;
+  trackingUrl?: string | null;
+  appWebUrl?: string | null;
+};
+
+export type FlipyCalificarEnvioInput = {
+  rating: number;
+  comentario?: string | null;
+};
+
+export type FlipyCalificarEnvioSuccessResult = {
+  success: true;
+  envioId: string;
+  estado: string;
+  idempotent: boolean;
+  tiendaResena?: FlipyTiendaResena | null;
+  calificacionDisponible?: boolean | null;
+  calificacionPeso?: number | null;
+  motorizado?: FlipyMotorizadoCalificacionStats | null;
+  message?: string | null;
+};
+
+export type FlipyCancelEnvioBlockedResult = {
+  success: false;
+  code: string;
+  message: string;
+  details?: FlipyCancelEnvioBlockedDetails | null;
+};
+
+/** POST /api/partner/envios/:id/cancelar — optional body. */
+export function buildFlipyCancelEnvioRequestBody(
+  input: FlipyCancelEnvioInput,
+): Record<string, unknown> | undefined {
+  const body: Record<string, unknown> = {};
+  if (input.motivo) body.motivo = input.motivo;
+  const motivoLabel = trimOptional(input.motivoLabel);
+  if (motivoLabel) body.motivoLabel = motivoLabel;
+  const notas = trimOptional(input.notas);
+  if (notas) body.notas = notas;
+  return Object.keys(body).length ? body : undefined;
+}
+
+/** POST /api/partner/envios/:id/confirmar-devolucion — optional body. */
+export function buildFlipyConfirmarDevolucionRequestBody(
+  input: FlipyConfirmarDevolucionInput,
+): Record<string, unknown> | undefined {
+  const notas = trimOptional(input.notas);
+  if (!notas) return undefined;
+  return { notas };
+}
+
+/** POST /api/partner/envios/:id/calificar */
+export function buildFlipyCalificarEnvioRequestBody(
+  input: FlipyCalificarEnvioInput,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { rating: input.rating };
+  const comentario = trimOptional(input.comentario);
+  if (comentario) body.comentario = comentario;
+  return body;
+}
+
+export function readFlipyTiendaResena(raw: unknown): FlipyTiendaResena | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const id = readString(bag, "id");
+  const rating = readFiniteNumber(bag, "rating");
+  if (!id || rating == null) return null;
+
+  return {
+    id,
+    rating,
+    peso: readFiniteNumber(bag, "peso") ?? undefined,
+    comentario: readString(bag, "comentario", "comment"),
+    createdAt: readString(bag, "createdAt", "created_at"),
+    autorTipo: readString(bag, "autorTipo", "autor_tipo"),
+  };
+}
+
+export function readFlipyMotorizadoCalificacionStats(
+  raw: unknown,
+): FlipyMotorizadoCalificacionStats | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const id = readString(bag, "id", "motorizadoId", "motorizado_id");
+  if (!id) return null;
+
+  return {
+    id,
+    calificacionPromedio:
+      readFiniteNumber(bag, "calificacionPromedio", "calificacion_promedio") ?? undefined,
+    totalCalificaciones:
+      readFiniteNumber(bag, "totalCalificaciones", "total_calificaciones") ?? undefined,
+  };
+}
+
+export function readFlipyCalificarEnvioSuccessResult(
+  raw: unknown,
+): FlipyCalificarEnvioSuccessResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+
+  return {
+    success: true,
+    envioId,
+    estado: readString(bag, "estado", "status") ?? "ENTREGADO",
+    idempotent: Boolean(bag.idempotent),
+    tiendaResena: readFlipyTiendaResena(bag.tiendaResena ?? bag.tienda_resena),
+    calificacionDisponible:
+      typeof bag.calificacionDisponible === "boolean"
+        ? bag.calificacionDisponible
+        : typeof bag.calificacion_disponible === "boolean"
+          ? bag.calificacion_disponible
+          : null,
+    calificacionPeso: readFiniteNumber(bag, "calificacionPeso", "calificacion_peso"),
+    motorizado: readFlipyMotorizadoCalificacionStats(bag.motorizado),
+    message: readString(bag, "message"),
+  };
+}
+
+export function readFlipyDevolucionInfo(raw: unknown): FlipyDevolucionInfo | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const pendienteConfirmacion = Boolean(
+    bag.pendienteConfirmacion ?? bag.pendiente_confirmacion,
+  );
+  const estado = readString(bag, "estado", "status");
+  const motivoId = readString(bag, "motivoId", "motivo_id");
+  const motivoLabel = readString(bag, "motivoLabel", "motivo_label");
+  const iniciadaAt = readString(bag, "iniciadaAt", "iniciada_at");
+  const confirmadaAt = readString(bag, "confirmadaAt", "confirmada_at");
+  const confirmadaPor = readString(bag, "confirmadaPor", "confirmada_por");
+  const resenaHabilitada =
+    typeof bag.resenaHabilitada === "boolean"
+      ? bag.resenaHabilitada
+      : typeof bag.resena_habilitada === "boolean"
+        ? bag.resena_habilitada
+        : null;
+
+  if (
+    !estado &&
+    !motivoId &&
+    !motivoLabel &&
+    !iniciadaAt &&
+    !confirmadaAt &&
+    !pendienteConfirmacion
+  ) {
+    return null;
+  }
+
+  return {
+    estado,
+    motivoId,
+    motivoLabel,
+    iniciadaAt,
+    confirmadaAt,
+    confirmadaPor,
+    pendienteConfirmacion,
+    resenaHabilitada,
+  };
+}
+
+export function readFlipyEnvioSummaryResult(raw: unknown): FlipyEnvioSummaryResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+
+  const fulfillmentRaw = readString(bag, "fulfillmentMode", "fulfillment_mode");
+  const fulfillmentMode =
+    fulfillmentRaw === "smart" || fulfillmentRaw === "bid" ? fulfillmentRaw : null;
+
+  const devolucion =
+    readFlipyDevolucionInfo(bag.devolucion) ??
+    readFlipyDevolucionInfo(asRecord(bag.evidencias)?.devolucion);
+
+  const calificacionDisponible =
+    typeof bag.calificacionDisponible === "boolean"
+      ? bag.calificacionDisponible
+      : typeof bag.calificacion_disponible === "boolean"
+        ? bag.calificacion_disponible
+        : null;
+
+  return {
+    envioId,
+    estado: readString(bag, "estado", "status") ?? "UNKNOWN",
+    externalOrderId: readString(bag, "externalOrderId", "external_order_id"),
+    trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
+    appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
+    appDeepLink: readString(bag, "appDeepLink", "app_deep_link"),
+    fulfillmentMode,
+    devolucion,
+    tiendaResena: readFlipyTiendaResena(bag.tiendaResena ?? bag.tienda_resena),
+    calificacionDisponible,
+    calificacionPeso: readFiniteNumber(bag, "calificacionPeso", "calificacion_peso"),
+  };
+}
+
+export function readFlipyEnvioByExternalOrderResult(
+  raw: unknown,
+): FlipyEnvioByExternalOrderResult | null {
+  return readFlipyEnvioSummaryResult(raw);
+}
+
+export function readFlipyCancelEnvioBlockedDetails(
+  raw: unknown,
+): FlipyCancelEnvioBlockedDetails | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+
+  return {
+    envioId,
+    externalOrderId: readString(bag, "externalOrderId", "external_order_id"),
+    estado: readString(bag, "estado", "status"),
+    resolution: readString(bag, "resolution"),
+    appDeepLink: readString(bag, "appDeepLink", "app_deep_link"),
+    appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
+    trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
+    supportHint: readString(bag, "supportHint", "support_hint"),
+    devolucion: readFlipyDevolucionInfo(bag.devolucion),
+  };
+}
+
+export function readFlipyCancelEnvioBlockedResult(
+  raw: unknown,
+): FlipyCancelEnvioBlockedResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const code = readString(bag, "code", "errorCode");
+  const message = readString(bag, "message", "error", "detail");
+  if (!code || !message) return null;
+
+  const detailsRaw = bag.details ?? bag.errorDetails;
+  return {
+    success: false,
+    code,
+    message,
+    details: readFlipyCancelEnvioBlockedDetails(detailsRaw),
+  };
+}
+
+export function readFlipyCancelEnvioSuccessResult(
+  raw: unknown,
+): FlipyCancelEnvioSuccessResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+
+  const fulfillmentRaw = readString(bag, "fulfillmentMode", "fulfillment_mode");
+  const fulfillmentMode =
+    fulfillmentRaw === "smart" || fulfillmentRaw === "bid" ? fulfillmentRaw : null;
+
+  return {
+    success: true,
+    contractVersion: readString(bag, "contractVersion", "contract_version"),
+    envioId,
+    estado: readString(bag, "estado", "status") ?? "CANCELADO",
+    estadoPrevio: readString(bag, "estadoPrevio", "estado_previo"),
+    cancelacionInmediata: bag.cancelacionInmediata !== false && bag.cancelacion_inmediata !== false,
+    idempotent: Boolean(bag.idempotent),
+    holdLiberado:
+      typeof bag.holdLiberado === "boolean"
+        ? bag.holdLiberado
+        : typeof bag.hold_liberado === "boolean"
+          ? bag.hold_liberado
+          : null,
+    message: readString(bag, "message"),
+    externalOrderId: readString(bag, "externalOrderId", "external_order_id"),
+    fulfillmentMode,
+    trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
+    appDeepLink: readString(bag, "appDeepLink", "app_deep_link"),
+    appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
+  };
+}
+
+export function readFlipyConfirmarDevolucionSuccessResult(
+  raw: unknown,
+): FlipyConfirmarDevolucionSuccessResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+
+  return {
+    success: true,
+    contractVersion: readString(bag, "contractVersion", "contract_version"),
+    envioId,
+    estado: readString(bag, "estado", "status") ?? "CANCELADO",
+    estadoPrevio: readString(bag, "estadoPrevio", "estado_previo"),
+    devolucionConfirmada: bag.devolucionConfirmada !== false && bag.devolucion_confirmada !== false,
+    idempotent: Boolean(bag.idempotent),
+    montoLiberado: readFiniteNumber(bag, "montoLiberado", "monto_liberado"),
+    devolucion: readFlipyDevolucionInfo(bag.devolucion),
+    message: readString(bag, "message"),
+    trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
+    appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
   };
 }
 

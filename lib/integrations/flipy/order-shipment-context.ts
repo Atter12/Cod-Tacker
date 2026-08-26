@@ -13,12 +13,20 @@ import {
   type FlipyPackageSize,
 } from "@/lib/integrations/flipy/map-package-size";
 import { readFlipyPickupKeywords } from "@/lib/integrations/flipy/settings";
+import type { FlipyDevolucionInfo, FlipyTiendaResena } from "@/lib/integrations/flipy/partner-contract";
+import { isFlipyDevolucionPendienteConfirmacion } from "@/lib/integrations/flipy/errors";
 import type { Json } from "@/types/database.generated";
 
 export { readOrderDestinationCoords } from "@/lib/integrations/flipy/auto-create";
 
 export type FlipyOrderShipmentContext = {
   flipyEnvioId: string | null;
+  flipyEstado: string | null;
+  flipyDevolucion: FlipyDevolucionInfo | null;
+  flipyDevolucionPendiente: boolean;
+  flipyTiendaResena: FlipyTiendaResena | null;
+  flipyCalificacionDisponible: boolean;
+  flipyCalificacionPeso: number | null;
   flipyTrackingUrl: string | null;
   flipyTrackingToken: string | null;
   payment: FlipyPaymentResolution;
@@ -81,6 +89,40 @@ function readContactFromMeta(meta: Record<string, unknown>): {
       ? meta.customer_phone.trim()
       : null;
   return { email, phone };
+}
+
+function readFlipyDevolucionFromMeta(meta: Record<string, unknown>): FlipyDevolucionInfo | null {
+  const raw = meta.flipy_devolucion;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const bag = raw as Record<string, unknown>;
+  return {
+    estado: typeof bag.estado === "string" ? bag.estado : null,
+    motivoId: typeof bag.motivoId === "string" ? bag.motivoId : null,
+    motivoLabel: typeof bag.motivoLabel === "string" ? bag.motivoLabel : null,
+    iniciadaAt: typeof bag.iniciadaAt === "string" ? bag.iniciadaAt : null,
+    confirmadaAt: typeof bag.confirmadaAt === "string" ? bag.confirmadaAt : null,
+    confirmadaPor: typeof bag.confirmadaPor === "string" ? bag.confirmadaPor : null,
+    pendienteConfirmacion: Boolean(bag.pendienteConfirmacion),
+    resenaHabilitada:
+      typeof bag.resenaHabilitada === "boolean" ? bag.resenaHabilitada : null,
+  };
+}
+
+function readFlipyTiendaResenaFromMeta(meta: Record<string, unknown>): FlipyTiendaResena | null {
+  const raw = meta.flipy_tienda_resena;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const bag = raw as Record<string, unknown>;
+  const id = typeof bag.id === "string" ? bag.id : null;
+  const rating = typeof bag.rating === "number" ? bag.rating : null;
+  if (!id || rating == null) return null;
+  return {
+    id,
+    rating,
+    peso: typeof bag.peso === "number" ? bag.peso : null,
+    comentario: typeof bag.comentario === "string" ? bag.comentario : null,
+    createdAt: typeof bag.createdAt === "string" ? bag.createdAt : null,
+    autorTipo: typeof bag.autorTipo === "string" ? bag.autorTipo : null,
+  };
 }
 
 export function buildFlipyOrderShipmentContext(
@@ -150,8 +192,19 @@ export function buildFlipyOrderShipmentContext(
     lineTitles,
   });
 
+  const flipyDevolucion = readFlipyDevolucionFromMeta(meta);
+  const flipyTiendaResena = readFlipyTiendaResenaFromMeta(meta);
+
   return {
     flipyEnvioId: typeof meta.flipy_envio_id === "string" ? meta.flipy_envio_id : null,
+    flipyEstado: typeof meta.flipy_estado === "string" ? meta.flipy_estado : null,
+    flipyDevolucion,
+    flipyDevolucionPendiente: isFlipyDevolucionPendienteConfirmacion(flipyDevolucion),
+    flipyTiendaResena,
+    flipyCalificacionDisponible:
+      meta.flipy_calificacion_disponible === true && flipyTiendaResena == null,
+    flipyCalificacionPeso:
+      typeof meta.flipy_calificacion_peso === "number" ? meta.flipy_calificacion_peso : null,
     flipyTrackingUrl: typeof meta.flipy_tracking_url === "string" ? meta.flipy_tracking_url : null,
     flipyTrackingToken: typeof meta.flipy_tracking_token === "string" ? meta.flipy_tracking_token : null,
     payment,

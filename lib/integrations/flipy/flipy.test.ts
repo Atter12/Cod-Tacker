@@ -5,6 +5,8 @@ import {
   buildFlipyWalletEmbedUrl,
   buildFlipyOperationWebUrl,
   buildFlipyBidsEmbedUrl,
+  buildFlipyAppActivationUrl,
+  buildFlipyAppLoginUrl,
   ensureFlipyMapWheelZoomParams,
   isAllowedFlipyPostMessageOrigin,
   resolveFlipyScopedEmbedUrl,
@@ -55,6 +57,29 @@ describe("flipy embed-urls", () => {
   it("builds tienda pujas fallback URL", () => {
     const url = buildFlipyOperationWebUrl({ appOrigin: FLIPY_DEFAULT_APP_ORIGIN });
     assert.equal(url, "https://tienda.flipyexpress.com/pujas");
+  });
+
+  it("builds app activation URL for partner-provisioned stores", () => {
+    const url = buildFlipyAppActivationUrl({
+      appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+      contactEmail: "integracionFC@gmail.com",
+      externalStoreId: "store-uuid",
+      flipyTiendaId: "tienda-1",
+    });
+    assert.match(url, /^https:\/\/tienda\.flipyexpress\.com\/activar-cuenta\?/);
+    assert.match(url, /email=integracionFC%40gmail\.com/);
+    assert.match(url, /source=codtracked/);
+    assert.match(url, /externalStoreId=store-uuid/);
+    assert.match(url, /tiendaId=tienda-1/);
+  });
+
+  it("builds app login URL with email prefill", () => {
+    const url = buildFlipyAppLoginUrl({
+      appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+      contactEmail: "ops@tienda.pe",
+    });
+    assert.match(url, /^https:\/\/tienda\.flipyexpress\.com\/login\?/);
+    assert.match(url, /email=ops%40tienda\.pe/);
   });
 
   it("builds partner pujas embed URL", () => {

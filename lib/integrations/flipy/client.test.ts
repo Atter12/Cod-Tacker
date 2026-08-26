@@ -2,15 +2,34 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   FLIPY_PARTNER_CONTRACT_VERSION,
+  buildFlipyCalificarEnvioRequestBody,
+  buildFlipyCancelEnvioRequestBody,
+  buildFlipyConfirmarDevolucionRequestBody,
   buildFlipyCotizarRequestBody,
   buildFlipyCreateEnvioRequestBody,
   buildFlipyProvisionRequestBody,
+  readFlipyCalificarEnvioSuccessResult,
+  readFlipyCancelEnvioBlockedResult,
+  readFlipyCancelEnvioSuccessResult,
+  readFlipyConfirmarDevolucionSuccessResult,
   readFlipyCotizarEnvioResult,
   readFlipyCreateEnvioResult,
+  readFlipyEnvioByExternalOrderResult,
+  readFlipyEnvioSummaryResult,
+  readFlipyTiendaResena,
   readFlipyFleteQuote,
   readFlipySaldoOperaciones,
   readFlipySaldoReservado,
+  readFlipySaldoGanancias,
+  readFlipyWalletSaldoResult,
+  buildFlipyTransferGananciasRequestBody,
+  readFlipyTransferGananciasSuccessResult,
 } from "@/lib/integrations/flipy/partner-contract";
+import {
+  isFlipyDevolucionPendienteConfirmacion,
+  isFlipyImmediateCancelEstado,
+  isFlipyTerminalEstado,
+} from "@/lib/integrations/flipy/errors";
 
 describe("flipy partner contract", () => {
   it("uses Partner API contract version 0.2.0", () => {
@@ -73,6 +92,53 @@ describe("flipy partner contract", () => {
     assert.equal(readFlipySaldoReservado({ billeteraReservado: 12 }), 12);
     assert.equal(readFlipySaldoReservado({ saldo: { billetera_reservado: 8 } }), 8);
     assert.equal(readFlipySaldoReservado({}), null);
+  });
+
+  it("reads wallet saldo with ganancias and transfer flags", () => {
+    const parsed = readFlipyWalletSaldoResult({
+      success: true,
+      billeteraOperaciones: 150,
+      billeteraReservado: 12,
+      billeteraGanancias: 89.5,
+      ganancias: 89.5,
+      transferGananciasDisponible: true,
+      destinoRetiroConfigurado: false,
+      canCreateEnvio: true,
+      warnings: [],
+    });
+
+    assert.equal(parsed.billeteraOperaciones, 150);
+    assert.equal(parsed.billeteraReservado, 12);
+    assert.equal(parsed.billeteraGanancias, 89.5);
+    assert.equal(parsed.transferGananciasDisponible, true);
+    assert.equal(readFlipySaldoGanancias({ ganancias: 40 }), 40);
+  });
+
+  it("builds and parses transfer ganancias → operaciones", () => {
+    assert.deepEqual(buildFlipyTransferGananciasRequestBody({ monto: 50 }), { monto: 50 });
+
+    const parsed = readFlipyTransferGananciasSuccessResult({
+      success: true,
+      contractVersion: "0.2.0",
+      idempotent: false,
+      transferId: "cltxn123",
+      monto: 50,
+      billeteraOperaciones: 200,
+      billeteraGanancias: 39.5,
+      billeteraReservado: 12,
+      saldo: {
+        billeteraOperaciones: 200,
+        billeteraGanancias: 39.5,
+        billeteraReservado: 12,
+      },
+      message: "Transferiste S/ 50.00 de Ganancias a Operaciones",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.monto, 50);
+    assert.equal(parsed?.billeteraOperaciones, 200);
+    assert.equal(parsed?.billeteraGanancias, 39.5);
+    assert.equal(parsed?.idempotent, false);
   });
 });
 
@@ -323,5 +389,222 @@ describe("flipy partner client v0.2 bodies", () => {
     assert.equal(quote?.recommendedFare, 11.25);
     assert.equal(quote?.marketLow, 9.5);
     assert.equal(quote?.packageSize, "pequeno");
+  });
+});
+
+describe("flipy partner calificación contract", () => {
+  it("builds calificar request body", () => {
+    assert.deepEqual(buildFlipyCalificarEnvioRequestBody({ rating: 4, comentario: "Bien" }), {
+      rating: 4,
+      comentario: "Bien",
+    });
+    assert.deepEqual(buildFlipyCalificarEnvioRequestBody({ rating: 5 }), { rating: 5 });
+  });
+
+  it("parses calificar success response", () => {
+    const parsed = readFlipyCalificarEnvioSuccessResult({
+      success: true,
+      envioId: "clenv123",
+      estado: "ENTREGADO",
+      idempotent: false,
+      calificacionDisponible: false,
+      calificacionPeso: 1,
+      tiendaResena: {
+        id: "clr1",
+        rating: 4,
+        peso: 1,
+        comentario: "Llegó tarde pero bien",
+        autorTipo: "TIENDA",
+      },
+      motorizado: {
+        id: "clmoto1",
+        calificacionPromedio: 4.72,
+        totalCalificaciones: 38,
+      },
+      message: "Calificación enviada correctamente",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.tiendaResena?.rating, 4);
+    assert.equal(parsed?.motorizado?.calificacionPromedio, 4.72);
+    assert.equal(parsed?.calificacionDisponible, false);
+  });
+
+  it("parses idempotent calificar response", () => {
+    const parsed = readFlipyCalificarEnvioSuccessResult({
+      success: true,
+      envioId: "clenv123",
+      estado: "ENTREGADO",
+      idempotent: true,
+      message: "Ya calificaste a este motorizado en este envío",
+      tiendaResena: { id: "clr1", rating: 5 },
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.idempotent, true);
+  });
+
+  it("parses envío summary with calificación fields", () => {
+    const parsed = readFlipyEnvioSummaryResult({
+      envioId: "clenv123",
+      estado: "CANCELADO",
+      calificacionDisponible: true,
+      calificacionPeso: 2,
+      tiendaResena: null,
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.calificacionDisponible, true);
+    assert.equal(parsed?.calificacionPeso, 2);
+    assert.equal(parsed?.tiendaResena, null);
+  });
+
+  it("parses tiendaResena", () => {
+    const resena = readFlipyTiendaResena({
+      id: "clr1",
+      rating: 3,
+      peso: 2,
+      comentario: "OK",
+      autorTipo: "TIENDA",
+    });
+    assert.ok(resena);
+    assert.equal(resena?.peso, 2);
+  });
+});
+
+describe("flipy partner devolución contract", () => {
+  it("parses devolución from envío summary", () => {
+    const parsed = readFlipyEnvioSummaryResult({
+      envioId: "clenv123",
+      estado: "EN_CURSO",
+      devolucion: {
+        estado: "PENDIENTE_CONFIRMACION_TIENDA",
+        motivoId: "CLIENTE_AUSENTE",
+        motivoLabel: "Cliente no disponible",
+        pendienteConfirmacion: true,
+      },
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.devolucion?.motivoLabel, "Cliente no disponible");
+    assert.equal(parsed?.devolucion?.pendienteConfirmacion, true);
+  });
+
+  it("parses confirmar-devolucion success response", () => {
+    const parsed = readFlipyConfirmarDevolucionSuccessResult({
+      success: true,
+      contractVersion: "0.2.0",
+      envioId: "clenv123",
+      estado: "CANCELADO",
+      estadoPrevio: "EN_CURSO",
+      devolucionConfirmada: true,
+      idempotent: false,
+      montoLiberado: 15.66,
+      devolucion: {
+        estado: "CONFIRMADA",
+        pendienteConfirmacion: false,
+        confirmadaPor: "PARTNER",
+      },
+      message: "Devolución confirmada.",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.estado, "CANCELADO");
+    assert.equal(parsed?.montoLiberado, 15.66);
+    assert.equal(parsed?.devolucion?.estado, "CONFIRMADA");
+  });
+
+  it("builds optional confirmar-devolucion body", () => {
+    assert.deepEqual(buildFlipyConfirmarDevolucionRequestBody({ notas: "Recibido OK" }), {
+      notas: "Recibido OK",
+    });
+    assert.equal(buildFlipyConfirmarDevolucionRequestBody({}), undefined);
+  });
+
+  it("detects devolución pendiente de confirmación", () => {
+    assert.equal(
+      isFlipyDevolucionPendienteConfirmacion({ pendienteConfirmacion: true }),
+      true,
+    );
+    assert.equal(
+      isFlipyDevolucionPendienteConfirmacion({ estado: "PENDIENTE_CONFIRMACION_TIENDA" }),
+      true,
+    );
+    assert.equal(isFlipyDevolucionPendienteConfirmacion({ pendienteConfirmacion: false }), false);
+  });
+});
+
+describe("flipy partner cancel contract", () => {
+  it("builds optional cancel body", () => {
+    assert.deepEqual(
+      buildFlipyCancelEnvioRequestBody({
+        motivo: "CLIENTE_CANCELADO",
+        motivoLabel: "Cliente canceló el pedido en Shopify",
+        notas: "Pedido #1042 anulado",
+      }),
+      {
+        motivo: "CLIENTE_CANCELADO",
+        motivoLabel: "Cliente canceló el pedido en Shopify",
+        notas: "Pedido #1042 anulado",
+      },
+    );
+    assert.equal(buildFlipyCancelEnvioRequestBody({}), undefined);
+  });
+
+  it("parses cancel success response", () => {
+    const parsed = readFlipyCancelEnvioSuccessResult({
+      success: true,
+      contractVersion: "0.2.0",
+      envioId: "clenv123",
+      estado: "CANCELADO",
+      estadoPrevio: "PENDIENTE_PUJAS",
+      cancelacionInmediata: true,
+      idempotent: false,
+      holdLiberado: true,
+      message: "Envío cancelado.",
+      appWebUrl: "https://tienda.flipyexpress.com/envios/clenv123",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.estado, "CANCELADO");
+    assert.equal(parsed?.estadoPrevio, "PENDIENTE_PUJAS");
+    assert.equal(parsed?.holdLiberado, true);
+    assert.equal(parsed?.idempotent, false);
+  });
+
+  it("parses cancel blocked 409 response", () => {
+    const parsed = readFlipyCancelEnvioBlockedResult({
+      success: false,
+      code: "CANCEL_BLOQUEADA_ASIGNADO",
+      message: "Ya hay un motorizado asignado.",
+      details: {
+        envioId: "clenv123",
+        estado: "ASIGNADO",
+        appWebUrl: "https://tienda.flipyexpress.com/envios/clenv123",
+        supportHint: "Abre el envío en Flipy.",
+      },
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.code, "CANCEL_BLOQUEADA_ASIGNADO");
+    assert.equal(parsed?.details?.appWebUrl, "https://tienda.flipyexpress.com/envios/clenv123");
+  });
+
+  it("parses envio by external order", () => {
+    const parsed = readFlipyEnvioByExternalOrderResult({
+      envioId: "clenv123",
+      estado: "PENDIENTE_PUJAS",
+      externalOrderId: "shopify:7123456789",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.estado, "PENDIENTE_PUJAS");
+  });
+
+  it("knows immediate-cancel and terminal estados", () => {
+    assert.equal(isFlipyImmediateCancelEstado("PENDIENTE_PUJAS"), true);
+    assert.equal(isFlipyImmediateCancelEstado("ASIGNADO"), false);
+    assert.equal(isFlipyTerminalEstado("CANCELADO"), true);
+    assert.equal(isFlipyTerminalEstado("EN_CURSO"), false);
   });
 });

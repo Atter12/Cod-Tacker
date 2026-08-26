@@ -60,7 +60,7 @@ export function createLiveFlipyCarrierProvider(
           mode: "live",
           checkedAt: new Date().toISOString(),
           latencyMs,
-          message: `Saldo operaciones: ${saldo.saldoOperaciones.toFixed(2)} PEN`,
+          message: `Operaciones: ${saldo.billeteraOperaciones.toFixed(2)} PEN · Ganancias: ${(saldo.billeteraGanancias ?? 0).toFixed(2)} PEN`,
           demo: false,
         };
       } catch (error) {

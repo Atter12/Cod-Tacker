@@ -2,6 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
+import {
+  buildFlipyAppActivationUrl,
+  buildFlipyAppLoginUrl,
+} from "@/lib/integrations/flipy/embed-urls";
 import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +15,10 @@ type Props = {
   storeSlug: string;
   embedOrigin: string;
   appOrigin: string;
+  contactEmail?: string | null;
+  activationPath?: string;
+  externalStoreId?: string | null;
+  flipyTiendaId?: string | null;
   orderId?: string | null;
 };
 
@@ -19,6 +27,10 @@ export function FlipyWalletRecargaPanel({
   storeSlug,
   embedOrigin,
   appOrigin,
+  contactEmail = null,
+  activationPath,
+  externalStoreId = null,
+  flipyTiendaId = null,
   orderId = null,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -48,7 +60,8 @@ export function FlipyWalletRecargaPanel({
     <div className="rounded-lg border border-border bg-surface-elevated p-4">
       <h2 className="text-sm font-semibold">Recarga billetera</h2>
       <p className="mt-1 text-[12.5px] text-text-secondary">
-        Recarga Operaciones vía embed Flipy (F3). También disponible al crear envío si el saldo es
+        Recarga Operaciones vía embed Flipy (F3). Si tienes Ganancias COD, también puedes pasarlas a
+        Operaciones desde la billetera arriba. También disponible al crear envío si el saldo es
         insuficiente.
       </p>
       {error ? (
@@ -63,12 +76,22 @@ export function FlipyWalletRecargaPanel({
           {pending ? "Cargando…" : "Recargar embed"}
         </Button>
         <a
-          href={appOrigin}
+          href={
+            contactEmail
+              ? buildFlipyAppActivationUrl({
+                  appOrigin,
+                  contactEmail,
+                  activationPath,
+                  externalStoreId,
+                  flipyTiendaId,
+                })
+              : buildFlipyAppLoginUrl({ appOrigin, contactEmail })
+          }
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted"
         >
-          Abrir app Flipy
+          {contactEmail ? "Activar cuenta Flipy" : "Abrir app Flipy"}
         </a>
       </div>
       {open && embedUrl ? (

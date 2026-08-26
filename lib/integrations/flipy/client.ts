@@ -6,32 +6,66 @@ import {
   buildFlipyCreateEnvioRequestBody,
   buildFlipyCotizarRequestBody,
   buildFlipyProvisionRequestBody,
+  buildFlipyCalificarEnvioRequestBody,
+  buildFlipyCancelEnvioRequestBody,
+  buildFlipyConfirmarDevolucionRequestBody,
+  readFlipyCalificarEnvioSuccessResult,
+  readFlipyCancelEnvioBlockedDetails,
+  readFlipyCancelEnvioSuccessResult,
+  readFlipyConfirmarDevolucionSuccessResult,
   readFlipyCreateEnvioResult,
   readFlipyCotizarEnvioResult,
+  readFlipyEnvioByExternalOrderResult,
+  readFlipyEnvioSummaryResult,
   readFlipySaldoOperaciones,
   readFlipySaldoReservado,
   readFlipySaldoWarningBajo,
+  readFlipyWalletSaldoResult,
+  buildFlipyTransferGananciasRequestBody,
+  readFlipyTransferGananciasSuccessResult,
+  type FlipyCalificarEnvioInput,
+  type FlipyCalificarEnvioSuccessResult,
+  type FlipyCancelEnvioInput,
+  type FlipyCancelEnvioSuccessResult,
+  type FlipyConfirmarDevolucionInput,
+  type FlipyConfirmarDevolucionSuccessResult,
   type FlipyCotizarEnvioInput,
   type FlipyCotizarEnvioResult,
   type FlipyCreateEnvioPartnerInput,
+  type FlipyEnvioByExternalOrderResult,
+  type FlipyEnvioSummaryResult,
   type FlipyFleteQuote,
   type FlipyAssignedMotorizado,
   type FlipyOperationalFulfillmentMode,
   type FlipyPackageCareId,
   type FlipyPackageSize,
   type FlipyShopifyPaymentInput,
+  type FlipyTransferGananciasInput,
+  type FlipyTransferGananciasSuccessResult,
   type FlipyTypeMode,
+  type FlipyWalletSaldoResult,
 } from "@/lib/integrations/flipy/partner-contract";
 
 export type {
+  FlipyCalificarEnvioInput,
+  FlipyCalificarEnvioSuccessResult,
+  FlipyCancelEnvioInput,
+  FlipyCancelEnvioSuccessResult,
+  FlipyConfirmarDevolucionInput,
+  FlipyConfirmarDevolucionSuccessResult,
   FlipyCotizarEnvioInput,
   FlipyCotizarEnvioResult,
+  FlipyEnvioByExternalOrderResult,
+  FlipyEnvioSummaryResult,
   FlipyFleteQuote,
   FlipyOperationalFulfillmentMode,
   FlipyPackageCareId,
   FlipyPackageSize,
   FlipyShopifyPaymentInput,
+  FlipyTransferGananciasInput,
+  FlipyTransferGananciasSuccessResult,
   FlipyTypeMode,
+  FlipyWalletSaldoResult,
 } from "@/lib/integrations/flipy/partner-contract";
 
 export type FlipyPartnerClientConfig = {
@@ -76,8 +110,10 @@ export type FlipyCreateEnvioResult = {
   assignedMotorizado?: FlipyAssignedMotorizado | null;
 };
 
-export type FlipySaldoResult = {
+export type FlipySaldoResult = FlipyWalletSaldoResult & {
+  /** @deprecated Use billeteraOperaciones */
   saldoOperaciones: number;
+  /** @deprecated Use billeteraReservado */
   saldoReservado?: number | null;
   warningBajo?: boolean;
 };
@@ -162,7 +198,8 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       const message =
         (bag ? readString(bag, "message", "error", "detail") : null) ||
         `Flipy API ${res.status}`;
-      throw new FlipyPartnerApiError(message, res.status, code ?? undefined);
+      const details = bag ? readFlipyCancelEnvioBlockedDetails(bag.details) ?? undefined : undefined;
+      throw new FlipyPartnerApiError(message, res.status, code ?? undefined, details);
     }
 
     return json as T;
@@ -215,11 +252,29 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
 
     async getSaldo(tiendaId: string): Promise<FlipySaldoResult> {
       const raw = await request<unknown>(`/api/partner/tiendas/${encodeURIComponent(tiendaId)}/saldo`);
+      const parsed = readFlipyWalletSaldoResult(raw);
       return {
-        saldoOperaciones: readFlipySaldoOperaciones(raw),
-        saldoReservado: readFlipySaldoReservado(raw),
-        warningBajo: readFlipySaldoWarningBajo(raw),
+        ...parsed,
+        saldoOperaciones: parsed.billeteraOperaciones,
+        saldoReservado: parsed.billeteraReservado,
+        warningBajo: parsed.warningBajo,
       };
+    },
+
+    async transferirGananciasAOperaciones(
+      input: FlipyTransferGananciasInput,
+      idempotencyKey: string,
+    ): Promise<FlipyTransferGananciasSuccessResult> {
+      const raw = await request<unknown>("/api/partner/wallet/transferir-a-operaciones", {
+        method: "POST",
+        idempotencyKey,
+        body: buildFlipyTransferGananciasRequestBody(input),
+      });
+      const parsed = readFlipyTransferGananciasSuccessResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió respuesta de transferencia", 502);
+      }
+      return parsed;
     },
 
     async issueWidgetToken(input: FlipyWidgetTokenInput): Promise<FlipyWidgetTokenResult> {
@@ -312,6 +367,87 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       const parsed = readFlipyCreateEnvioResult(raw);
       if (!parsed) {
         throw new FlipyPartnerApiError("Flipy no devolvió envioId", 502);
+      }
+      return parsed;
+    },
+
+    async getEnvioByExternalOrder(externalOrderId: string): Promise<FlipyEnvioByExternalOrderResult> {
+      const query = encodeURIComponent(externalOrderId.trim());
+      const raw = await request<unknown>(
+        `/api/partner/envios/by-external-order?externalOrderId=${query}`,
+        { method: "GET" },
+      );
+      const parsed = readFlipyEnvioByExternalOrderResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió envioId", 502);
+      }
+      return parsed;
+    },
+
+    async getEnvio(envioId: string): Promise<FlipyEnvioSummaryResult> {
+      const raw = await request<unknown>(
+        `/api/partner/envios/${encodeURIComponent(envioId)}`,
+        { method: "GET" },
+      );
+      const parsed = readFlipyEnvioSummaryResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió envioId", 502);
+      }
+      return parsed;
+    },
+
+    async cancelEnvio(
+      envioId: string,
+      input: FlipyCancelEnvioInput = {},
+    ): Promise<FlipyCancelEnvioSuccessResult> {
+      const body = buildFlipyCancelEnvioRequestBody(input);
+      const raw = await request<unknown>(
+        `/api/partner/envios/${encodeURIComponent(envioId)}/cancelar`,
+        {
+          method: "POST",
+          body: body ?? {},
+        },
+      );
+      const parsed = readFlipyCancelEnvioSuccessResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió respuesta de cancelación", 502);
+      }
+      return parsed;
+    },
+
+    async confirmarDevolucion(
+      envioId: string,
+      input: FlipyConfirmarDevolucionInput = {},
+    ): Promise<FlipyConfirmarDevolucionSuccessResult> {
+      const body = buildFlipyConfirmarDevolucionRequestBody(input);
+      const raw = await request<unknown>(
+        `/api/partner/envios/${encodeURIComponent(envioId)}/confirmar-devolucion`,
+        {
+          method: "POST",
+          body: body ?? {},
+        },
+      );
+      const parsed = readFlipyConfirmarDevolucionSuccessResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió respuesta de devolución", 502);
+      }
+      return parsed;
+    },
+
+    async calificarEnvio(
+      envioId: string,
+      input: FlipyCalificarEnvioInput,
+    ): Promise<FlipyCalificarEnvioSuccessResult> {
+      const raw = await request<unknown>(
+        `/api/partner/envios/${encodeURIComponent(envioId)}/calificar`,
+        {
+          method: "POST",
+          body: buildFlipyCalificarEnvioRequestBody(input),
+        },
+      );
+      const parsed = readFlipyCalificarEnvioSuccessResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió respuesta de calificación", 502);
       }
       return parsed;
     },

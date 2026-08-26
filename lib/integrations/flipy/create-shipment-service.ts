@@ -341,6 +341,7 @@ export async function createFlipyShipmentForOrder(input: {
     ...meta,
     fulfillment_mode: "delivery",
     flipy_envio_id: created.envioId,
+    flipy_estado: created.estado,
     flipy_tracking_url: created.trackingUrl ?? null,
     flipy_tracking_token: created.trackingToken ?? null,
     flipy_auto_create: {

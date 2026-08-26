@@ -4,7 +4,12 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   createFlipyShipmentFromOrder,
+  geocodeFlipyDeliveryAddress,
 } from "@/app/actions/flipy-shipments";
+import {
+  fetchFlipyWalletSaldo,
+  transferFlipyGananciasToOperaciones,
+} from "@/app/actions/flipy-wallet";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
 import { FlipyConfirmStepPanel } from "@/components/flipy/FlipyConfirmStepPanel";
@@ -52,7 +57,6 @@ import {
   recalcFleteFromDistance,
   type FlipyFleteQuoteSource,
 } from "@/lib/integrations/flipy/flete-quote-local";
-import type { FlipyEscenarioPago, FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
 import {
   emptyFlipyRoutePoint,
   hasFlipyRouteLocation,
@@ -61,6 +65,11 @@ import {
   type FlipyRoutePoint,
   type FlipyStoreOriginDefaults,
 } from "@/lib/integrations/flipy/route-address";
+import type { FlipyEscenarioPago, FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
+import {
+  applyGeocodedShopifyDelivery,
+  resolveShopifyDeliveryPoint,
+} from "@/lib/integrations/flipy/shopify-delivery";
 
 export type { FlipyStoreOriginDefaults };
 
@@ -72,6 +81,10 @@ type Props = {
   currencyCode: string;
   prefillAddress: string;
   prefillCoords?: { lat: number; lng: number } | null;
+  shippingAddress1?: string | null;
+  shippingCountryCode?: string | null;
+  shippingCity?: string | null;
+  shippingRegion?: string | null;
   embedOrigin: string;
   appOrigin: string;
   paymentResolution: FlipyPaymentResolution;
@@ -86,6 +99,12 @@ type Props = {
 };
 
 type Step = "payment" | "ruta" | "confirm" | "success" | "recarga";
+
+type WalletSaldoSnapshot = {
+  billeteraOperaciones: number;
+  billeteraGanancias: number;
+  transferGananciasDisponible: boolean;
+};
 
 type CreateResult = {
   envioId: string;
@@ -124,26 +143,42 @@ function buildInitialPickup(storeOrigin: FlipyStoreOriginDefaults | null): Flipy
   };
 }
 
+function buildShopifyDeliveryInput(input: {
+  prefillAddress: string;
+  prefillCoords?: { lat: number; lng: number } | null;
+  shippingAddress1?: string | null;
+  shippingCountryCode?: string | null;
+  shippingCity?: string | null;
+  shippingRegion?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+}) {
+  return {
+    prefillAddress: input.prefillAddress,
+    prefillCoords: input.prefillCoords,
+    shippingAddress1: input.shippingAddress1,
+    shippingCountryCode: input.shippingCountryCode,
+    shippingCity: input.shippingCity,
+    shippingRegion: input.shippingRegion,
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
+    customerEmail: input.customerEmail,
+  };
+}
+
 function buildInitialDelivery(input: {
   prefillAddress: string;
   prefillCoords?: { lat: number; lng: number } | null;
+  shippingAddress1?: string | null;
+  shippingCountryCode?: string | null;
+  shippingCity?: string | null;
+  shippingRegion?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
 }): FlipyRoutePoint {
-  const hasCoords =
-    input.prefillCoords != null &&
-    Number.isFinite(input.prefillCoords.lat) &&
-    Number.isFinite(input.prefillCoords.lng);
-  return {
-    address: input.prefillAddress.trim(),
-    lat: hasCoords ? input.prefillCoords!.lat : NaN,
-    lng: hasCoords ? input.prefillCoords!.lng : NaN,
-    contactName: input.customerName?.trim() ?? "",
-    contactPhone: input.customerPhone?.trim() ?? "",
-    contactEmail: input.customerEmail?.trim() ?? "",
-    pinConfirmed: Boolean(input.prefillAddress.trim() && hasCoords),
-  };
+  return resolveShopifyDeliveryPoint(buildShopifyDeliveryInput(input)).point;
 }
 
 function isSmartFallback(result: CreateResult, smartEligible: boolean): boolean {
@@ -191,6 +226,10 @@ export function FlipyCreateShipmentModal({
   currencyCode,
   prefillAddress,
   prefillCoords = null,
+  shippingAddress1 = null,
+  shippingCountryCode = null,
+  shippingCity = null,
+  shippingRegion = null,
   embedOrigin,
   appOrigin,
   paymentResolution,
@@ -204,6 +243,31 @@ export function FlipyCreateShipmentModal({
   onOpenChange,
 }: Props) {
   const router = useRouter();
+  const shopifyDeliveryInput = useMemo(
+    () =>
+      buildShopifyDeliveryInput({
+        prefillAddress,
+        prefillCoords,
+        shippingAddress1,
+        shippingCountryCode,
+        shippingCity,
+        shippingRegion,
+        customerName,
+        customerPhone,
+        customerEmail,
+      }),
+    [
+      prefillAddress,
+      prefillCoords,
+      shippingAddress1,
+      shippingCountryCode,
+      shippingCity,
+      shippingRegion,
+      customerName,
+      customerPhone,
+      customerEmail,
+    ],
+  );
   const [pending, startTransition] = useTransition();
   const smartEligible = paymentResolution.smartEligible;
   const fleteContext = useMemo(
@@ -231,6 +295,10 @@ export function FlipyCreateShipmentModal({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
+  const [walletSaldo, setWalletSaldo] = useState<WalletSaldoSnapshot | null>(null);
+  const [walletSaldoLoading, setWalletSaldoLoading] = useState(false);
+  const [walletTransferMessage, setWalletTransferMessage] = useState<string | null>(null);
+  const transferIdempotencyRef = useRef<string | null>(null);
   const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [escenario, setEscenario] = useState<FlipyEscenarioPago>(() =>
     initialFlipyEscenarioForUi(paymentResolution),
@@ -244,14 +312,11 @@ export function FlipyCreateShipmentModal({
     buildInitialPickup(storeOrigin),
   );
   const [deliveryPoint, setDeliveryPoint] = useState<FlipyRoutePoint>(() =>
-    buildInitialDelivery({
-      prefillAddress,
-      prefillCoords,
-      customerName,
-      customerPhone,
-      customerEmail,
-    }),
+    buildInitialDelivery(shopifyDeliveryInput),
   );
+  const [shopifyDeliveryHint, setShopifyDeliveryHint] = useState<string | null>(null);
+  const [geocodingShopifyDelivery, setGeocodingShopifyDelivery] = useState(false);
+  const geocodeAttemptRef = useRef<string | null>(null);
   const [routeModal, setRouteModal] = useState<"pickup" | "delivery" | null>(null);
   const [mapEmbedPrefetch, setMapEmbedPrefetch] = useState<{
     pickup: FlipyMapEmbedPrefetch | null;
@@ -636,16 +701,16 @@ export function FlipyCreateShipmentModal({
     setError(null);
     setErrorCode(null);
     setWalletEmbedUrl(null);
+    setWalletSaldo(null);
+    setWalletSaldoLoading(false);
+    setWalletTransferMessage(null);
+    transferIdempotencyRef.current = null;
     setPickupPoint(buildInitialPickup(storeOrigin));
-    setDeliveryPoint(
-      buildInitialDelivery({
-        prefillAddress,
-        prefillCoords,
-        customerName,
-        customerPhone,
-        customerEmail,
-      }),
-    );
+    const resolvedDelivery = resolveShopifyDeliveryPoint(shopifyDeliveryInput);
+    setDeliveryPoint(resolvedDelivery.point);
+    setShopifyDeliveryHint(resolvedDelivery.hint);
+    setGeocodingShopifyDelivery(false);
+    geocodeAttemptRef.current = null;
     setRouteModal(null);
     setPickupCardError(null);
     setDeliveryCardError(null);
@@ -685,6 +750,75 @@ export function FlipyCreateShipmentModal({
 
   useEffect(() => {
     if (!open) {
+      geocodeAttemptRef.current = null;
+      setGeocodingShopifyDelivery(false);
+      return;
+    }
+
+    const resolved = resolveShopifyDeliveryPoint(shopifyDeliveryInput);
+    if (resolved.autoConfirmed) {
+      setDeliveryPoint((current) =>
+        current.pinConfirmed ? current : resolved.point,
+      );
+      setShopifyDeliveryHint(resolved.hint);
+      return;
+    }
+
+    if (!resolved.needsGeocode) {
+      setShopifyDeliveryHint(resolved.hint);
+      return;
+    }
+
+    if (hasFlipyRouteLocation(deliveryPoint)) return;
+
+    const attemptKey = prefillAddress.trim();
+    if (!attemptKey || geocodeAttemptRef.current === attemptKey) return;
+    geocodeAttemptRef.current = attemptKey;
+
+    let cancelled = false;
+    setGeocodingShopifyDelivery(true);
+    void (async () => {
+      const result = await geocodeFlipyDeliveryAddress({
+        agencySlug,
+        storeSlug,
+        address: prefillAddress,
+      });
+      if (cancelled) return;
+      setGeocodingShopifyDelivery(false);
+
+      if (result.data) {
+        const applied = applyGeocodedShopifyDelivery({
+          point: resolved.point,
+          geocoded: result.data,
+          prefillAddress,
+        });
+        if (applied) {
+          setDeliveryPoint(applied.point);
+          setShopifyDeliveryHint(applied.hint);
+          setDeliveryCardError(null);
+          return;
+        }
+      }
+
+      setShopifyDeliveryHint(
+        "No pudimos ubicar la dirección de Shopify automáticamente. Confirma la entrega en el mapa.",
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    shopifyDeliveryInput,
+    agencySlug,
+    storeSlug,
+    prefillAddress,
+    deliveryPoint.pinConfirmed,
+  ]);
+
+  useEffect(() => {
+    if (!open) {
       skippedSmartPaymentRef.current = false;
       return;
     }
@@ -701,6 +835,7 @@ export function FlipyCreateShipmentModal({
 
   function loadWalletEmbed() {
     setError(null);
+    setWalletTransferMessage(null);
     startTransition(async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
         agencySlug,
@@ -715,6 +850,46 @@ export function FlipyCreateShipmentModal({
       setWalletEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       setStep("recarga");
+    });
+  }
+
+  function transferGananciasForShipment() {
+    if (!walletSaldo || walletSaldo.billeteraGanancias <= 0 || !walletSaldo.transferGananciasDisponible) {
+      return;
+    }
+    if (!transferIdempotencyRef.current) {
+      transferIdempotencyRef.current = crypto.randomUUID();
+    }
+    const monto = walletSaldo.billeteraGanancias;
+    setWalletTransferMessage(null);
+    startTransition(async () => {
+      const result = await transferFlipyGananciasToOperaciones({
+        agencySlug,
+        storeSlug,
+        monto,
+        idempotencyKey: transferIdempotencyRef.current,
+      });
+      if (result.error) {
+        setError(result.error);
+        setErrorCode(typeof result.errorCode === "string" ? result.errorCode : null);
+        return;
+      }
+      transferIdempotencyRef.current = null;
+      setWalletSaldo({
+        billeteraOperaciones: result.billeteraOperaciones ?? walletSaldo.billeteraOperaciones,
+        billeteraGanancias: result.billeteraGanancias ?? 0,
+        transferGananciasDisponible:
+          (result.billeteraGanancias ?? 0) > 0 && walletSaldo.transferGananciasDisponible,
+      });
+      setError(null);
+      setErrorCode(null);
+      setWalletTransferMessage(
+        result.message ??
+          `Transferiste ${formatCurrency(monto, "PEN")} a Operaciones. Reintenta crear el envío.`,
+      );
+      if (step === "recarga") {
+        setStep("confirm");
+      }
     });
   }
 
@@ -790,6 +965,7 @@ export function FlipyCreateShipmentModal({
       if (created.error || !created.envioId) {
         setError(created.error ?? "No se pudo crear el envío.");
         setErrorCode(typeof created.errorCode === "string" ? created.errorCode : null);
+        setWalletTransferMessage(null);
         return;
       }
       setResult({
@@ -811,6 +987,35 @@ export function FlipyCreateShipmentModal({
   const showRecargaCta =
     errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
     (error?.toLowerCase().includes("saldo") ?? false);
+  const canTransferGanancias =
+    Boolean(walletSaldo?.transferGananciasDisponible) &&
+    (walletSaldo?.billeteraGanancias ?? 0) > 0;
+  const needsWalletSaldo = showRecargaCta || step === "recarga";
+
+  useEffect(() => {
+    if (!open || !needsWalletSaldo) {
+      setWalletSaldo(null);
+      setWalletSaldoLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setWalletSaldoLoading(true);
+    void fetchFlipyWalletSaldo({ agencySlug, storeSlug }).then((result) => {
+      if (cancelled) return;
+      setWalletSaldoLoading(false);
+      if (result.error) return;
+      setWalletSaldo({
+        billeteraOperaciones: result.billeteraOperaciones ?? 0,
+        billeteraGanancias: result.billeteraGanancias ?? 0,
+        transferGananciasDisponible: Boolean(result.transferGananciasDisponible),
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, needsWalletSaldo, agencySlug, storeSlug]);
   const flipyOperationLink = result
     ? buildFlipyOperationDeepLink({
         appOrigin,
@@ -930,14 +1135,49 @@ export function FlipyCreateShipmentModal({
           />
         ) : null}
 
+        {walletTransferMessage ? (
+          <Alert variant="success" title="Billetera actualizada">
+            <div className="space-y-2">
+              <p>{walletTransferMessage}</p>
+              <Button size="sm" disabled={pending} onClick={() => submitCreate()}>
+                Reintentar crear envío
+              </Button>
+            </div>
+          </Alert>
+        ) : null}
+
         {error ? (
           <Alert variant="danger" title="Error">
             <div className="space-y-2">
               <p>{error}</p>
               {showRecargaCta ? (
-                <Button size="sm" variant="outline" disabled={pending} onClick={() => loadWalletEmbed()}>
-                  Recargar en Flipy
-                </Button>
+                <div className="space-y-2">
+                  {walletSaldoLoading ? (
+                    <p className="text-xs text-text-secondary">Consultando billetera Flipy…</p>
+                  ) : null}
+                  {canTransferGanancias && walletSaldo ? (
+                    <p className="text-xs text-text-secondary">
+                      Tienes {formatCurrency(walletSaldo.billeteraGanancias, "PEN")} en Ganancias COD.
+                      Puedes pasarlas a Operaciones al instante o recargar con tarjeta.
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {canTransferGanancias && walletSaldo ? (
+                      <Button
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => transferGananciasForShipment()}
+                      >
+                        {pending
+                          ? "Transfiriendo…"
+                          : `Pasar ${formatCurrency(walletSaldo.billeteraGanancias, "PEN")} a Operaciones`}
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => loadWalletEmbed()}>
+                      Recargar en Flipy
+                    </Button>
+                  </div>
+                </div>
               ) : null}
             </div>
           </Alert>
@@ -964,7 +1204,20 @@ export function FlipyCreateShipmentModal({
         ) : null}
 
         {step === "ruta" ? (
-          <FlipyRutaStepPanel
+          <>
+            {geocodingShopifyDelivery ? (
+              <Alert variant="info" title="Dirección Shopify">
+                Ubicando la dirección de envío desde Shopify…
+              </Alert>
+            ) : shopifyDeliveryHint ? (
+              <Alert
+                variant={shopifyDeliveryHint.includes("Confirma") ? "warning" : "info"}
+                title="Dirección Shopify"
+              >
+                {shopifyDeliveryHint}
+              </Alert>
+            ) : null}
+            <FlipyRutaStepPanel
             showModalidadStep={showModalidadStep}
             smartEligible={smartEligible}
             storeOriginAvailable={Boolean(storeOrigin)}
@@ -1009,10 +1262,27 @@ export function FlipyCreateShipmentModal({
             fleteAmount={fleteValidation.value}
             currencyCode={currencyCode}
           />
+          </>
         ) : null}
 
         {step === "recarga" && walletEmbedUrl ? (
           <div className="space-y-3">
+            {canTransferGanancias && walletSaldo ? (
+              <Alert variant="info" title="Alternativa sin tarjeta">
+                También puedes transferir{" "}
+                {formatCurrency(walletSaldo.billeteraGanancias, "PEN")} de Ganancias a Operaciones.
+                <div className="mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => transferGananciasForShipment()}
+                  >
+                    Pasar Ganancias a Operaciones
+                  </Button>
+                </div>
+              </Alert>
+            ) : null}
             <FlipyWalletEmbed
               embedUrl={walletEmbedUrl}
               embedOrigin={resolvedEmbedOrigin}

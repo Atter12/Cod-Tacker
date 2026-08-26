@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  FLIPY_DEFAULT_APP_ACTIVATION_PATH,
   FLIPY_DEFAULT_APP_ORIGIN,
   FLIPY_DEFAULT_EMBED_ORIGIN,
 } from "@/lib/integrations/flipy/embed-urls";
@@ -12,6 +13,7 @@ import {
  * FLIPY_API_BASE_URL      — default https://flipy-backend.vercel.app
  * FLIPY_EMBED_ORIGIN      — partner iframe host (web-app); default https://flipy-panel.vercel.app
  * FLIPY_APP_ORIGIN        — tienda app web / deep links; default https://tienda.flipyexpress.com
+ * FLIPY_APP_ACTIVATION_PATH — set-password landing on Flipy app; default /activar-cuenta
  */
 
 function readTrimmed(name: string): string | null {
@@ -28,6 +30,7 @@ export type FlipyEnv = {
   apiBaseUrl: string;
   embedOrigin: string;
   appOrigin: string;
+  appActivationPath: string;
   partnerId: string;
 };
 
@@ -40,6 +43,8 @@ export function getFlipyEnv(): FlipyEnv {
       /\/$/,
       "",
     ),
+    appActivationPath:
+      readTrimmed("FLIPY_APP_ACTIVATION_PATH") ?? FLIPY_DEFAULT_APP_ACTIVATION_PATH,
     partnerId: readTrimmed("FLIPY_PARTNER_ID") ?? "codtracked",
   };
 }
