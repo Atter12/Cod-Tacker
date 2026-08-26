@@ -786,10 +786,19 @@ export function FlipyCreateShipmentModal({
       if (cancelled) return;
       setGeocodingShopifyDelivery(false);
 
-      if (result.data) {
+      if (
+        !result.error &&
+        typeof result.lat === "number" &&
+        typeof result.lng === "number" &&
+        typeof result.address === "string"
+      ) {
         const applied = applyGeocodedShopifyDelivery({
           point: resolved.point,
-          geocoded: result.data,
+          geocoded: {
+            address: result.address,
+            lat: result.lat,
+            lng: result.lng,
+          },
           prefillAddress,
         });
         if (applied) {
