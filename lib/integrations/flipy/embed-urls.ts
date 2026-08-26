@@ -147,14 +147,22 @@ export function isAllowedFlipyPostMessageOrigin(origin: string, embedOrigin: str
 }
 
 /** Append map UX + parentOrigin so Flipy can postMessage back to this host. */
-export function withFlipyLocationClientParams(embedUrl: string, parentOrigin?: string | null): string {
+export function withFlipyLocationClientParams(
+  embedUrl: string,
+  parentOrigin?: string | null,
+  options?: { liveSync?: boolean },
+): string {
   try {
     const url = new URL(embedUrl);
     if (!url.pathname.includes("/partner/ubicacion")) return embedUrl;
     url.searchParams.set("gestureHandling", "greedy");
     url.searchParams.set("mapWheel", "zoom");
-    // Ask Flipy embed to post flipy-location-updated while the pin moves (not only on confirm).
-    url.searchParams.set("liveLocationSync", "1");
+    if (options?.liveSync) {
+      url.searchParams.set("liveLocationSync", "1");
+    } else {
+      url.searchParams.delete("liveLocationSync");
+      url.searchParams.set("embedMode", "standalone");
+    }
     const parent = parentOrigin?.trim();
     if (parent) url.searchParams.set("parentOrigin", parent);
     return url.toString();

@@ -8,7 +8,8 @@ import {
 } from "@/app/actions/flipy-shipments";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
-import { FlipyLocationEmbed } from "@/components/flipy/FlipyLocationEmbed";
+import { FlipyRouteAddressCard } from "@/components/flipy/FlipyRouteAddressCard";
+import { FlipyRouteAddressModal } from "@/components/flipy/FlipyRouteAddressModal";
 import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -44,16 +45,16 @@ import {
 } from "@/lib/integrations/flipy/map-package-size";
 import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
 import type { FlipyEscenarioPago, FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
+import {
+  emptyFlipyRoutePoint,
+  hasFlipyRouteLocation,
+  peMobileDigits,
+  validateFlipyRoutePoint,
+  type FlipyRoutePoint,
+  type FlipyStoreOriginDefaults,
+} from "@/lib/integrations/flipy/route-address";
 
-type Destination = { address: string; lat: number; lng: number };
-
-export type FlipyStoreOriginDefaults = {
-  address: string;
-  lat: number;
-  lng: number;
-  contactName: string;
-  phone: string;
-};
+export type { FlipyStoreOriginDefaults };
 
 type Props = {
   agencySlug: string;
@@ -97,13 +98,38 @@ type CreateResult = {
 const PACKAGE_SIZES: FlipyPackageSize[] = ["pequeno", "mediano", "grande"];
 const QUOTE_DEBOUNCE_MS = 500;
 
-function peMobileDigits(value: string): string {
-  return value.replace(/\D/g, "").slice(-9);
+function buildInitialPickup(storeOrigin: FlipyStoreOriginDefaults | null): FlipyRoutePoint {
+  if (!storeOrigin) return emptyFlipyRoutePoint();
+  return {
+    address: storeOrigin.address,
+    lat: storeOrigin.lat,
+    lng: storeOrigin.lng,
+    contactName: storeOrigin.contactName,
+    contactPhone: storeOrigin.phone,
+    pinConfirmed: Boolean(storeOrigin.address && Number.isFinite(storeOrigin.lat)),
+  };
 }
 
-function isValidPeMobile(value: string): boolean {
-  const digits = peMobileDigits(value);
-  return digits.length === 9 && digits.startsWith("9");
+function buildInitialDelivery(input: {
+  prefillAddress: string;
+  prefillCoords?: { lat: number; lng: number } | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+}): FlipyRoutePoint {
+  const hasCoords =
+    input.prefillCoords != null &&
+    Number.isFinite(input.prefillCoords.lat) &&
+    Number.isFinite(input.prefillCoords.lng);
+  return {
+    address: input.prefillAddress.trim(),
+    lat: hasCoords ? input.prefillCoords!.lat : NaN,
+    lng: hasCoords ? input.prefillCoords!.lng : NaN,
+    contactName: input.customerName?.trim() ?? "",
+    contactPhone: input.customerPhone?.trim() ?? "",
+    contactEmail: input.customerEmail?.trim() ?? "",
+    pinConfirmed: Boolean(input.prefillAddress.trim() && hasCoords),
+  };
 }
 
 function isSmartFallback(result: CreateResult, smartEligible: boolean): boolean {
@@ -161,25 +187,26 @@ export function FlipyCreateShipmentModal({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
+  const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [escenario, setEscenario] = useState<FlipyEscenarioPago>(() =>
     initialFlipyEscenarioForUi(paymentResolution),
   );
 
-  const [originAddress, setOriginAddress] = useState(storeOrigin?.address ?? "");
-  const [originLat, setOriginLat] = useState(storeOrigin?.lat ?? NaN);
-  const [originLng, setOriginLng] = useState(storeOrigin?.lng ?? NaN);
-  const [originContactName, setOriginContactName] = useState(storeOrigin?.contactName ?? "");
-  const [originPhone, setOriginPhone] = useState(storeOrigin?.phone ?? "");
-
-  const [destination, setDestination] = useState<Destination | null>(null);
-  const [destContactName, setDestContactName] = useState(customerName ?? "");
-  const [destPhone, setDestPhone] = useState(customerPhone ?? "");
-  const [destEmail, setDestEmail] = useState(customerEmail ?? "");
-  const [pickupEmbedUrl, setPickupEmbedUrl] = useState<string | null>(null);
-  const [deliveryEmbedUrl, setDeliveryEmbedUrl] = useState<string | null>(null);
-  const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
-  const [originPinConfirmed, setOriginPinConfirmed] = useState(false);
-  const [pickupMapNonce, setPickupMapNonce] = useState(0);
+  const [pickupPoint, setPickupPoint] = useState<FlipyRoutePoint>(() =>
+    buildInitialPickup(storeOrigin),
+  );
+  const [deliveryPoint, setDeliveryPoint] = useState<FlipyRoutePoint>(() =>
+    buildInitialDelivery({
+      prefillAddress,
+      prefillCoords,
+      customerName,
+      customerPhone,
+      customerEmail,
+    }),
+  );
+  const [routeModal, setRouteModal] = useState<"pickup" | "delivery" | null>(null);
+  const [pickupCardError, setPickupCardError] = useState<string | null>(null);
+  const [deliveryCardError, setDeliveryCardError] = useState<string | null>(null);
 
   const [packageSize, setPackageSize] = useState<FlipyPackageSize>(defaultPackageSize);
   const [packageCare, setPackageCare] = useState<FlipyPackageCareId[]>(defaultPackageCare);
@@ -211,25 +238,21 @@ export function FlipyCreateShipmentModal({
   );
 
   const destinationConsistency = useMemo(() => {
-    if (!destination) return null;
+    if (!hasFlipyRouteLocation(deliveryPoint)) return null;
     return evaluateDestinationConsistency({
-      address: destination.address,
-      lat: destination.lat,
-      lng: destination.lng,
+      address: deliveryPoint.address,
+      lat: deliveryPoint.lat,
+      lng: deliveryPoint.lng,
       prefillAddress,
       prefillCoords,
     });
-  }, [destination, prefillAddress, prefillCoords]);
+  }, [deliveryPoint, prefillAddress, prefillCoords]);
 
   const coordsReady =
-    Number.isFinite(originLat) &&
-    Number.isFinite(originLng) &&
-    destination != null &&
-    Number.isFinite(destination.lat) &&
-    Number.isFinite(destination.lng);
+    hasFlipyRouteLocation(pickupPoint) && hasFlipyRouteLocation(deliveryPoint);
 
   const requestQuote = useCallback(() => {
-    if (!coordsReady || !destination) return;
+    if (!coordsReady) return;
     const requestId = ++quoteRequestIdRef.current;
     setQuoting(true);
     setQuoteError(null);
@@ -237,10 +260,10 @@ export function FlipyCreateShipmentModal({
       const quoted = await cotizarFlipyFlete({
         agencySlug,
         storeSlug,
-        originLat,
-        originLng,
-        destinationLat: destination.lat,
-        destinationLng: destination.lng,
+        originLat: pickupPoint.lat,
+        originLng: pickupPoint.lng,
+        destinationLat: deliveryPoint.lat,
+        destinationLng: deliveryPoint.lng,
         packageSize,
       });
       if (requestId !== quoteRequestIdRef.current) return;
@@ -265,9 +288,10 @@ export function FlipyCreateShipmentModal({
     agencySlug,
     storeSlug,
     coordsReady,
-    destination,
-    originLat,
-    originLng,
+    pickupPoint.lat,
+    pickupPoint.lng,
+    deliveryPoint.lat,
+    deliveryPoint.lng,
     packageSize,
     fleteLocked,
     fletePrice,
@@ -280,51 +304,29 @@ export function FlipyCreateShipmentModal({
     if (!open || step !== "ruta" || !coordsReady) return;
     const timer = window.setTimeout(() => requestQuote(), QUOTE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [open, step, coordsReady, originLat, originLng, destination, packageSize, requestQuote]);
+  }, [open, step, coordsReady, pickupPoint.lat, pickupPoint.lng, deliveryPoint.lat, deliveryPoint.lng, packageSize, requestQuote]);
 
-  function applyStoreOrigin() {
+  function applyStoreOriginToPickupCard() {
     if (!storeOrigin) {
       setError("No hay origen de tienda Flipy configurado. Reconecta la integración con dirección completa.");
       return;
     }
     setError(null);
-    setOriginAddress(storeOrigin.address);
-    setOriginLat(storeOrigin.lat);
-    setOriginLng(storeOrigin.lng);
-    setOriginContactName(storeOrigin.contactName);
-    setOriginPhone(storeOrigin.phone);
-    setOriginPinConfirmed(true);
-    setPickupEmbedUrl(null);
-    startTransition(async () => {
-      const tokenResult = await issueFlipyWidgetTokenAction({
-        agencySlug,
-        storeSlug,
-        orderId,
-        prefillAddress: storeOrigin.address,
-        prefillLat: storeOrigin.lat,
-        prefillLng: storeOrigin.lng,
-      });
-      if (tokenResult.error || !tokenResult.embedUrl) {
-        setError(
-          tokenResult.error ??
-            "Dirección de tienda aplicada en el formulario, pero no se pudo recargar el mapa.",
-        );
-        return;
-      }
-      setPickupEmbedUrl(tokenResult.embedUrl);
-      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
-      setPickupMapNonce((n) => n + 1);
+    setPickupPoint({
+      address: storeOrigin.address,
+      lat: storeOrigin.lat,
+      lng: storeOrigin.lng,
+      contactName: storeOrigin.contactName,
+      contactPhone: storeOrigin.phone,
+      pinConfirmed: true,
     });
+    setPickupCardError(null);
   }
 
-  function applyStoreContact() {
-    if (!storeOrigin) {
-      setError("No hay datos de contacto de tienda Flipy.");
-      return;
-    }
-    setOriginContactName(storeOrigin.contactName);
-    setOriginPhone(storeOrigin.phone);
+  function goToRutaStep() {
     setError(null);
+    if (smartEligible) setEscenario("1A");
+    setStep("ruta");
   }
 
   function togglePackageCare(id: FlipyPackageCareId) {
@@ -340,12 +342,20 @@ export function FlipyCreateShipmentModal({
     setError(null);
     setErrorCode(null);
     setWalletEmbedUrl(null);
-    setDestination(null);
-    setPickupEmbedUrl(null);
-    setDeliveryEmbedUrl(null);
+    setPickupPoint(buildInitialPickup(storeOrigin));
+    setDeliveryPoint(
+      buildInitialDelivery({
+        prefillAddress,
+        prefillCoords,
+        customerName,
+        customerPhone,
+        customerEmail,
+      }),
+    );
+    setRouteModal(null);
+    setPickupCardError(null);
+    setDeliveryCardError(null);
     setResolvedEmbedOrigin(embedOrigin);
-    setOriginPinConfirmed(false);
-    setPickupMapNonce(0);
     setResult(null);
     setNotes("");
     setPackageSize(defaultPackageSize);
@@ -359,14 +369,6 @@ export function FlipyCreateShipmentModal({
     setFletePrice(
       initialFleteInputValue(nextEscenario, paymentResolution.suggestedFlete, { smartEligible }),
     );
-    setOriginAddress(storeOrigin?.address ?? "");
-    setOriginLat(storeOrigin?.lat ?? NaN);
-    setOriginLng(storeOrigin?.lng ?? NaN);
-    setOriginContactName(storeOrigin?.contactName ?? "");
-    setOriginPhone(storeOrigin?.phone ?? "");
-    setDestContactName(customerName ?? "");
-    setDestPhone(customerPhone ?? "");
-    setDestEmail(customerEmail ?? "");
   }
 
   function closeModal(nextOpen: boolean) {
@@ -375,67 +377,15 @@ export function FlipyCreateShipmentModal({
   }
 
   function validateRuta(): string | null {
-    if (!originAddress.trim()) return "Confirma o edita la dirección de recojo en el mapa.";
-    if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
-      return "Mueve el pin de recojo en el mapa (o usa la dirección de tu tienda).";
-    }
-    if (!originPinConfirmed) {
-      return "Mueve el pin de recojo en el mapa (o pulsa “Usar dirección de mi tienda”).";
-    }
-    if (!originContactName.trim()) return "Indica quién entrega (nombre).";
-    if (!isValidPeMobile(originPhone)) {
-      return "Celular de quién entrega: 9 dígitos PE (empieza en 9).";
-    }
-    if (!destination) return "Mueve el pin de entrega en el mapa.";
-    if (!destination.address.trim()) return "La dirección de entrega está vacía — edítala.";
+    const pickupErr = validateFlipyRoutePoint(pickupPoint, "pickup");
+    if (pickupErr) return pickupErr;
+    const deliveryErr = validateFlipyRoutePoint(deliveryPoint, "delivery");
+    if (deliveryErr) return deliveryErr;
     if (destinationConsistency && !destinationConsistency.ok) {
-      return "La dirección textual no coincide con el pin. Corrígela antes de continuar.";
-    }
-    if (!destContactName.trim()) return "Indica quién recibe (nombre).";
-    if (!isValidPeMobile(destPhone)) {
-      return "Celular de quién recibe: 9 dígitos PE (empieza en 9).";
+      return "La dirección de entrega no coincide con el pin. Edítala en Entrega.";
     }
     if (!fleteValidation.ok) return fleteValidation.error ?? "Revisa el flete.";
     return null;
-  }
-
-  function loadRutaEmbeds() {
-    setError(null);
-    if (smartEligible) setEscenario("1A");
-    startTransition(async () => {
-      const [pickupToken, deliveryToken] = await Promise.all([
-        issueFlipyWidgetTokenAction({
-          agencySlug,
-          storeSlug,
-          orderId,
-          prefillAddress: storeOrigin?.address || originAddress || null,
-          prefillLat: storeOrigin?.lat ?? (Number.isFinite(originLat) ? originLat : null),
-          prefillLng: storeOrigin?.lng ?? (Number.isFinite(originLng) ? originLng : null),
-        }),
-        issueFlipyWidgetTokenAction({
-          agencySlug,
-          storeSlug,
-          orderId,
-          prefillAddress,
-          prefillLat: prefillCoords?.lat,
-          prefillLng: prefillCoords?.lng,
-        }),
-      ]);
-
-      if (pickupToken.error || !pickupToken.embedUrl) {
-        setError(pickupToken.error ?? "No se pudo cargar el mapa de recojo Flipy.");
-        return;
-      }
-      if (deliveryToken.error || !deliveryToken.embedUrl) {
-        setError(deliveryToken.error ?? "No se pudo cargar el mapa de entrega Flipy.");
-        return;
-      }
-
-      setPickupEmbedUrl(pickupToken.embedUrl);
-      setDeliveryEmbedUrl(deliveryToken.embedUrl);
-      setResolvedEmbedOrigin(pickupToken.embedOrigin ?? deliveryToken.embedOrigin ?? embedOrigin);
-      setStep("ruta");
-    });
   }
 
   useEffect(() => {
@@ -450,7 +400,7 @@ export function FlipyCreateShipmentModal({
     setFletePrice(
       initialFleteInputValue("1A", paymentResolution.suggestedFlete, { smartEligible }),
     );
-    loadRutaEmbeds();
+    goToRutaStep();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot skip on open
   }, [open, smartEligible]);
 
@@ -474,11 +424,25 @@ export function FlipyCreateShipmentModal({
   }
 
   function goConfirm() {
+    const pickupErr = validateFlipyRoutePoint(pickupPoint, "pickup");
+    if (pickupErr) {
+      setPickupCardError(pickupErr);
+      setError(pickupErr);
+      return;
+    }
+    const deliveryErr = validateFlipyRoutePoint(deliveryPoint, "delivery");
+    if (deliveryErr) {
+      setDeliveryCardError(deliveryErr);
+      setError(deliveryErr);
+      return;
+    }
     const rutaError = validateRuta();
     if (rutaError) {
       setError(rutaError);
       return;
     }
+    setPickupCardError(null);
+    setDeliveryCardError(null);
     setError(null);
     setStep("confirm");
   }
@@ -490,12 +454,17 @@ export function FlipyCreateShipmentModal({
       setStep("ruta");
       return;
     }
-    if (!destination || !fleteValidation.ok || fleteValidation.value == null) {
+    if (!hasFlipyRouteLocation(deliveryPoint) || !fleteValidation.ok || fleteValidation.value == null) {
       setError(fleteValidation.error ?? "Revisa la oferta de flete.");
       setStep("ruta");
       return;
     }
     setError(null);
+    const destination = {
+      address: deliveryPoint.address.trim(),
+      lat: deliveryPoint.lat,
+      lng: deliveryPoint.lng,
+    };
     startTransition(async () => {
       const created = await createFlipyShipmentFromOrder({
         agencySlug,
@@ -508,18 +477,18 @@ export function FlipyCreateShipmentModal({
         packageSize,
         packageCare,
         packageCareNote: packageCareNote.trim() || null,
-        destinationEmail: destEmail.trim() || null,
+        destinationEmail: deliveryPoint.contactEmail?.trim() || null,
         smartEligible,
         origin: {
-          address: originAddress.trim(),
-          lat: originLat,
-          lng: originLng,
-          contactName: originContactName.trim(),
-          phone: peMobileDigits(originPhone),
+          address: pickupPoint.address.trim(),
+          lat: pickupPoint.lat,
+          lng: pickupPoint.lng,
+          contactName: pickupPoint.contactName.trim(),
+          phone: peMobileDigits(pickupPoint.contactPhone),
         },
         destinationContact: {
-          name: destContactName.trim(),
-          phone: peMobileDigits(destPhone),
+          name: deliveryPoint.contactName.trim(),
+          phone: peMobileDigits(deliveryPoint.contactPhone),
         },
         notes: notes.trim() || null,
       });
@@ -642,8 +611,8 @@ export function FlipyCreateShipmentModal({
               <Button variant="outline" onClick={() => closeModal(false)}>
                 Cancelar
               </Button>
-              <Button disabled={pending} onClick={() => loadRutaEmbeds()}>
-                {pending ? "Cargando mapas…" : "Siguiente: ruta"}
+              <Button disabled={pending} onClick={() => goToRutaStep()}>
+                Siguiente: ruta
               </Button>
             </div>
           </div>
@@ -651,6 +620,11 @@ export function FlipyCreateShipmentModal({
 
         {step === "ruta" ? (
           <div className="space-y-4">
+            <p className="text-sm text-text-secondary">
+              Recojo, entrega, flete y tamaño del paquete — como en la app Flipy. Toca cada tarjeta
+              para abrir el mapa y contacto.
+            </p>
+
             {smartEligible ? (
               <Alert variant="info" title="Asignación automática (1A)">
                 Flete prepagado en Shopify — modalidad 1A aplicada. El flete se fija con la cotización
@@ -658,111 +632,40 @@ export function FlipyCreateShipmentModal({
               </Alert>
             ) : null}
 
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <h3 className="text-sm font-semibold">Recojo</h3>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" type="button" onClick={applyStoreOrigin} disabled={!storeOrigin}>
-                  Usar dirección de mi tienda
-                </Button>
-                <Button size="sm" variant="outline" type="button" onClick={applyStoreContact} disabled={!storeOrigin}>
-                  Usar datos de mi tienda
+            {storeOrigin ? (
+              <div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={applyStoreOriginToPickupCard}
+                >
+                  Usar dirección de mi tienda (recojo)
                 </Button>
               </div>
-              {pickupEmbedUrl ? (
-                <FlipyLocationEmbed
-                  key={`pickup-map-${pickupMapNonce}`}
-                  embedUrl={pickupEmbedUrl}
-                  embedOrigin={resolvedEmbedOrigin}
-                  agencySlug={agencySlug}
-                  storeSlug={storeSlug}
-                  purpose="pickup"
-                  prefillAddress={storeOrigin?.address || originAddress || null}
-                  prefillCoords={
-                    storeOrigin
-                      ? { lat: storeOrigin.lat, lng: storeOrigin.lng }
-                      : Number.isFinite(originLat) && Number.isFinite(originLng)
-                        ? { lat: originLat, lng: originLng }
-                        : null
-                  }
-                  mapHeightClassName="h-[min(58vh,520px)]"
-                  onConfirmed={(next) => {
-                    setOriginAddress(next.address);
-                    setOriginLat(next.lat);
-                    setOriginLng(next.lng);
-                    setOriginPinConfirmed(true);
-                    setError(null);
-                  }}
-                />
-              ) : (
-                <p className="text-xs text-text-secondary">{pending ? "Cargando mapa de recojo…" : "Mapa de recojo pendiente."}</p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormField label="Quién entrega — nombre" htmlFor="flipy-origin-name">
-                  <Input
-                    id="flipy-origin-name"
-                    value={originContactName}
-                    onChange={(e) => setOriginContactName(e.target.value)}
-                  />
-                </FormField>
-                <FormField label="Quién entrega — celular (9 dígitos)" htmlFor="flipy-origin-phone">
-                  <Input
-                    id="flipy-origin-phone"
-                    inputMode="tel"
-                    value={originPhone}
-                    onChange={(e) => setOriginPhone(e.target.value)}
-                    placeholder="9XXXXXXXX"
-                  />
-                </FormField>
-              </div>
-            </div>
+            ) : null}
 
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <h3 className="text-sm font-semibold">Entrega</h3>
-              {deliveryEmbedUrl ? (
-                <FlipyLocationEmbed
-                  embedUrl={deliveryEmbedUrl}
-                  embedOrigin={resolvedEmbedOrigin}
-                  agencySlug={agencySlug}
-                  storeSlug={storeSlug}
-                  purpose="delivery"
-                  prefillAddress={prefillAddress}
-                  prefillCoords={prefillCoords}
-                  mapHeightClassName="h-[min(58vh,520px)]"
-                  onConfirmed={(next) => {
-                    setDestination(next);
-                    setError(null);
-                  }}
-                />
-              ) : (
-                <p className="text-xs text-text-secondary">{pending ? "Cargando mapa de entrega…" : "Mapa de entrega pendiente."}</p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormField label="Quién recibe — nombre" htmlFor="flipy-dest-name">
-                  <Input
-                    id="flipy-dest-name"
-                    value={destContactName}
-                    onChange={(e) => setDestContactName(e.target.value)}
-                  />
-                </FormField>
-                <FormField label="Quién recibe — celular (9 dígitos)" htmlFor="flipy-dest-phone">
-                  <Input
-                    id="flipy-dest-phone"
-                    inputMode="tel"
-                    value={destPhone}
-                    onChange={(e) => setDestPhone(e.target.value)}
-                    placeholder="9XXXXXXXX"
-                  />
-                </FormField>
-              </div>
-              <FormField label="Email (opcional)" htmlFor="flipy-dest-email">
-                <Input
-                  id="flipy-dest-email"
-                  type="email"
-                  value={destEmail}
-                  onChange={(e) => setDestEmail(e.target.value)}
-                />
-              </FormField>
-            </div>
+            <FlipyRouteAddressCard
+              label="Dirección de recogida"
+              emptyHint="Toca para indicar dónde recogemos el paquete"
+              point={pickupPoint}
+              error={pickupCardError}
+              onPress={() => {
+                setPickupCardError(null);
+                setRouteModal("pickup");
+              }}
+            />
+
+            <FlipyRouteAddressCard
+              label="Dirección de entrega"
+              emptyHint="Toca para indicar dónde entregamos el paquete"
+              point={deliveryPoint}
+              error={deliveryCardError}
+              onPress={() => {
+                setDeliveryCardError(null);
+                setRouteModal("delivery");
+              }}
+            />
 
             <div className="space-y-2">
               <p className="text-sm font-semibold">Tamaño del paquete</p>
@@ -851,8 +754,10 @@ export function FlipyCreateShipmentModal({
                     : ""}
                 </p>
               ) : coordsReady ? (
-                <p className="text-xs text-text-secondary">Confirma recojo y entrega para cotizar.</p>
-              ) : null}
+                <p className="text-xs text-text-secondary">Completa recojo y entrega para cotizar.</p>
+              ) : (
+                <p className="text-xs text-text-secondary">Indica recojo y entrega para cotizar el flete.</p>
+              )}
               {fleteValidation.ok && fleteValidation.value != null ? (
                 <p className="text-xs font-medium text-text-primary">
                   {fleteLocked ? "Flete fijo" : "Oferta"}:{" "}
@@ -878,17 +783,14 @@ export function FlipyCreateShipmentModal({
               >
                 {smartEligible ? "Cancelar" : "Atrás"}
               </Button>
-              <Button
-                disabled={pending || !pickupEmbedUrl || !deliveryEmbedUrl || !fleteValidation.ok}
-                onClick={() => goConfirm()}
-              >
+              <Button disabled={pending || !fleteValidation.ok} onClick={() => goConfirm()}>
                 Siguiente: confirmar
               </Button>
             </div>
           </div>
         ) : null}
 
-        {step === "confirm" && destination ? (
+        {step === "confirm" && hasFlipyRouteLocation(deliveryPoint) ? (
           <div className="space-y-3">
             <Alert
               variant={smartEligible ? "info" : "warning"}
@@ -905,29 +807,29 @@ export function FlipyCreateShipmentModal({
               </div>
               <div>
                 <dt className="text-text-secondary">Recojo</dt>
-                <dd>{originAddress}</dd>
+                <dd>{pickupPoint.address}</dd>
                 <dd className="text-xs text-text-secondary">
-                  {originContactName} · {peMobileDigits(originPhone)} ·{" "}
-                  {formatCoordsLabel(originLat, originLng)}
+                  {pickupPoint.contactName} · {peMobileDigits(pickupPoint.contactPhone)} ·{" "}
+                  {formatCoordsLabel(pickupPoint.lat, pickupPoint.lng)}
                 </dd>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
                   <dt className="text-text-secondary">Entrega — dirección</dt>
-                  <dd className="font-medium">{destination.address}</dd>
+                  <dd className="font-medium">{deliveryPoint.address}</dd>
                 </div>
                 <div>
                   <dt className="text-text-secondary">Entrega — pin</dt>
                   <dd className="font-mono text-xs">
-                    {formatCoordsLabel(destination.lat, destination.lng)}
+                    {formatCoordsLabel(deliveryPoint.lat, deliveryPoint.lng)}
                   </dd>
                 </div>
               </div>
               <div>
                 <dt className="text-text-secondary">Quién recibe</dt>
                 <dd>
-                  {destContactName} · {peMobileDigits(destPhone)}
-                  {destEmail ? ` · ${destEmail}` : ""}
+                  {deliveryPoint.contactName} · {peMobileDigits(deliveryPoint.contactPhone)}
+                  {deliveryPoint.contactEmail ? ` · ${deliveryPoint.contactEmail}` : ""}
                 </dd>
               </div>
               <div>
@@ -1093,6 +995,46 @@ export function FlipyCreateShipmentModal({
           </div>
         ) : null}
       </div>
+
+      <FlipyRouteAddressModal
+        open={routeModal === "pickup"}
+        onOpenChange={(next) => setRouteModal(next ? "pickup" : null)}
+        kind="pickup"
+        agencySlug={agencySlug}
+        storeSlug={storeSlug}
+        orderId={orderId}
+        embedOrigin={embedOrigin}
+        value={pickupPoint}
+        storeOrigin={storeOrigin}
+        defaultContactName={storeOrigin?.contactName ?? customerName}
+        defaultContactPhone={storeOrigin?.phone ?? customerPhone}
+        onSave={(point) => {
+          setPickupPoint(point);
+          setPickupCardError(null);
+          setError(null);
+        }}
+      />
+
+      <FlipyRouteAddressModal
+        open={routeModal === "delivery"}
+        onOpenChange={(next) => setRouteModal(next ? "delivery" : null)}
+        kind="delivery"
+        agencySlug={agencySlug}
+        storeSlug={storeSlug}
+        orderId={orderId}
+        embedOrigin={embedOrigin}
+        value={deliveryPoint}
+        mapPrefillAddress={prefillAddress}
+        mapPrefillCoords={prefillCoords}
+        defaultContactName={customerName}
+        defaultContactPhone={customerPhone}
+        defaultContactEmail={customerEmail}
+        onSave={(point) => {
+          setDeliveryPoint(point);
+          setDeliveryCardError(null);
+          setError(null);
+        }}
+      />
     </Dialog>
   );
 }

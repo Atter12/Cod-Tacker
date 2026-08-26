@@ -30,15 +30,15 @@ type Props = {
   prefillCoords?: { lat: number; lng: number } | null;
   mapHeightClassName?: string;
   purpose?: "pickup" | "delivery";
+  /** standalone = confirm in iframe; partner = live pin sync (fullscreen host). */
+  syncMode?: "standalone" | "partner";
+  /** When true, address field below map is read-only (modal UX). */
+  readOnlyAddress?: boolean;
   onConfirmed: (destination: FlipyDestination) => void;
 };
 
 const PIN_SYNC_DEBOUNCE_MS = 450;
 
-/**
- * Host for Flipy `/partner/ubicacion`.
- * Syncs CT fields on pin move (postMessage) + reverse-geocode when the embed text is weak ("Perú").
- */
 export function FlipyLocationEmbed({
   embedUrl,
   embedOrigin,
@@ -48,8 +48,11 @@ export function FlipyLocationEmbed({
   prefillCoords,
   mapHeightClassName = "h-[min(58vh,520px)]",
   purpose = "delivery",
+  syncMode = "standalone",
+  readOnlyAddress = false,
   onConfirmed,
 }: Props) {
+  const liveSync = syncMode === "partner";
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [liveAddress, setLiveAddress] = useState(prefillAddress?.trim() ?? "");
@@ -57,7 +60,11 @@ export function FlipyLocationEmbed({
     prefillCoords ?? null,
   );
   const [resolving, setResolving] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string>("Mueve el pin en el mapa para elegir la ubicación.");
+  const [syncStatus, setSyncStatus] = useState<string>(
+    liveSync
+      ? "Mueve el pin en el mapa para elegir la ubicación."
+      : "Mueve el pin y confirma con el botón verde del mapa.",
+  );
   const [parentOrigin, setParentOrigin] = useState<string | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const onConfirmedRef = useRef(onConfirmed);
@@ -138,6 +145,10 @@ export function FlipyLocationEmbed({
 
   const processLocationUpdate = useCallback(
     (confirmed: { address: string; lat: number; lng: number; provisional?: boolean }) => {
+      if (!liveSync && confirmed.provisional) {
+        return;
+      }
+
       const consistency = evaluateDestinationConsistency({
         address: confirmed.address,
         lat: confirmed.lat,
@@ -146,7 +157,8 @@ export function FlipyLocationEmbed({
         prefillCoords: prefillCoordsRef.current,
       });
       const weak = isWeakLocationAddress(confirmed.address);
-      const needsGeocode = weak || !consistency.ok || confirmed.provisional === true;
+      const needsGeocode =
+        weak || !consistency.ok || (liveSync && confirmed.provisional === true);
 
       setLiveCoords({ lat: confirmed.lat, lng: confirmed.lng });
 
@@ -165,18 +177,18 @@ export function FlipyLocationEmbed({
         lng: confirmed.lng,
       });
     },
-    [emitConfirmed, resolveAddressFromPin],
+    [emitConfirmed, liveSync, resolveAddressFromPin],
   );
 
   const scheduleLocationUpdate = useCallback(
     (confirmed: { address: string; lat: number; lng: number; provisional?: boolean }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      const delay = confirmed.provisional ? PIN_SYNC_DEBOUNCE_MS : 0;
+      const delay = liveSync && confirmed.provisional ? PIN_SYNC_DEBOUNCE_MS : 0;
       debounceRef.current = setTimeout(() => {
         processLocationUpdate(confirmed);
       }, delay);
     },
-    [processLocationUpdate],
+    [liveSync, processLocationUpdate],
   );
 
   useEffect(() => {
@@ -224,8 +236,9 @@ export function FlipyLocationEmbed({
   }, []);
 
   function commitManualAddress() {
+    if (readOnlyAddress) return;
     if (!liveCoords) {
-      setError("Primero mueve el pin en el mapa.");
+      setError("Primero confirma la ubicación en el mapa.");
       return;
     }
     const trimmed = liveAddress.trim();
@@ -241,7 +254,7 @@ export function FlipyLocationEmbed({
     });
   }
 
-  const mapSrc = withFlipyLocationClientParams(embedUrl, parentOrigin);
+  const mapSrc = withFlipyLocationClientParams(embedUrl, parentOrigin, { liveSync });
   const addressLabel =
     purpose === "pickup" ? "Dirección de recojo" : "Dirección de entrega";
 
@@ -270,12 +283,18 @@ export function FlipyLocationEmbed({
         <Input
           id={`flipy-live-address-${purpose}`}
           value={liveAddress}
+          readOnly={readOnlyAddress}
           onChange={(e) => setLiveAddress(e.target.value)}
           onBlur={() => {
-            if (liveAddress.trim() && liveCoords) commitManualAddress();
+            if (!readOnlyAddress && liveAddress.trim() && liveCoords) commitManualAddress();
           }}
-          placeholder="Se completa al mover el pin en el mapa"
-          disabled={resolving}
+          placeholder={
+            readOnlyAddress
+              ? "Se completa al confirmar en el mapa"
+              : "Se completa al confirmar en el mapa o edítala aquí"
+          }
+          disabled={resolving || (readOnlyAddress && !liveAddress)}
+          className={readOnlyAddress ? "bg-muted/40" : undefined}
         />
       </FormField>
       {liveCoords ? (

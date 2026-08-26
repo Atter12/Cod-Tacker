@@ -116,9 +116,19 @@ describe("flipy embed-urls", () => {
     const url = withFlipyLocationClientParams(
       `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
       "https://app.codtracked.com",
+      { liveSync: true },
     );
     assert.match(url, /liveLocationSync=1/);
     assert.match(url, /parentOrigin=https%3A%2F%2Fapp\.codtracked\.com/);
+  });
+
+  it("uses standalone embed mode by default (modal UX)", () => {
+    const url = withFlipyLocationClientParams(
+      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
+      "https://app.codtracked.com",
+    );
+    assert.match(url, /embedMode=standalone/);
+    assert.doesNotMatch(url, /liveLocationSync=1/);
   });
 });
 
