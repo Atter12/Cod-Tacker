@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyLocationEmbed } from "@/components/flipy/FlipyLocationEmbed";
 import type { FlipyStoreOriginDefaults } from "@/lib/integrations/flipy/route-address";
@@ -14,6 +14,7 @@ import {
   peMobileDigits,
   validateFlipyRoutePoint,
 } from "@/lib/integrations/flipy/route-address";
+import { cn } from "@/lib/utils/cn";
 
 export type FlipyMapEmbedPrefetch = {
   embedUrl: string;
@@ -93,11 +94,11 @@ export function FlipyRouteAddressModal({
   onSave,
   onLiveCoordsChange,
 }: Props) {
-  const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<FlipyRoutePoint>(value);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [mapNonce, setMapNonce] = useState(0);
+  const [tokenLoading, setTokenLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadedPrefillKeyRef = useRef<string | null>(null);
@@ -112,6 +113,7 @@ export function FlipyRouteAddressModal({
     storeOrigin,
   });
   const mapPrefillKey = buildMapPrefillKey(mapPrefill);
+  const hasWarmPrefetch = prefetchedEmbed?.prefillKey === mapPrefillKey;
 
   useEffect(() => {
     if (!open) return;
@@ -120,30 +122,30 @@ export function FlipyRouteAddressModal({
     setLoadError(null);
   }, [open, value]);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const hasWarmPrefetch = prefetchedEmbed?.prefillKey === mapPrefillKey;
-    const alreadyLoadedForKey =
-      Boolean(embedUrl) && loadedPrefillKeyRef.current === mapPrefillKey;
-
-    // Prefer warm token — skip blank state and avoid remounting the iframe.
-    if (hasWarmPrefetch) {
-      const nextUrl = prefetchedEmbed.embedUrl;
-      const urlChanged = embedUrl !== nextUrl;
-      if (!alreadyLoadedForKey || urlChanged) {
-        setEmbedUrl(nextUrl);
-        setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
-        if (urlChanged) setMapNonce((n) => n + 1);
-        loadedPrefillKeyRef.current = mapPrefillKey;
-      }
-      setLoadError(null);
+  useLayoutEffect(() => {
+    if (!hasWarmPrefetch || !prefetchedEmbed) return;
+    if (
+      loadedPrefillKeyRef.current === mapPrefillKey &&
+      embedUrl === prefetchedEmbed.embedUrl
+    ) {
       return;
     }
+    setEmbedUrl(prefetchedEmbed.embedUrl);
+    setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
+    loadedPrefillKeyRef.current = mapPrefillKey;
+    setLoadError(null);
+  }, [hasWarmPrefetch, prefetchedEmbed, mapPrefillKey, embedUrl]);
 
-    if (alreadyLoadedForKey) return;
+  useEffect(() => {
+    if (!open) return;
+    if (embedUrl && loadedPrefillKeyRef.current === mapPrefillKey) return;
+    if (hasWarmPrefetch) return;
 
-    startTransition(async () => {
+    let cancelled = false;
+    setTokenLoading(true);
+    setLoadError(null);
+
+    void (async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
         agencySlug,
         storeSlug,
@@ -153,32 +155,32 @@ export function FlipyRouteAddressModal({
         prefillLng: mapPrefill.lng ?? undefined,
       });
       if (cancelled) return;
+      setTokenLoading(false);
       if (tokenResult.error || !tokenResult.embedUrl) {
         setLoadError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
         return;
       }
       setEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
-      setLoadError(null);
       loadedPrefillKeyRef.current = mapPrefillKey;
       setMapNonce((n) => n + 1);
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
   }, [
     open,
+    hasWarmPrefetch,
+    embedUrl,
+    mapPrefillKey,
     agencySlug,
     storeSlug,
     orderId,
     embedOrigin,
-    mapPrefillKey,
-    prefetchedEmbed,
     mapPrefill.address,
     mapPrefill.lat,
     mapPrefill.lng,
-    embedUrl,
   ]);
 
   function reloadMap(input: {
@@ -187,7 +189,8 @@ export function FlipyRouteAddressModal({
     lng: number;
   }) {
     setLoadError(null);
-    startTransition(async () => {
+    setTokenLoading(true);
+    void (async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
         agencySlug,
         storeSlug,
@@ -196,6 +199,7 @@ export function FlipyRouteAddressModal({
         prefillLat: input.lat,
         prefillLng: input.lng,
       });
+      setTokenLoading(false);
       if (tokenResult.error || !tokenResult.embedUrl) {
         setLoadError(tokenResult.error ?? "No se pudo recargar el mapa.");
         return;
@@ -204,7 +208,7 @@ export function FlipyRouteAddressModal({
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       loadedPrefillKeyRef.current = buildMapPrefillKey(input);
       setMapNonce((n) => n + 1);
-    });
+    })();
   }
 
   function applyStoreAddress() {
@@ -255,37 +259,101 @@ export function FlipyRouteAddressModal({
     onOpenChange(false);
   }
 
-  if (!open) return null;
+  const shouldMount = open || Boolean(embedUrl);
+  if (!shouldMount) return null;
+
+  const mapPanel = embedUrl ? (
+    <FlipyLocationEmbed
+      key={`${kind}-map-${mapNonce}`}
+      embedUrl={embedUrl}
+      embedOrigin={resolvedEmbedOrigin}
+      agencySlug={agencySlug}
+      storeSlug={storeSlug}
+      purpose={kind === "pickup" ? "pickup" : "delivery"}
+      syncMode="partner"
+      readOnlyAddress
+      prefillAddress={
+        hasFlipyRouteLocation(draft) ? draft.address : mapPrefill.address
+      }
+      prefillCoords={
+        hasFlipyRouteLocation(draft)
+          ? { lat: draft.lat, lng: draft.lng }
+          : mapPrefill.lat != null && mapPrefill.lng != null
+            ? { lat: mapPrefill.lat, lng: mapPrefill.lng }
+            : null
+      }
+      mapHeightClassName="h-[min(42vh,420px)] sm:h-[min(45vh,460px)]"
+      onConfirmed={(next) => {
+        setDraft((prev) => ({
+          ...prev,
+          address: next.address,
+          lat: next.lat,
+          lng: next.lng,
+          pinConfirmed: true,
+        }));
+        setError(null);
+        onLiveCoordsChange?.({ lat: next.lat, lng: next.lng });
+      }}
+    />
+  ) : (
+    <div
+      className="flex h-[min(42vh,420px)] items-center justify-center rounded-lg border border-border bg-muted/30 sm:h-[min(45vh,460px)]"
+      aria-busy={tokenLoading}
+    >
+      <p className="text-xs text-text-secondary">
+        {tokenLoading ? "Obteniendo acceso al mapa…" : "Preparando mapa Flipy…"}
+      </p>
+    </div>
+  );
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center p-3 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
+      className={cn(
+        open
+          ? "fixed inset-0 z-[60] grid place-items-center p-3 sm:p-4"
+          : "pointer-events-none fixed -left-[9999px] top-0 h-[min(45vh,460px)] w-[640px] overflow-hidden opacity-0",
+      )}
+      role={open ? "dialog" : undefined}
+      aria-modal={open ? true : undefined}
+      aria-hidden={open ? undefined : true}
+      aria-label={open ? title : undefined}
     >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/50"
-        aria-label="Cerrar"
-        onClick={() => onOpenChange(false)}
-      />
-      <section className="relative z-10 flex max-h-[min(92vh,880px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-surface-elevated shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button type="button" aria-label="Cerrar" onClick={() => onOpenChange(false)}>
-            <X className="size-5" />
-          </button>
-        </div>
+      {open ? (
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/50"
+          aria-label="Cerrar"
+          onClick={() => onOpenChange(false)}
+        />
+      ) : null}
+      <section
+        className={cn(
+          "relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-surface-elevated shadow-2xl",
+          open ? "max-h-[min(92vh,880px)]" : "h-full",
+        )}
+      >
+        {open ? (
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <button type="button" aria-label="Cerrar" onClick={() => onOpenChange(false)}>
+              <X className="size-5" />
+            </button>
+          </div>
+        ) : null}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-          {isPickup ? (
+        <div
+          className={cn(
+            "min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4",
+            !open && "h-full p-0",
+          )}
+        >
+          {open && isPickup ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 type="button"
-                disabled={!storeOrigin || pending}
+                disabled={!storeOrigin || tokenLoading}
                 onClick={applyStoreAddress}
               >
                 Usar dirección de mi tienda
@@ -294,7 +362,7 @@ export function FlipyRouteAddressModal({
                 size="sm"
                 variant="outline"
                 type="button"
-                disabled={!storeOrigin || pending}
+                disabled={!storeOrigin || tokenLoading}
                 onClick={applyStoreContact}
               >
                 Usar datos de mi tienda
@@ -302,121 +370,83 @@ export function FlipyRouteAddressModal({
             </div>
           ) : null}
 
-          {loadError ? (
+          {open && loadError ? (
             <Alert variant="danger" title="Mapa">
               {loadError}
             </Alert>
           ) : null}
 
-          {embedUrl ? (
-            <FlipyLocationEmbed
-              key={`${kind}-map-${mapNonce}`}
-              embedUrl={embedUrl}
-              embedOrigin={resolvedEmbedOrigin}
-              agencySlug={agencySlug}
-              storeSlug={storeSlug}
-              purpose={kind === "pickup" ? "pickup" : "delivery"}
-              syncMode="partner"
-              readOnlyAddress
-              prefillAddress={
-                hasFlipyRouteLocation(draft)
-                  ? draft.address
-                  : mapPrefill.address
-              }
-              prefillCoords={
-                hasFlipyRouteLocation(draft)
-                  ? { lat: draft.lat, lng: draft.lng }
-                  : mapPrefill.lat != null && mapPrefill.lng != null
-                    ? { lat: mapPrefill.lat, lng: mapPrefill.lng }
-                    : null
-              }
-              mapHeightClassName="h-[min(42vh,420px)] sm:h-[min(45vh,460px)]"
-              onConfirmed={(next) => {
-                setDraft((prev) => ({
-                  ...prev,
-                  address: next.address,
-                  lat: next.lat,
-                  lng: next.lng,
-                  pinConfirmed: true,
-                }));
-                setError(null);
-                onLiveCoordsChange?.({ lat: next.lat, lng: next.lng });
-              }}
-            />
-          ) : (
-            <div
-              className="flex h-[min(42vh,420px)] items-center justify-center rounded-lg border border-border bg-muted/30 sm:h-[min(45vh,460px)]"
-              aria-busy={pending}
-            >
-              <p className="text-xs text-text-secondary">
-                {pending ? "Cargando mapa…" : "Preparando mapa Flipy…"}
-              </p>
-            </div>
-          )}
+          {mapPanel}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormField
-              label={isPickup ? "Quién entrega — nombre" : "Quién recibe — nombre"}
-              htmlFor={`flipy-route-name-${kind}`}
-            >
-              <Input
-                id={`flipy-route-name-${kind}`}
-                value={draft.contactName}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, contactName: e.target.value }))
-                }
-                placeholder={defaultContactName ?? undefined}
-              />
-            </FormField>
-            <FormField
-              label={
-                isPickup
-                  ? "Quién entrega — celular (9 dígitos)"
-                  : "Quién recibe — celular (9 dígitos)"
-              }
-              htmlFor={`flipy-route-phone-${kind}`}
-            >
-              <Input
-                id={`flipy-route-phone-${kind}`}
-                inputMode="tel"
-                value={draft.contactPhone}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, contactPhone: e.target.value }))
-                }
-                placeholder={defaultContactPhone ?? "9XXXXXXXX"}
-              />
-            </FormField>
+          {open ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  label={isPickup ? "Quién entrega — nombre" : "Quién recibe — nombre"}
+                  htmlFor={`flipy-route-name-${kind}`}
+                >
+                  <Input
+                    id={`flipy-route-name-${kind}`}
+                    value={draft.contactName}
+                    onChange={(e) =>
+                      setDraft((prev) => ({ ...prev, contactName: e.target.value }))
+                    }
+                    placeholder={defaultContactName ?? undefined}
+                  />
+                </FormField>
+                <FormField
+                  label={
+                    isPickup
+                      ? "Quién entrega — celular (9 dígitos)"
+                      : "Quién recibe — celular (9 dígitos)"
+                  }
+                  htmlFor={`flipy-route-phone-${kind}`}
+                >
+                  <Input
+                    id={`flipy-route-phone-${kind}`}
+                    inputMode="tel"
+                    value={draft.contactPhone}
+                    onChange={(e) =>
+                      setDraft((prev) => ({ ...prev, contactPhone: e.target.value }))
+                    }
+                    placeholder={defaultContactPhone ?? "9XXXXXXXX"}
+                  />
+                </FormField>
+              </div>
+
+              {!isPickup ? (
+                <FormField label="Email (opcional, PIN)" htmlFor={`flipy-route-email-${kind}`}>
+                  <Input
+                    id={`flipy-route-email-${kind}`}
+                    type="email"
+                    value={draft.contactEmail ?? ""}
+                    onChange={(e) =>
+                      setDraft((prev) => ({ ...prev, contactEmail: e.target.value }))
+                    }
+                    placeholder={defaultContactEmail ?? undefined}
+                  />
+                </FormField>
+              ) : null}
+
+              {error ? (
+                <Alert variant="danger" title="Revisa los datos">
+                  {error}
+                </Alert>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        {open ? (
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={tokenLoading} onClick={handleSave}>
+              Guardar
+            </Button>
           </div>
-
-          {!isPickup ? (
-            <FormField label="Email (opcional, PIN)" htmlFor={`flipy-route-email-${kind}`}>
-              <Input
-                id={`flipy-route-email-${kind}`}
-                type="email"
-                value={draft.contactEmail ?? ""}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, contactEmail: e.target.value }))
-                }
-                placeholder={defaultContactEmail ?? undefined}
-              />
-            </FormField>
-          ) : null}
-
-          {error ? (
-            <Alert variant="danger" title="Revisa los datos">
-              {error}
-            </Alert>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
-          <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button type="button" disabled={pending} onClick={handleSave}>
-            Guardar
-          </Button>
-        </div>
+        ) : null}
       </section>
     </div>
   );
