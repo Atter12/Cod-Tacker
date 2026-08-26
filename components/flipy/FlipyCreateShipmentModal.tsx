@@ -7,18 +7,24 @@ import {
 } from "@/app/actions/flipy-shipments";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
-import { FlipyFleteOfferCard } from "@/components/flipy/FlipyFleteOfferCard";
-import { FlipyRouteAddressCard } from "@/components/flipy/FlipyRouteAddressCard";
-import { FlipyRouteAddressModal, buildMapPrefillKey, resolveMapPrefill, type FlipyMapEmbedPrefetch } from "@/components/flipy/FlipyRouteAddressModal";
+import { FlipyConfirmStepPanel } from "@/components/flipy/FlipyConfirmStepPanel";
+import { FlipyPaymentStepPanel } from "@/components/flipy/FlipyPaymentStepPanel";
+import { FlipyRutaStepPanel } from "@/components/flipy/FlipyRutaStepPanel";
+import { FlipyWizardFooter } from "@/components/flipy/FlipyWizardFooter";
+import { mapFlipyWizardStep } from "@/components/flipy/FlipyWizardStepper";
+import {
+  FlipyRouteAddressModal,
+  buildMapPrefillKey,
+  resolveMapPrefill,
+  type FlipyMapEmbedPrefetch,
+} from "@/components/flipy/FlipyRouteAddressModal";
 import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { FormField, Input } from "@/components/ui";
 import { formatCurrency } from "@/lib/formatting/currency";
 import {
   evaluateDestinationConsistency,
-  formatCoordsLabel,
 } from "@/lib/integrations/flipy/destination-consistency";
 import { FLIPY_ERROR_CODES } from "@/lib/integrations/flipy/errors";
 import { buildFlipyOperationDeepLink } from "@/lib/integrations/flipy/embed-urls";
@@ -32,21 +38,11 @@ import {
   deriveCodAmountFromD3,
   flipyEscenarioOptionsForUi,
   initialFlipyEscenarioForUi,
-  labelFlipyEscenario,
   shouldSkipFlipyCodPaymentStep,
-  shouldSuggestFlipyEscenario1DForYape,
   FLIPY_YAPE_COD_TOPE,
 } from "@/lib/integrations/flipy/labels";
-import {
-  FLIPY_PACKAGE_CARE_IDS,
-  FLIPY_PACKAGE_CARE_LABELS,
-  type FlipyPackageCareId,
-} from "@/lib/integrations/flipy/map-package-care";
-import {
-  FLIPY_PACKAGE_SIZE_HINTS,
-  FLIPY_PACKAGE_SIZE_LABELS,
-  type FlipyPackageSize,
-} from "@/lib/integrations/flipy/map-package-size";
+import type { FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
+import type { FlipyPackageSize } from "@/lib/integrations/flipy/map-package-size";
 import type { FlipyFleteQuote, FlipyTypeMode } from "@/lib/integrations/flipy/partner-contract";
 import { fetchFlipyCotizar } from "@/lib/integrations/flipy/fetch-cotizar-client";
 import {
@@ -157,6 +153,41 @@ function isSmartFallback(result: CreateResult, smartEligible: boolean): boolean 
   );
 }
 
+function wizardHeadline(step: Step): string {
+  switch (step) {
+    case "payment":
+      return "Modalidad de pago en destino";
+    case "ruta":
+      return "Ruta y detalles del paquete";
+    case "confirm":
+      return "Revisa y confirma el envío";
+    case "recarga":
+      return "Recargar billetera Flipy";
+    case "success":
+      return "Envío creado en Flipy";
+  }
+}
+
+function formatOrderLabel(orderNumber: string): string {
+  const trimmed = orderNumber.trim();
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
+function escenarioBadgeLabel(escenario: FlipyEscenarioPago): string {
+  switch (escenario) {
+    case "1C":
+      return "Yape";
+    case "1E":
+      return "Efectivo";
+    case "1D":
+      return "Digital";
+    case "1A":
+      return "Prepago";
+    default:
+      return escenario;
+  }
+}
+
 function isSmartSuccess(result: CreateResult, smartEligible: boolean): boolean {
   if (!smartEligible || isSmartFallback(result, smartEligible)) return false;
   return (
@@ -259,6 +290,7 @@ export function FlipyCreateShipmentModal({
     ),
   );
   const [notes, setNotes] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [result, setResult] = useState<CreateResult | null>(null);
 
@@ -267,6 +299,28 @@ export function FlipyCreateShipmentModal({
     () => validateFlipyFletePrice(escenario, fletePrice, { ...fleteContext, fleteQuote }),
     [escenario, fletePrice, fleteContext, fleteQuote],
   );
+
+  const destinoCobroSummary = useMemo(() => {
+    const parts: number[] = [];
+    if (codAmountForEscenario != null && codAmountForEscenario > 0) {
+      parts.push(codAmountForEscenario);
+    }
+    if (
+      !paymentResolution.shippingPaidAtCheckout &&
+      fleteValidation.value != null &&
+      fleteValidation.value > 0
+    ) {
+      parts.push(fleteValidation.value);
+    }
+    if (parts.length === 0) return "Nada";
+    const total = parts.reduce((sum, value) => sum + value, 0);
+    return formatCurrency(total, currencyCode);
+  }, [
+    codAmountForEscenario,
+    paymentResolution.shippingPaidAtCheckout,
+    fleteValidation.value,
+    currencyCode,
+  ]);
 
   const destinationConsistency = useMemo(() => {
     if (!hasFlipyRouteLocation(deliveryPoint)) return null;
@@ -589,6 +643,7 @@ export function FlipyCreateShipmentModal({
     setResolvedEmbedOrigin(embedOrigin);
     setResult(null);
     setNotes("");
+    setTermsAccepted(false);
     setPackageSize(defaultPackageSize);
     setPackageCare(defaultPackageCare);
     setPackageCareNote("");
@@ -744,17 +799,6 @@ export function FlipyCreateShipmentModal({
     });
   }
 
-  const title =
-    step === "payment"
-      ? "Crear envío Flipy — Modalidad"
-      : step === "ruta"
-        ? "Crear envío Flipy — Paso 1 Ruta"
-        : step === "confirm"
-          ? "Crear envío Flipy — Confirmar"
-          : step === "recarga"
-            ? "Recargar billetera Flipy"
-            : "Envío creado en Flipy";
-
   const showRecargaCta =
     errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
     (error?.toLowerCase().includes("saldo") ?? false);
@@ -765,21 +809,117 @@ export function FlipyCreateShipmentModal({
         appWebUrl: result.appWebUrl,
       })
     : null;
-
-  const escenarioLabel = labelFlipyEscenario(escenario);
   const smartSuccess = result ? isSmartSuccess(result, smartEligible) : false;
   const smartFallback = result ? isSmartFallback(result, smartEligible) : false;
   const showBidsEmbed = result ? !smartSuccess : false;
 
+  const showModalidadStep = !shouldSkipFlipyCodPaymentStep(paymentResolution);
+  const wizardStep = mapFlipyWizardStep(step);
+  const wizardEyebrow = step !== "success" && step !== "recarga" ? "CREAR ENVÍO · FLIPY" : undefined;
+  const orderLabel = formatOrderLabel(orderNumber);
+
+  const wizardFooter =
+    wizardStep && step === "payment"
+      ? (
+          <FlipyWizardFooter
+            activeStep="modalidad"
+            showModalidad={showModalidadStep}
+            onCancel={() => closeModal(false)}
+            primaryLabel="Siguiente: ruta"
+            onPrimary={() => goToRutaStep()}
+            primaryDisabled={pending}
+          />
+        )
+      : wizardStep && step === "ruta"
+        ? (
+            <FlipyWizardFooter
+              activeStep="ruta"
+              showModalidad={showModalidadStep}
+              hideStepper
+              onCancel={() => closeModal(false)}
+              showCancel={false}
+              backLinkLabel={smartEligible ? undefined : "Volver a modalidad"}
+              onBackLink={smartEligible ? undefined : () => setStep("payment")}
+              primaryLabel="Siguiente: confirmación"
+              onPrimary={() => goConfirm()}
+              primaryDisabled={pending || !fleteValidation.ok}
+            />
+          )
+        : wizardStep && step === "confirm"
+          ? (
+              <FlipyWizardFooter
+                activeStep="confirmacion"
+                showModalidad={showModalidadStep}
+                variant="confirm"
+                onCancel={() => closeModal(false)}
+                showCancel={false}
+                onBackLink={() => setStep("ruta")}
+                primaryLabel={pending ? "Creando…" : "Crear envío en Flipy"}
+                onPrimary={() => submitCreate()}
+                primaryDisabled={
+                  pending ||
+                  !termsAccepted ||
+                  !fleteValidation.ok ||
+                  Boolean(destinationConsistency && !destinationConsistency.ok)
+                }
+                primaryPending={pending}
+              />
+            )
+          : null;
+
   return (
-    <Dialog open={open} onOpenChange={closeModal} title={title} className="max-w-3xl">
+    <Dialog
+      open={open}
+      onOpenChange={closeModal}
+      eyebrow={wizardEyebrow}
+      title={wizardHeadline(step)}
+      headerMeta={
+        step !== "success" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-text-secondary">
+              Pedido{" "}
+              <span className="font-semibold text-text-primary">{orderLabel}</span>
+            </span>
+            {step === "ruta" || step === "confirm" ? (
+              <span className="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                {escenario} {escenarioBadgeLabel(escenario)}
+              </span>
+            ) : null}
+          </div>
+        ) : undefined
+      }
+      footer={wizardFooter}
+      className="max-w-3xl"
+    >
       <div className="space-y-4 text-sm">
-        <p className="text-text-secondary">
-          Pedido <span className="font-medium text-text-primary">{orderNumber}</span>
-          {step !== "payment" && step !== "success" && step !== "recarga" ? (
-            <span className="ml-2 text-xs">· {escenarioLabel}</span>
-          ) : null}
-        </p>
+        {step === "confirm" && hasFlipyRouteLocation(deliveryPoint) ? (
+          <FlipyConfirmStepPanel
+            showModalidadStep={showModalidadStep}
+            smartEligible={smartEligible}
+            escenario={escenario}
+            pickupPoint={pickupPoint}
+            deliveryPoint={deliveryPoint}
+            fleteQuote={fleteQuote}
+            packageSize={packageSize}
+            packageCare={packageCare}
+            packageCareNote={packageCareNote}
+            driverNotes={notes}
+            fleteAmount={fleteValidation.value}
+            fleteLocked={fleteLocked}
+            codProductAmount={codAmountForEscenario}
+            productPaidAtCheckout={paymentResolution.productPaidAtCheckout}
+            shippingPaidAtCheckout={paymentResolution.shippingPaidAtCheckout}
+            currencyCode={currencyCode}
+            termsAccepted={termsAccepted}
+            onTermsAcceptedChange={setTermsAccepted}
+            termsUrl={`${appOrigin.replace(/\/$/, "")}/terminos`}
+            onEditRuta={() => setStep("ruta")}
+            onEditModalidad={() => setStep(showModalidadStep ? "payment" : "ruta")}
+            destinationInconsistent={Boolean(
+              destinationConsistency && !destinationConsistency.ok,
+            )}
+          />
+        ) : null}
 
         {error ? (
           <Alert variant="danger" title="Error">
@@ -795,328 +935,71 @@ export function FlipyCreateShipmentModal({
         ) : null}
 
         {step === "payment" ? (
-          <div className="space-y-3">
-            <Alert variant="info" title="Modalidad de pago">
-              {shopifyPaymentSummary.alertBody}
-            </Alert>
-            <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Montos según Shopify
-              </p>
-              <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                <div>
-                  <dt className="text-text-secondary">Producto</dt>
-                  <dd className="font-medium">{shopifyPaymentSummary.productLabel}</dd>
-                </div>
-                <div>
-                  <dt className="text-text-secondary">Envío en checkout</dt>
-                  <dd className="font-medium">{shopifyPaymentSummary.shippingLabel}</dd>
-                </div>
-                {shopifyPaymentSummary.codProductLabel ? (
-                  <div className="sm:col-span-2">
-                    <dt className="text-text-secondary">COD producto (codAmount → Flipy)</dt>
-                    <dd className="font-medium">{shopifyPaymentSummary.codProductLabel}</dd>
-                  </div>
-                ) : null}
-                <div className="sm:col-span-2">
-                  <dt className="text-text-secondary">Cobro en destino (D3)</dt>
-                  <dd className="font-medium">{shopifyPaymentSummary.destinoCobroLabel}</dd>
-                </div>
-              </dl>
-            </div>
-            {paymentResolution.suggestedEscenario === "1C" ||
-            paymentResolution.suggestedEscenario === "1E" ||
-            paymentResolution.suggestedEscenario === "1D" ? (
-              <p className="text-xs text-text-secondary">
-                Sugerido según Shopify:{" "}
-                <span className="font-medium text-text-primary">
-                  {paymentResolution.suggestedEscenario}
-                </span>
-              </p>
-            ) : null}
-            <fieldset className="space-y-2">
-              {escenarioOptions.map((opt) => (
-                <label
-                  key={opt.value}
-                  className="flex cursor-pointer gap-3 rounded-lg border border-border p-3 hover:bg-muted/40"
-                >
-                  <input
-                    type="radio"
-                    name="flipy-escenario"
-                    value={opt.value}
-                    checked={escenario === opt.value}
-                    onChange={() => {
-                      setEscenario(opt.value);
-                      setFletePrice(
-                        initialFleteInputValue(opt.value, paymentResolution.suggestedFlete, {
-                          smartEligible,
-                          fleteQuote,
-                        }),
-                      );
-                    }}
-                    className="mt-1"
-                  />
-                  <span>
-                    <span className="font-medium">{opt.label}</span>
-                    <span className="mt-0.5 block text-xs text-text-secondary">{opt.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            {shouldSuggestFlipyEscenario1DForYape(escenario, codAmountForEscenario) ? (
-              <Alert variant="warning" title="Tope Yape">
-                El COD producto supera S/ {FLIPY_YAPE_COD_TOPE}. Flipy puede rechazar 1C — considera 1D (cobro digital
-                en rastreo).
-              </Alert>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => closeModal(false)}>
-                Cancelar
-              </Button>
-              <Button disabled={pending} onClick={() => goToRutaStep()}>
-                Siguiente: ruta
-              </Button>
-            </div>
-          </div>
+          <FlipyPaymentStepPanel
+            summary={shopifyPaymentSummary}
+            escenarioOptions={escenarioOptions}
+            escenario={escenario}
+            suggestedEscenario={paymentResolution.suggestedEscenario}
+            codAmountForEscenario={codAmountForEscenario}
+            yapeTop={FLIPY_YAPE_COD_TOPE}
+            onSelectEscenario={(value) => {
+              setEscenario(value);
+              setFletePrice(
+                initialFleteInputValue(value, paymentResolution.suggestedFlete, {
+                  smartEligible,
+                  fleteQuote,
+                }),
+              );
+            }}
+          />
         ) : null}
 
         {step === "ruta" ? (
-          <div className="space-y-4">
-            <p className="text-sm text-text-secondary">
-              Recojo, entrega, flete y tamaño del paquete — como en la app Flipy. Toca cada tarjeta
-              para abrir el mapa y contacto.
-            </p>
-
-            {smartEligible ? (
-              <Alert variant="info" title="Asignación automática (1A)">
-                Flete prepagado en Shopify — modalidad 1A aplicada. El flete se fija con la cotización
-                Flipy.
-              </Alert>
-            ) : null}
-
-            {storeOrigin ? (
-              <div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  onClick={applyStoreOriginToPickupCard}
-                >
-                  Usar dirección de mi tienda (recojo)
-                </Button>
-              </div>
-            ) : null}
-
-            <FlipyRouteAddressCard
-              label="Dirección de recogida"
-              emptyHint="Toca para indicar dónde recogemos el paquete"
-              point={pickupPoint}
-              error={pickupCardError}
-              onPress={() => {
-                setPickupCardError(null);
-                setRouteModal("pickup");
-              }}
-            />
-
-            <FlipyRouteAddressCard
-              label="Dirección de entrega"
-              emptyHint="Toca para indicar dónde entregamos el paquete"
-              point={deliveryPoint}
-              error={deliveryCardError}
-              onPress={() => {
-                setDeliveryCardError(null);
-                setRouteModal("delivery");
-              }}
-            />
-
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Tamaño del paquete</p>
-              <div className="grid grid-cols-3 gap-2">
-                {PACKAGE_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => setPackageSize(size)}
-                    className={`rounded-lg border p-3 text-left transition-colors ${
-                      packageSize === size
-                        ? "border-brand-primary bg-brand-primary/5"
-                        : "border-border hover:bg-muted/40"
-                    }`}
-                  >
-                    <span className="block text-sm font-medium">{FLIPY_PACKAGE_SIZE_LABELS[size]}</span>
-                    <span className="mt-0.5 block text-xs text-text-secondary">
-                      {FLIPY_PACKAGE_SIZE_HINTS[size]}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Cuidado del paquete</p>
-              <div className="flex flex-wrap gap-2">
-                {FLIPY_PACKAGE_CARE_IDS.map((id) => {
-                  const active = packageCare.includes(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => togglePackageCare(id)}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                        active
-                          ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-                          : "border-border hover:bg-muted/40"
-                      }`}
-                    >
-                      {FLIPY_PACKAGE_CARE_LABELS[id]}
-                    </button>
-                  );
-                })}
-              </div>
-              <FormField label="Nota de cuidado (opcional)" htmlFor="flipy-care-note">
-                <Input
-                  id="flipy-care-note"
-                  value={packageCareNote}
-                  onChange={(e) => setPackageCareNote(e.target.value.slice(0, 120))}
-                  placeholder="Instrucciones adicionales para el motorizado"
-                />
-              </FormField>
-            </div>
-
-            <FlipyFleteOfferCard
-              value={fletePrice}
-              onChange={setFletePrice}
-              locked={fleteLocked}
-              quoting={quoting}
-              quoteError={quoteError}
-              fleteQuote={fleteQuote}
-              coordsReady={coordsReady}
-              validationError={
-                quoting || !coordsReady
+          <FlipyRutaStepPanel
+            showModalidadStep={showModalidadStep}
+            smartEligible={smartEligible}
+            storeOriginAvailable={Boolean(storeOrigin)}
+            onApplyStoreOrigin={applyStoreOriginToPickupCard}
+            pickupPoint={pickupPoint}
+            deliveryPoint={deliveryPoint}
+            pickupCardError={pickupCardError}
+            deliveryCardError={deliveryCardError}
+            onOpenPickup={() => {
+              setPickupCardError(null);
+              setRouteModal("pickup");
+            }}
+            onOpenDelivery={() => {
+              setDeliveryCardError(null);
+              setRouteModal("delivery");
+            }}
+            fleteQuote={fleteQuote}
+            quoting={quoting}
+            packageSizes={PACKAGE_SIZES}
+            packageSize={packageSize}
+            onPackageSizeChange={setPackageSize}
+            packageCare={packageCare}
+            onTogglePackageCare={togglePackageCare}
+            packageCareNote={packageCareNote}
+            onPackageCareNoteChange={setPackageCareNote}
+            fletePrice={fletePrice}
+            onFletePriceChange={setFletePrice}
+            fleteLocked={fleteLocked}
+            quoteError={quoteError}
+            coordsReady={coordsReady}
+            fleteValidationError={
+              quoting || !coordsReady
+                ? null
+                : fleteValidation.ok
                   ? null
-                  : fleteValidation.ok
-                    ? null
-                    : fleteValidation.error
-              }
-            />
-
-            <FormField label="Notas para el motorizado (opcional)" htmlFor="flipy-notes">
-              <Input
-                id="flipy-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Timbre, referencia, horario…"
-              />
-            </FormField>
-
-            <div className="flex justify-between gap-2">
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() => (smartEligible ? closeModal(false) : setStep("payment"))}
-              >
-                {smartEligible ? "Cancelar" : "Atrás"}
-              </Button>
-              <Button disabled={pending || !fleteValidation.ok} onClick={() => goConfirm()}>
-                Siguiente: confirmar
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {step === "confirm" && hasFlipyRouteLocation(deliveryPoint) ? (
-          <div className="space-y-3">
-            <Alert
-              variant={smartEligible ? "info" : "warning"}
-              title={smartEligible ? "Asignación automática" : "Motorizados pujarán"}
-            >
-              {smartEligible
-                ? "Flipy asignará el motorizado más cercano con flete fijo según cotización."
-                : "Los motorizados competirán por tu oferta de flete."}
-            </Alert>
-            <dl className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <div>
-                <dt className="text-text-secondary">Escenario</dt>
-                <dd className="font-medium">{escenarioLabel}</dd>
-              </div>
-              {codAmountForEscenario != null ? (
-                <div>
-                  <dt className="text-text-secondary">COD producto (Flipy)</dt>
-                  <dd className="font-medium">
-                    {formatCurrency(codAmountForEscenario, currencyCode)}
-                  </dd>
-                </div>
-              ) : null}
-              <div>
-                <dt className="text-text-secondary">Recojo</dt>
-                <dd>{pickupPoint.address}</dd>
-                <dd className="text-xs text-text-secondary">
-                  {pickupPoint.contactName} · {peMobileDigits(pickupPoint.contactPhone)} ·{" "}
-                  {formatCoordsLabel(pickupPoint.lat, pickupPoint.lng)}
-                </dd>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div>
-                  <dt className="text-text-secondary">Entrega — dirección</dt>
-                  <dd className="font-medium">{deliveryPoint.address}</dd>
-                </div>
-                <div>
-                  <dt className="text-text-secondary">Entrega — pin</dt>
-                  <dd className="font-mono text-xs">
-                    {formatCoordsLabel(deliveryPoint.lat, deliveryPoint.lng)}
-                  </dd>
-                </div>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Quién recibe</dt>
-                <dd>
-                  {deliveryPoint.contactName} · {peMobileDigits(deliveryPoint.contactPhone)}
-                  {deliveryPoint.contactEmail ? ` · ${deliveryPoint.contactEmail}` : ""}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">Paquete</dt>
-                <dd>
-                  {FLIPY_PACKAGE_SIZE_LABELS[packageSize]}
-                  {packageCare.length
-                    ? ` · ${packageCare.map((id) => FLIPY_PACKAGE_CARE_LABELS[id]).join(", ")}`
-                    : ""}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-text-secondary">{fleteLocked ? "Flete (cotización)" : "Oferta de flete"}</dt>
-                <dd className="font-medium">
-                  {formatCurrency(fleteValidation.value ?? 0, currencyCode)}
-                </dd>
-              </div>
-              {notes.trim() || packageCareNote.trim() ? (
-                <div>
-                  <dt className="text-text-secondary">Notas</dt>
-                  <dd>{[notes.trim(), packageCareNote.trim()].filter(Boolean).join(" · ")}</dd>
-                </div>
-              ) : null}
-            </dl>
-            {destinationConsistency && !destinationConsistency.ok ? (
-              <Alert variant="danger" title="Destino inconsistente">
-                No se puede crear: la dirección textual no coincide con el pin. Vuelve a Ruta.
-              </Alert>
-            ) : null}
-            <div className="flex justify-between gap-2">
-              <Button variant="outline" disabled={pending} onClick={() => setStep("ruta")}>
-                Atrás
-              </Button>
-              <Button
-                disabled={
-                  pending ||
-                  !fleteValidation.ok ||
-                  Boolean(destinationConsistency && !destinationConsistency.ok)
-                }
-                onClick={submitCreate}
-              >
-                {pending ? "Creando…" : "Crear envío en Flipy"}
-              </Button>
-            </div>
-          </div>
+                  : fleteValidation.error
+            }
+            driverNotes={notes}
+            onDriverNotesChange={setNotes}
+            productSummaryLabel={shopifyPaymentSummary.productLabel}
+            destinoCobroSummary={destinoCobroSummary}
+            fleteAmount={fleteValidation.value}
+            currencyCode={currencyCode}
+          />
         ) : null}
 
         {step === "recarga" && walletEmbedUrl ? (

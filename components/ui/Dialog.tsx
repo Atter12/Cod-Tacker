@@ -11,6 +11,9 @@ export function Dialog({
   children,
   className,
   bodyClassName,
+  eyebrow,
+  headerMeta,
+  footer,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -19,6 +22,12 @@ export function Dialog({
   className?: string;
   /** Applied to the scrollable body under the title. */
   bodyClassName?: string;
+  /** Small label above the title (wizard modals). */
+  eyebrow?: string;
+  /** Right side of header row (e.g. order meta). Close button follows. */
+  headerMeta?: ReactNode;
+  /** Sticky footer below scrollable body. */
+  footer?: ReactNode;
 }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -48,11 +57,38 @@ export function Dialog({
           className,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-semibold leading-snug">{title}</h2>
-          <button aria-label="Cerrar" onClick={() => onOpenChange(false)}>
-            <X className="size-5" />
-          </button>
+        <div
+          className={cn(
+            "flex shrink-0 border-b border-border px-5 py-4 sm:px-6",
+            eyebrow ? "flex-col gap-2" : "items-center justify-between gap-3",
+          )}
+        >
+          {eyebrow ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                  {eyebrow}
+                </p>
+                <div className="flex items-center gap-3">
+                  {headerMeta}
+                  <button aria-label="Cerrar" onClick={() => onOpenChange(false)}>
+                    <X className="size-5 text-text-secondary" />
+                  </button>
+                </div>
+              </div>
+              <h2 className="text-xl font-semibold leading-snug text-text-primary">{title}</h2>
+            </>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold leading-snug">{title}</h2>
+              <div className="flex items-center gap-3">
+                {headerMeta}
+                <button aria-label="Cerrar" onClick={() => onOpenChange(false)}>
+                  <X className="size-5" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
         <div
           className={cn(
@@ -62,6 +98,9 @@ export function Dialog({
         >
           {children}
         </div>
+        {footer ? (
+          <div className="shrink-0 border-t border-border bg-surface-elevated">{footer}</div>
+        ) : null}
       </section>
     </div>
   );

@@ -16,17 +16,20 @@ type Props = {
   error?: string | null;
   requireEmail?: boolean;
   onPress: () => void;
+  /** Dashed border when empty (delivery pending mock). */
+  dashedWhenEmpty?: boolean;
 };
 
 const STATUS_STYLES: Record<
   FlipyRouteCardStatus,
-  { border: string; bg: string; badge: string; badgeText: string }
+  { border: string; bg: string; badge: string; badgeText: string; dashed?: boolean }
 > = {
   empty: {
-    border: "border-red-200 dark:border-red-900/50",
-    bg: "bg-red-50/60 dark:bg-red-950/20",
-    badge: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+    border: "border-orange-300/80 dark:border-orange-800/60",
+    bg: "bg-orange-50/50 dark:bg-orange-950/15",
+    badge: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
     badgeText: "Pendiente",
+    dashed: true,
   },
   partial: {
     border: "border-amber-200 dark:border-amber-900/50",
@@ -49,9 +52,11 @@ export function FlipyRouteAddressCard({
   error,
   requireEmail,
   onPress,
+  dashedWhenEmpty = false,
 }: Props) {
   const status = getFlipyRouteCardStatus(point, { requireEmail });
   const styles = STATUS_STYLES[status];
+  const useDashed = dashedWhenEmpty && status === "empty";
   const contactLine = formatFlipyRouteContactLine(point);
   const hasLocation = hasFlipyRouteLocation(point);
 
@@ -62,6 +67,7 @@ export function FlipyRouteAddressCard({
       className={cn(
         "flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors",
         "hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40",
+        useDashed ? "border-dashed" : null,
         styles.border,
         styles.bg,
         error ? "ring-1 ring-red-400/50" : null,
