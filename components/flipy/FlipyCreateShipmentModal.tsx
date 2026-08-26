@@ -272,7 +272,9 @@ export function FlipyCreateShipmentModal({
     const requestId = ++quoteRequestIdRef.current;
     setQuoting(true);
     setQuoteError(null);
-    startTransition(async () => {
+    // Plain async — avoid startTransition so cotización results paint immediately
+    // after the Flipy API returns (often several seconds).
+    void (async () => {
       const quoted = await cotizarFlipyFlete({
         agencySlug,
         storeSlug,
@@ -291,23 +293,10 @@ export function FlipyCreateShipmentModal({
       }
       const quote = quoted.fleteQuote;
       setFleteQuote(quote);
-      if (fleteLocked) {
-        setFletePrice(String(quote.recommendedFare));
-      } else {
-        // Always seed from cotización when empty/invalid so the offer card
-        // does not stay on "—" after a multi-second Flipy Directions call.
-        const current = Number.parseFloat(fletePrice.trim());
-        const needsSeed = !fletePrice.trim() || !Number.isFinite(current) || current <= 0;
-        if (needsSeed) {
-          setFletePrice(
-            initialFleteInputValue(escenario, paymentResolution.suggestedFlete, {
-              smartEligible,
-              fleteQuote: quote,
-            }) || String(quote.recommendedFare),
-          );
-        }
-      }
-    });
+      // Always apply cotización when route/package changes — merchant offer
+      // must follow the new recommended fare (not stale Shopify shipping).
+      setFletePrice(String(quote.recommendedFare));
+    })();
   }, [
     agencySlug,
     storeSlug,
@@ -317,11 +306,6 @@ export function FlipyCreateShipmentModal({
     deliveryPoint.lat,
     deliveryPoint.lng,
     packageSize,
-    fleteLocked,
-    fletePrice,
-    escenario,
-    paymentResolution.suggestedFlete,
-    smartEligible,
   ]);
 
   useEffect(() => {

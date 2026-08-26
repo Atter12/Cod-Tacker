@@ -105,10 +105,10 @@ export function FlipyFleteOfferCard({
           <p className="text-base font-semibold text-text-primary">
             {locked ? "Flete (cotización Flipy)" : "Tu oferta de flete"}
           </p>
-          {routeMeta ? (
-            <p className="text-sm text-text-secondary">{routeMeta}</p>
-          ) : quoting ? (
+          {quoting ? (
             <p className="text-sm text-text-secondary">Cotizando flete…</p>
+          ) : routeMeta ? (
+            <p className="text-sm text-text-secondary">{routeMeta}</p>
           ) : coordsReady ? (
             <p className="text-sm text-text-secondary">Calculando ruta…</p>
           ) : (
@@ -122,12 +122,19 @@ export function FlipyFleteOfferCard({
         aria-live="polite"
       >
         {displayAmount != null ? (
-          <p className="text-4xl font-bold tracking-tight text-text-primary sm:text-[42px]">
+          <p
+            className={`text-4xl font-bold tracking-tight text-text-primary sm:text-[42px] ${
+              quoting ? "opacity-50" : ""
+            }`}
+          >
             {formatFlipySoles(displayAmount)}
           </p>
         ) : (
           <p className="text-lg font-medium text-text-secondary">—</p>
         )}
+        {quoting ? (
+          <p className="mt-1 text-xs font-medium text-brand-primary">Actualizando cotización…</p>
+        ) : null}
       </div>
 
       {locked ? (
