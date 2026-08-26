@@ -25,6 +25,7 @@ import {
   type FlipyRoutePoint,
 } from "@/lib/integrations/flipy/route-address";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { formatCoordsLabel } from "@/lib/integrations/flipy/destination-consistency";
 import { FlipyWizardStepper } from "@/components/flipy/FlipyWizardStepper";
 import { Alert } from "@/components/ui/Alert";
@@ -38,9 +39,9 @@ const PACKAGE_SIZE_DESCRIPTIONS: Record<FlipyPackageSize, string> = {
 
 const ESCENARIO_COBRO_TITLE: Record<Exclude<FlipyEscenarioPago, "GRATIS">, string> = {
   "1A": "Prepago total",
-  "1C": "Cobro en destino · Yape al motorizado",
-  "1E": "Cobro en destino · Efectivo al motorizado",
-  "1D": "Cobro en destino · Digital en rastreo",
+  "1C": "Cobro en destino · Yape",
+  "1E": "Cobro en destino · Efectivo",
+  "1D": "Cobro en destino · Tarjeta",
 };
 
 type Props = {
@@ -362,24 +363,24 @@ export function FlipyConfirmStepPanel({
       <section className="space-y-3">
         <SectionHeader title="Cobro y modalidad" onEdit={onEditModalidad} />
         <div className="overflow-hidden rounded-xl border border-border bg-surface-elevated">
-          <div className="flex items-start justify-between gap-3 border-b border-dashed border-border px-4 py-3">
+          <div className="flex items-start gap-3 border-b border-dashed border-border px-4 py-3">
             <div className="flex min-w-0 items-start gap-2">
               <span className="mt-1.5 size-2 shrink-0 rounded-full bg-brand-primary" aria-hidden />
-              <p className="text-sm font-semibold text-text-primary">
+              <FlipyEscenarioLabel
+                escenario={escenario}
+                className="text-sm font-semibold text-text-primary"
+              >
                 {escenario === "GRATIS"
                   ? "Envío gratuito"
                   : ESCENARIO_COBRO_TITLE[escenario]}
-              </p>
+              </FlipyEscenarioLabel>
             </div>
-            <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-bold text-text-secondary">
-              {escenario}
-            </span>
           </div>
 
           <div className="space-y-2 border-b border-dashed border-border px-4 py-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-text-secondary">
-                Producto (P)
+                Producto
                 {productPaidAtCheckout ? " — prepago en Shopify" : " — COD en destino"}
               </span>
               <span className="font-medium text-text-primary">
@@ -388,7 +389,7 @@ export function FlipyConfirmStepPanel({
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-text-secondary">
-                {fleteLocked ? "Flete (F) — cotización Flipy" : "Flete (F) — tu oferta de puja"}
+                {fleteLocked ? "Flete — cotización Flipy" : "Flete — tu oferta de puja"}
               </span>
               <span className="font-medium text-text-primary">
                 {formatCurrency(fleteCharge, currencyCode)}
@@ -408,11 +409,12 @@ export function FlipyConfirmStepPanel({
           <div className="flex items-start gap-2 border-t border-dashed border-border px-4 py-3 text-xs leading-relaxed text-text-secondary">
             <Info className="mt-0.5 size-3.5 shrink-0 text-brand-primary" aria-hidden />
             <p>
-              El motorizado cobrará <span className="font-semibold text-text-primary">P + F</span>{" "}
+              El motorizado cobrará{" "}
+              <span className="font-semibold text-text-primary">producto + flete</span>{" "}
               {escenario === "1C"
                 ? "vía Yape"
                 : escenario === "1D"
-                  ? "con tarjeta en rastreo"
+                  ? "con tarjeta"
                   : escenario === "1A"
                     ? "— nada en destino"
                     : "en efectivo"}{" "}

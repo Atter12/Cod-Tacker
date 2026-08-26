@@ -230,7 +230,8 @@ export function FlipyFleteOfferCard({
             <span className="font-medium text-text-primary">
               {formatFlipySoles(competitiveRange.low)} – {formatFlipySoles(competitiveRange.high)}
             </span>
-            . El cliente paga en destino <span className="font-medium">P + F</span> según lo que
+            . El cliente paga en destino{" "}
+            <span className="font-medium">producto + flete</span> según lo que
             falte cobrar.
           </span>
         </p>

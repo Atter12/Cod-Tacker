@@ -5,8 +5,8 @@ import {
   FlipyCreateShipmentModal,
   type FlipyStoreOriginDefaults,
 } from "@/components/flipy/FlipyCreateShipmentModal";
+import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { buildFlipyOperationWebUrl } from "@/lib/integrations/flipy/embed-urls";
-import { labelFlipyEscenario } from "@/lib/integrations/flipy/labels";
 import type { FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
 import type { FlipyPackageSize } from "@/lib/integrations/flipy/map-package-size";
 import type { FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
@@ -77,7 +77,15 @@ export function FlipyShipmentPanel({
       <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
         <h2 className="text-sm font-semibold">Flipy</h2>
         <p className="text-xs text-text-secondary">
-          Escenario: {labelFlipyEscenario(paymentResolution.suggestedEscenario)}
+          Modalidad:{" "}
+          {paymentResolution.suggestedEscenario ? (
+            <FlipyEscenarioLabel
+              escenario={paymentResolution.suggestedEscenario}
+              className="text-xs"
+            />
+          ) : (
+            "—"
+          )}
         </p>
         <p className="font-mono text-xs break-all">{flipyEnvioId}</p>
         <div className="flex flex-wrap gap-2">
@@ -118,7 +126,13 @@ export function FlipyShipmentPanel({
             <>
               {" "}
               Sugerido:{" "}
-              <span className="font-medium">{paymentResolution.suggestedEscenario}</span>.
+              {paymentResolution.suggestedEscenario ? (
+                <FlipyEscenarioLabel
+                  escenario={paymentResolution.suggestedEscenario}
+                  className="font-medium"
+                />
+              ) : null}
+              .
             </>
           ) : null}
         </p>

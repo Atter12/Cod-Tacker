@@ -2,15 +2,12 @@
 
 import { Info } from "lucide-react";
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
-import type { FlipyShopifyPaymentSummary } from "@/lib/integrations/flipy/labels";
+import {
+  type FlipyShopifyPaymentSummary,
+} from "@/lib/integrations/flipy/labels";
+import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { Alert } from "@/components/ui/Alert";
 import { cn } from "@/lib/utils/cn";
-
-const ESCENARIO_SHORT: Record<"1C" | "1E" | "1D", string> = {
-  "1C": "Yape al motorizado",
-  "1E": "Efectivo",
-  "1D": "Digital — tarjeta en rastreo",
-};
 
 const ESCENARIO_COBRO_HINT: Record<"1C" | "1E" | "1D", string> = {
   "1C": "El cliente paga en destino vía Yape directo al motorizado.",
@@ -71,12 +68,12 @@ export function FlipyPaymentStepPanel({
           </div>
           {summary.codProductLabel ? (
             <div className="sm:col-span-2">
-              <dt className="text-text-secondary">COD producto (codAmount → Flipy)</dt>
+              <dt className="text-text-secondary">Producto a cobrar en destino</dt>
               <dd className="mt-0.5 font-medium text-text-primary">{summary.codProductLabel}</dd>
             </div>
           ) : null}
           <div className="sm:col-span-2">
-            <dt className="text-text-secondary">Cobro en destino (D3)</dt>
+            <dt className="text-text-secondary">Cobro en destino</dt>
             <dd className="mt-0.5 font-medium text-text-primary">{summary.destinoCobroLabel}</dd>
           </div>
         </dl>
@@ -89,7 +86,8 @@ export function FlipyPaymentStepPanel({
           suggestedEscenario === "1E" ||
           suggestedEscenario === "1D" ? (
             <span className="rounded-full bg-brand-softer px-2.5 py-0.5 text-xs font-semibold text-brand-primary">
-              Sugerido: {suggestedEscenario}
+              Sugerido:{" "}
+              <FlipyEscenarioLabel escenario={suggestedEscenario} className="font-semibold" />
             </span>
           ) : null}
         </div>
@@ -98,7 +96,6 @@ export function FlipyPaymentStepPanel({
           {escenarioOptions.map((opt) => {
             const code = opt.value as "1C" | "1E" | "1D";
             const selected = escenario === opt.value;
-            const shortTitle = ESCENARIO_SHORT[code] ?? opt.label;
             const cobroHint = ESCENARIO_COBRO_HINT[code] ?? opt.hint;
 
             return (
@@ -122,14 +119,14 @@ export function FlipyPaymentStepPanel({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-text-primary">{shortTitle}</span>
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary">
-                        {opt.value}
-                      </span>
+                      <FlipyEscenarioLabel
+                        escenario={opt.value}
+                        className="font-semibold text-text-primary"
+                      />
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-text-secondary">{cobroHint}</p>
                     <p className="mt-1 text-xs text-text-secondary/80">
-                      Cobro: P + F · Según lo que falte cobrar
+                      Cobro: producto + flete · Según lo que falte cobrar
                     </p>
                   </div>
                 </div>
@@ -141,8 +138,8 @@ export function FlipyPaymentStepPanel({
 
       {showYapeWarning ? (
         <Alert variant="warning" title="Tope Yape">
-          El COD producto supera S/ {yapeTop}. Flipy puede rechazar 1C — considera 1D (cobro digital en
-          rastreo).
+          El COD producto supera S/ {yapeTop}. Flipy puede rechazar Yape — considera Tarjeta (cobro
+          digital en rastreo).
         </Alert>
       ) : null}
     </div>

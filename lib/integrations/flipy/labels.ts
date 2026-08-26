@@ -11,6 +11,22 @@ export const FLIPY_COD_ESCENARIOS = ["1C", "1E", "1D"] as const satisfies readon
 /** Flipy Yape cap — 1C + codAmount above this should suggest 1D. */
 export const FLIPY_YAPE_COD_TOPE = 300;
 
+/** Short labels for COD channel selection in the wizard UI. */
+export const FLIPY_COD_CHANNEL_SHORT: Record<(typeof FLIPY_COD_ESCENARIOS)[number], string> = {
+  "1C": "Yape",
+  "1E": "Efectivo",
+  "1D": "Tarjeta",
+};
+
+export function labelFlipyCodChannel(
+  value: FlipyEscenarioPago | null | undefined,
+): string | null {
+  if (value === "1C" || value === "1E" || value === "1D") {
+    return FLIPY_COD_CHANNEL_SHORT[value];
+  }
+  return null;
+}
+
 const ESCENARIO_LABELS: Record<(typeof FLIPY_USER_ESCENARIOS)[number], string> = {
   "1A": "1A — Prepago total",
   "1C": "1C — Yape al motorizado",
@@ -146,8 +162,8 @@ export function buildFlipyShopifyPaymentSummary(
 
   const alertBody =
     shouldSkipFlipyCodPaymentStep(resolution)
-      ? "Producto y flete prepagados en Shopify — modalidad 1A (sin cobro en destino)."
-      : "Hay cobro en destino según Shopify. Elige el canal: 1C (Yape), 1E (efectivo) o 1D (tarjeta en rastreo). Los montos (codAmount / flete) vienen de la matriz D3, no del canal.";
+      ? "Producto y flete prepagados en Shopify — sin cobro en destino."
+      : "Hay cobro en destino según Shopify. Elige el canal: Yape, efectivo o tarjeta. Los montos los define Shopify, no el canal de cobro.";
 
   return { alertBody, productLabel, shippingLabel, codProductLabel, destinoCobroLabel };
 }

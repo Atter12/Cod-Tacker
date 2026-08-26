@@ -8,6 +8,7 @@ import {
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
 import { FlipyConfirmStepPanel } from "@/components/flipy/FlipyConfirmStepPanel";
+import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { FlipyPaymentStepPanel } from "@/components/flipy/FlipyPaymentStepPanel";
 import { FlipyRutaStepPanel } from "@/components/flipy/FlipyRutaStepPanel";
 import { FlipyWizardFooter } from "@/components/flipy/FlipyWizardFooter";
@@ -171,21 +172,6 @@ function wizardHeadline(step: Step): string {
 function formatOrderLabel(orderNumber: string): string {
   const trimmed = orderNumber.trim();
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-}
-
-function escenarioBadgeLabel(escenario: FlipyEscenarioPago): string {
-  switch (escenario) {
-    case "1C":
-      return "Yape";
-    case "1E":
-      return "Efectivo";
-    case "1D":
-      return "Digital";
-    case "1A":
-      return "Prepago";
-    default:
-      return escenario;
-  }
 }
 
 function isSmartSuccess(result: CreateResult, smartEligible: boolean): boolean {
@@ -882,7 +868,7 @@ export function FlipyCreateShipmentModal({
             </span>
             {step === "ruta" || step === "confirm" ? (
               <span className="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
-                {escenario} {escenarioBadgeLabel(escenario)}
+                <FlipyEscenarioLabel escenario={escenario} className="font-semibold" />
               </span>
             ) : null}
           </div>
