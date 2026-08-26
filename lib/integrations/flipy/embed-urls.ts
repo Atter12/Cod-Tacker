@@ -159,6 +159,7 @@ export function withFlipyLocationClientParams(
     url.searchParams.set("mapWheel", "zoom");
     if (options?.liveSync) {
       url.searchParams.set("liveLocationSync", "1");
+      url.searchParams.delete("embedMode");
     } else {
       url.searchParams.delete("liveLocationSync");
       url.searchParams.set("embedMode", "standalone");

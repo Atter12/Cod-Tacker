@@ -15,6 +15,12 @@ import {
   validateFlipyRoutePoint,
 } from "@/lib/integrations/flipy/route-address";
 
+export type FlipyMapEmbedPrefetch = {
+  embedUrl: string;
+  embedOrigin: string;
+  prefillKey: string;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,8 +36,41 @@ type Props = {
   defaultContactName?: string | null;
   defaultContactPhone?: string | null;
   defaultContactEmail?: string | null;
+  prefetchedEmbed?: FlipyMapEmbedPrefetch | null;
   onSave: (point: FlipyRoutePoint) => void;
 };
+
+export function buildMapPrefillKey(input: {
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}): string {
+  const lat = input.lat != null && Number.isFinite(input.lat) ? input.lat : "";
+  const lng = input.lng != null && Number.isFinite(input.lng) ? input.lng : "";
+  return `${input.address?.trim() ?? ""}|${lat}|${lng}`;
+}
+
+export function resolveMapPrefill(input: {
+  value: FlipyRoutePoint;
+  mapPrefillAddress?: string | null;
+  mapPrefillCoords?: { lat: number; lng: number } | null;
+  isPickup: boolean;
+  storeOrigin?: FlipyStoreOriginDefaults | null;
+}): { address: string | null; lat: number | null; lng: number | null } {
+  const address =
+    input.mapPrefillAddress ??
+    (hasFlipyRouteLocation(input.value) ? input.value.address : null) ??
+    (input.isPickup ? input.storeOrigin?.address : null);
+  const lat =
+    input.mapPrefillCoords?.lat ??
+    (hasFlipyRouteLocation(input.value) ? input.value.lat : null) ??
+    (input.isPickup ? input.storeOrigin?.lat : null);
+  const lng =
+    input.mapPrefillCoords?.lng ??
+    (hasFlipyRouteLocation(input.value) ? input.value.lng : null) ??
+    (input.isPickup ? input.storeOrigin?.lng : null);
+  return { address, lat, lng };
+}
 
 export function FlipyRouteAddressModal({
   open,
@@ -48,6 +87,7 @@ export function FlipyRouteAddressModal({
   defaultContactName = null,
   defaultContactPhone = null,
   defaultContactEmail = null,
+  prefetchedEmbed = null,
   onSave,
 }: Props) {
   const [pending, startTransition] = useTransition();
@@ -60,60 +100,73 @@ export function FlipyRouteAddressModal({
 
   const title = kind === "pickup" ? "Recojo" : "Entrega";
   const isPickup = kind === "pickup";
+  const mapPrefill = resolveMapPrefill({
+    value,
+    mapPrefillAddress,
+    mapPrefillCoords,
+    isPickup,
+    storeOrigin,
+  });
+  const mapPrefillKey = buildMapPrefillKey(mapPrefill);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setEmbedUrl(null);
+      setLoadError(null);
+      return;
+    }
     setDraft(value);
     setError(null);
-    setLoadError(null);
-    setEmbedUrl(null);
   }, [open, value]);
 
   useEffect(() => {
     if (!open) return;
-    startTransition(async () => {
-      const prefillAddress =
-        mapPrefillAddress ??
-        (hasFlipyRouteLocation(value) ? value.address : null) ??
-        (isPickup ? storeOrigin?.address : null);
-      const prefillLat =
-        mapPrefillCoords?.lat ??
-        (hasFlipyRouteLocation(value) ? value.lat : null) ??
-        (isPickup ? storeOrigin?.lat : null);
-      const prefillLng =
-        mapPrefillCoords?.lng ??
-        (hasFlipyRouteLocation(value) ? value.lng : null) ??
-        (isPickup ? storeOrigin?.lng : null);
+    let cancelled = false;
+    const hasWarmPrefetch = prefetchedEmbed?.prefillKey === mapPrefillKey;
 
+    if (hasWarmPrefetch) {
+      setEmbedUrl(prefetchedEmbed.embedUrl);
+      setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
+      setLoadError(null);
+      setMapNonce((n) => n + 1);
+    }
+
+    startTransition(async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
         agencySlug,
         storeSlug,
         orderId,
-        prefillAddress,
-        prefillLat: prefillLat ?? undefined,
-        prefillLng: prefillLng ?? undefined,
+        prefillAddress: mapPrefill.address,
+        prefillLat: mapPrefill.lat ?? undefined,
+        prefillLng: mapPrefill.lng ?? undefined,
       });
+      if (cancelled) return;
       if (tokenResult.error || !tokenResult.embedUrl) {
-        setLoadError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
+        if (!hasWarmPrefetch) {
+          setLoadError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
+        }
         return;
       }
       setEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
+      setLoadError(null);
       setMapNonce((n) => n + 1);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     open,
     agencySlug,
     storeSlug,
     orderId,
     embedOrigin,
-    mapPrefillAddress,
-    mapPrefillCoords,
-    isPickup,
-    storeOrigin,
-    value.address,
-    value.lat,
-    value.lng,
+    mapPrefillKey,
+    prefetchedEmbed,
+    mapPrefill.address,
+    mapPrefill.lat,
+    mapPrefill.lng,
   ]);
 
   function reloadMap(input: {
@@ -250,20 +303,19 @@ export function FlipyRouteAddressModal({
               agencySlug={agencySlug}
               storeSlug={storeSlug}
               purpose={kind === "pickup" ? "pickup" : "delivery"}
-              syncMode="standalone"
+              syncMode="partner"
               readOnlyAddress
               prefillAddress={
                 hasFlipyRouteLocation(draft)
                   ? draft.address
-                  : mapPrefillAddress ?? (isPickup ? storeOrigin?.address : null)
+                  : mapPrefill.address
               }
               prefillCoords={
                 hasFlipyRouteLocation(draft)
                   ? { lat: draft.lat, lng: draft.lng }
-                  : mapPrefillCoords ??
-                    (isPickup && storeOrigin
-                      ? { lat: storeOrigin.lat, lng: storeOrigin.lng }
-                      : null)
+                  : mapPrefill.lat != null && mapPrefill.lng != null
+                    ? { lat: mapPrefill.lat, lng: mapPrefill.lng }
+                    : null
               }
               mapHeightClassName="h-[min(42vh,420px)] sm:h-[min(45vh,460px)]"
               onConfirmed={(next) => {
@@ -278,9 +330,14 @@ export function FlipyRouteAddressModal({
               }}
             />
           ) : (
-            <p className="text-xs text-text-secondary">
-              {pending ? "Cargando mapa…" : "Preparando mapa Flipy…"}
-            </p>
+            <div
+              className="flex h-[min(42vh,420px)] items-center justify-center rounded-lg border border-border bg-muted/30 sm:h-[min(45vh,460px)]"
+              aria-busy={pending}
+            >
+              <p className="text-xs text-text-secondary">
+                {pending ? "Cargando mapa…" : "Preparando mapa Flipy…"}
+              </p>
+            </div>
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">

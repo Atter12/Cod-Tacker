@@ -266,7 +266,7 @@ export function FlipyLocationEmbed({
       </p>
       <div
         ref={shellRef}
-        className="relative isolate overflow-hidden rounded-lg border border-border bg-surface-elevated shadow-sm overscroll-none"
+        className="relative isolate overflow-hidden rounded-lg border border-border bg-muted/20 shadow-sm overscroll-none"
         data-flipy-map-shell
       >
         <iframe

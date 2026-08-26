@@ -9,7 +9,7 @@ import {
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
 import { FlipyRouteAddressCard } from "@/components/flipy/FlipyRouteAddressCard";
-import { FlipyRouteAddressModal } from "@/components/flipy/FlipyRouteAddressModal";
+import { FlipyRouteAddressModal, buildMapPrefillKey, resolveMapPrefill, type FlipyMapEmbedPrefetch } from "@/components/flipy/FlipyRouteAddressModal";
 import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -205,6 +205,10 @@ export function FlipyCreateShipmentModal({
     }),
   );
   const [routeModal, setRouteModal] = useState<"pickup" | "delivery" | null>(null);
+  const [mapEmbedPrefetch, setMapEmbedPrefetch] = useState<{
+    pickup: FlipyMapEmbedPrefetch | null;
+    delivery: FlipyMapEmbedPrefetch | null;
+  }>({ pickup: null, delivery: null });
   const [pickupCardError, setPickupCardError] = useState<string | null>(null);
   const [deliveryCardError, setDeliveryCardError] = useState<string | null>(null);
 
@@ -298,6 +302,85 @@ export function FlipyCreateShipmentModal({
     escenario,
     paymentResolution.suggestedFlete,
     smartEligible,
+  ]);
+
+  useEffect(() => {
+    if (!open || step !== "ruta") return;
+    let cancelled = false;
+
+    const pickupPrefill = resolveMapPrefill({
+      value: pickupPoint,
+      isPickup: true,
+      storeOrigin,
+    });
+    const deliveryPrefill = resolveMapPrefill({
+      value: deliveryPoint,
+      mapPrefillAddress: prefillAddress,
+      mapPrefillCoords: prefillCoords,
+      isPickup: false,
+      storeOrigin,
+    });
+
+    startTransition(async () => {
+      const [pickupToken, deliveryToken] = await Promise.all([
+        issueFlipyWidgetTokenAction({
+          agencySlug,
+          storeSlug,
+          orderId,
+          prefillAddress: pickupPrefill.address,
+          prefillLat: pickupPrefill.lat ?? undefined,
+          prefillLng: pickupPrefill.lng ?? undefined,
+        }),
+        issueFlipyWidgetTokenAction({
+          agencySlug,
+          storeSlug,
+          orderId,
+          prefillAddress: deliveryPrefill.address,
+          prefillLat: deliveryPrefill.lat ?? undefined,
+          prefillLng: deliveryPrefill.lng ?? undefined,
+        }),
+      ]);
+      if (cancelled) return;
+
+      setMapEmbedPrefetch({
+        pickup:
+          pickupToken.embedUrl
+            ? {
+                embedUrl: pickupToken.embedUrl,
+                embedOrigin: pickupToken.embedOrigin ?? embedOrigin,
+                prefillKey: buildMapPrefillKey(pickupPrefill),
+              }
+            : null,
+        delivery:
+          deliveryToken.embedUrl
+            ? {
+                embedUrl: deliveryToken.embedUrl,
+                embedOrigin: deliveryToken.embedOrigin ?? embedOrigin,
+                prefillKey: buildMapPrefillKey(deliveryPrefill),
+              }
+            : null,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    step,
+    agencySlug,
+    storeSlug,
+    orderId,
+    embedOrigin,
+    storeOrigin,
+    prefillAddress,
+    prefillCoords,
+    pickupPoint.address,
+    pickupPoint.lat,
+    pickupPoint.lng,
+    deliveryPoint.address,
+    deliveryPoint.lat,
+    deliveryPoint.lng,
   ]);
 
   useEffect(() => {
@@ -1008,6 +1091,7 @@ export function FlipyCreateShipmentModal({
         storeOrigin={storeOrigin}
         defaultContactName={storeOrigin?.contactName ?? customerName}
         defaultContactPhone={storeOrigin?.phone ?? customerPhone}
+        prefetchedEmbed={mapEmbedPrefetch.pickup}
         onSave={(point) => {
           setPickupPoint(point);
           setPickupCardError(null);
@@ -1029,6 +1113,7 @@ export function FlipyCreateShipmentModal({
         defaultContactName={customerName}
         defaultContactPhone={customerPhone}
         defaultContactEmail={customerEmail}
+        prefetchedEmbed={mapEmbedPrefetch.delivery}
         onSave={(point) => {
           setDeliveryPoint(point);
           setDeliveryCardError(null);

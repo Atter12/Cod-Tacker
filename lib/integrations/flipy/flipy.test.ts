@@ -114,12 +114,13 @@ describe("flipy embed-urls", () => {
 
   it("requests live pin sync + parentOrigin on ubicacion iframe", () => {
     const url = withFlipyLocationClientParams(
-      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`,
+      `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc&embedMode=standalone`,
       "https://app.codtracked.com",
       { liveSync: true },
     );
     assert.match(url, /liveLocationSync=1/);
     assert.match(url, /parentOrigin=https%3A%2F%2Fapp\.codtracked\.com/);
+    assert.doesNotMatch(url, /embedMode=standalone/);
   });
 
   it("uses standalone embed mode by default (modal UX)", () => {
