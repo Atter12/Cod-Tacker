@@ -308,6 +308,18 @@ export function buildFlipyAppLoginUrl(input: {
   return url.toString();
 }
 
+/** True when URL targets Flipy app password setup / recovery (not partner embeds). */
+export function isFlipyAppActivationUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return /activar-cuenta|activate-account|olvide-contrasena|set-password|reset-password/i.test(
+      parsed.pathname,
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** First-time password when partner activation init is unavailable on Flipy backend. */
 export function buildFlipyAppForgotPasswordUrl(input: {
   appOrigin: string;

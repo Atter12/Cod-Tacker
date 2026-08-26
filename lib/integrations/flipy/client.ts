@@ -2,6 +2,7 @@ import "server-only";
 
 import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
+import { isFlipyAppActivationUrl } from "@/lib/integrations/flipy/embed-urls";
 import {
   buildFlipyCreateEnvioRequestBody,
   buildFlipyCotizarRequestBody,
@@ -288,34 +289,6 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
     async initActivateAccount(
       input: FlipyActivateAccountInitInput,
     ): Promise<FlipyActivateAccountInitResult> {
-      const activationScopes = ["account_activation", "activar_cuenta", "set_password"] as const;
-      for (const scope of activationScopes) {
-        try {
-          const widget = await this.issueWidgetToken({
-            scope: [scope],
-            orderContext: {
-              orderId: config.externalStoreId,
-              externalOrderId: `codtracked:store:${config.externalStoreId}`,
-            },
-          });
-          const directUrl =
-            widget.activacionEmbedUrl ?? widget.activationUrl ?? widget.embedUrl ?? null;
-          if (directUrl && /activar-cuenta|activate-account/i.test(directUrl)) {
-            return { token: widget.token, activationUrl: directUrl };
-          }
-          if (widget.token) {
-            return { token: widget.token, activationUrl: directUrl };
-          }
-        } catch (error) {
-          if (
-            error instanceof FlipyPartnerApiError &&
-            (error.status === 404 || error.status === 400 || error.status === 422)
-          ) {
-            continue;
-          }
-        }
-      }
-
       const paths = [
         "/api/partner/cuenta/activar-cuenta/init",
         "/api/partner/cuenta/activacion/init",
@@ -329,23 +302,35 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         );
       }
 
-      let lastError: unknown = null;
-      for (const path of paths) {
-        try {
-          const raw = await request<unknown>(path, {
-            method: "POST",
-            body: buildFlipyActivateAccountInitRequestBody(input),
-          });
+      const body = buildFlipyActivateAccountInitRequestBody(input);
+      const attempts = await Promise.allSettled(
+        paths.map(async (path) => {
+          const raw = await request<unknown>(path, { method: "POST", body });
           const parsed = readFlipyActivateAccountInitResult(raw);
-          if (parsed) return parsed;
-        } catch (error) {
-          lastError = error;
-          const message = error instanceof Error ? error.message : "";
-          const status = error instanceof FlipyPartnerApiError ? error.status : null;
-          if (status === 404 || /ruta no encontrada/i.test(message)) {
-            continue;
+          if (!parsed) {
+            throw new FlipyPartnerApiError("Flipy no devolvió token de activación", 502);
           }
-          throw error;
+          const activationUrl = parsed.activationUrl?.trim();
+          if (activationUrl && !isFlipyAppActivationUrl(activationUrl)) {
+            throw new FlipyPartnerApiError("Flipy devolvió URL de activación inválida", 502);
+          }
+          return parsed;
+        }),
+      );
+
+      for (const attempt of attempts) {
+        if (attempt.status === "fulfilled") return attempt.value;
+      }
+
+      let lastError: unknown = null;
+      for (const attempt of attempts) {
+        if (attempt.status !== "rejected") continue;
+        lastError = attempt.reason;
+        const message = attempt.reason instanceof Error ? attempt.reason.message : "";
+        const status =
+          attempt.reason instanceof FlipyPartnerApiError ? attempt.reason.status : null;
+        if (status !== 404 && !/ruta no encontrada/i.test(message)) {
+          throw attempt.reason;
         }
       }
 

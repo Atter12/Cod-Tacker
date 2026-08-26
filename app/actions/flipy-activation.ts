@@ -11,6 +11,7 @@ import {
 import {
   buildFlipyAppActivationUrl,
   buildFlipyAppForgotPasswordUrl,
+  isFlipyAppActivationUrl,
 } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
@@ -80,16 +81,18 @@ export async function issueFlipyActivationUrlAction(input: {
 
     try {
       const session = await client.initActivateAccount({ contactEmail, flipyTiendaId });
+      const partnerActivationUrl = session.activationUrl?.trim();
       const activationUrl =
-        session.activationUrl?.trim() ||
-        buildFlipyAppActivationUrl({
-          appOrigin: env.appOrigin,
-          contactEmail,
-          activationPath: env.appActivationPath,
-          externalStoreId: membership.storeId,
-          flipyTiendaId,
-          token: session.token,
-        });
+        partnerActivationUrl && isFlipyAppActivationUrl(partnerActivationUrl)
+          ? partnerActivationUrl
+          : buildFlipyAppActivationUrl({
+              appOrigin: env.appOrigin,
+              contactEmail,
+              activationPath: env.appActivationPath,
+              externalStoreId: membership.storeId,
+              flipyTiendaId,
+              token: session.token,
+            });
 
       return actionOk({ activationUrl });
     } catch (error) {

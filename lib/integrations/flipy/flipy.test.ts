@@ -7,6 +7,7 @@ import {
   buildFlipyBidsEmbedUrl,
   buildFlipyAppActivationUrl,
   buildFlipyAppLoginUrl,
+  isFlipyAppActivationUrl,
   ensureFlipyMapWheelZoomParams,
   isAllowedFlipyPostMessageOrigin,
   resolveFlipyScopedEmbedUrl,
@@ -82,6 +83,21 @@ describe("flipy embed-urls", () => {
     });
     assert.match(url, /^https:\/\/tienda\.flipyexpress\.com\/login\?/);
     assert.match(url, /email=ops%40tienda\.pe/);
+  });
+
+  it("detects app activation URLs vs partner embeds", () => {
+    assert.equal(
+      isFlipyAppActivationUrl("https://tienda.flipyexpress.com/activar-cuenta?email=a@b.com"),
+      true,
+    );
+    assert.equal(
+      isFlipyAppActivationUrl("https://tienda.flipyexpress.com/olvide-contrasena?email=a@b.com"),
+      true,
+    );
+    assert.equal(
+      isFlipyAppActivationUrl("https://flipy-panel.vercel.app/partner/ubicacion?token=abc"),
+      false,
+    );
   });
 
   it("builds partner pujas embed URL", () => {
