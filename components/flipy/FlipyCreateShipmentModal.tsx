@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  cotizarFlipyFlete,
   createFlipyShipmentFromOrder,
 } from "@/app/actions/flipy-shipments";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
@@ -48,7 +47,14 @@ import {
   FLIPY_PACKAGE_SIZE_LABELS,
   type FlipyPackageSize,
 } from "@/lib/integrations/flipy/map-package-size";
-import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
+import type { FlipyFleteQuote, FlipyTypeMode } from "@/lib/integrations/flipy/partner-contract";
+import { fetchFlipyCotizar } from "@/lib/integrations/flipy/fetch-cotizar-client";
+import {
+  buildFlipyRouteKey,
+  canRecalcFleteLocally,
+  recalcFleteFromDistance,
+  type FlipyFleteQuoteSource,
+} from "@/lib/integrations/flipy/flete-quote-local";
 import type { FlipyEscenarioPago, FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
 import {
   emptyFlipyRoutePoint,
@@ -101,7 +107,13 @@ type CreateResult = {
 };
 
 const PACKAGE_SIZES: FlipyPackageSize[] = ["pequeno", "mediano", "grande"];
-const QUOTE_DEBOUNCE_MS = 150;
+const QUOTE_PREFETCH_DEBOUNCE_MS = 300;
+const FLIPY_TYPE_MODE: FlipyTypeMode = "express";
+
+type QuoteCache = {
+  routeKey: string;
+  fleteQuote: FlipyFleteQuote;
+};
 
 function buildInitialPickup(storeOrigin: FlipyStoreOriginDefaults | null): FlipyRoutePoint {
   if (!storeOrigin) return emptyFlipyRoutePoint();
@@ -194,6 +206,9 @@ export function FlipyCreateShipmentModal({
   );
   const skippedSmartPaymentRef = useRef(false);
   const quoteRequestIdRef = useRef(0);
+  const quoteCacheRef = useRef<QuoteCache | null>(null);
+  const quoteAbortRef = useRef<AbortController | null>(null);
+  const prefetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [step, setStep] = useState<Step>("payment");
   const [error, setError] = useState<string | null>(null);
@@ -267,46 +282,177 @@ export function FlipyCreateShipmentModal({
   const coordsReady =
     hasFlipyRouteLocation(pickupPoint) && hasFlipyRouteLocation(deliveryPoint);
 
-  const requestQuote = useCallback(() => {
-    if (!coordsReady) return;
-    const requestId = ++quoteRequestIdRef.current;
-    setQuoting(true);
+  const routeKey = useMemo(() => {
+    if (!coordsReady) return null;
+    return buildFlipyRouteKey({
+      originLat: pickupPoint.lat,
+      originLng: pickupPoint.lng,
+      destinationLat: deliveryPoint.lat,
+      destinationLng: deliveryPoint.lng,
+    });
+  }, [coordsReady, pickupPoint.lat, pickupPoint.lng, deliveryPoint.lat, deliveryPoint.lng]);
+
+  const applyQuoteResult = useCallback((quote: FlipyFleteQuote, nextRouteKey: string) => {
+    quoteCacheRef.current = { routeKey: nextRouteKey, fleteQuote: quote };
+    setFleteQuote(quote);
+    setFletePrice(String(quote.recommendedFare));
     setQuoteError(null);
-    // Plain async — avoid startTransition so cotización results paint immediately
-    // after the Flipy API returns (often several seconds).
-    void (async () => {
-      const quoted = await cotizarFlipyFlete({
-        agencySlug,
-        storeSlug,
-        originLat: pickupPoint.lat,
-        originLng: pickupPoint.lng,
-        destinationLat: deliveryPoint.lat,
-        destinationLng: deliveryPoint.lng,
-        packageSize,
+  }, []);
+
+  const readQuoteSource = useCallback((quote: FlipyFleteQuote): FlipyFleteQuoteSource => {
+    if (quote.source === "haversine" || quote.source === "directions") {
+      return quote.source;
+    }
+    return "directions";
+  }, []);
+
+  const requestRemoteQuote = useCallback(
+    (
+      nextRouteKey: string,
+      coords: {
+        originLat: number;
+        originLng: number;
+        destinationLat: number;
+        destinationLng: number;
+      },
+    ) => {
+      quoteAbortRef.current?.abort();
+      const abort = new AbortController();
+      quoteAbortRef.current = abort;
+      const requestId = ++quoteRequestIdRef.current;
+      setQuoting(true);
+      setQuoteError(null);
+
+      void fetchFlipyCotizar(
+        {
+          agencySlug,
+          storeSlug,
+          originLat: coords.originLat,
+          originLng: coords.originLng,
+          destinationLat: coords.destinationLat,
+          destinationLng: coords.destinationLng,
+          packageSize,
+          typeMode: FLIPY_TYPE_MODE,
+        },
+        abort.signal,
+      ).then((result) => {
+        if (requestId !== quoteRequestIdRef.current) return;
+        if (abort.signal.aborted) return;
+        setQuoting(false);
+        if (result.error || !result.fleteQuote) {
+          setQuoteError(result.error ?? "No se pudo cotizar el flete.");
+          setFleteQuote(null);
+          return;
+        }
+        applyQuoteResult(result.fleteQuote, nextRouteKey);
       });
-      if (requestId !== quoteRequestIdRef.current) return;
-      setQuoting(false);
-      if (quoted.error || !quoted.fleteQuote) {
-        setQuoteError(quoted.error ?? "No se pudo cotizar el flete.");
-        setFleteQuote(null);
-        return;
+    },
+    [agencySlug, storeSlug, packageSize, applyQuoteResult],
+  );
+
+  const schedulePrefetchQuote = useCallback(
+    (coords: {
+      originLat: number;
+      originLng: number;
+      destinationLat: number;
+      destinationLng: number;
+    }) => {
+      if (prefetchDebounceRef.current) clearTimeout(prefetchDebounceRef.current);
+      prefetchDebounceRef.current = setTimeout(() => {
+        const coordsValid = [
+          coords.originLat,
+          coords.originLng,
+          coords.destinationLat,
+          coords.destinationLng,
+        ].every((value) => Number.isFinite(value));
+        if (!coordsValid) return;
+
+        const nextRouteKey = buildFlipyRouteKey(coords);
+        if (quoteCacheRef.current?.routeKey === nextRouteKey) return;
+        requestRemoteQuote(nextRouteKey, coords);
+      }, QUOTE_PREFETCH_DEBOUNCE_MS);
+    },
+    [requestRemoteQuote],
+  );
+
+  const handleLivePinCoords = useCallback(
+    (coords: { lat: number; lng: number }, kind: "pickup" | "delivery") => {
+      if (!Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
+      if (kind === "delivery" && hasFlipyRouteLocation(pickupPoint)) {
+        schedulePrefetchQuote({
+          originLat: pickupPoint.lat,
+          originLng: pickupPoint.lng,
+          destinationLat: coords.lat,
+          destinationLng: coords.lng,
+        });
+      } else if (kind === "pickup" && hasFlipyRouteLocation(deliveryPoint)) {
+        schedulePrefetchQuote({
+          originLat: coords.lat,
+          originLng: coords.lng,
+          destinationLat: deliveryPoint.lat,
+          destinationLng: deliveryPoint.lng,
+        });
       }
-      const quote = quoted.fleteQuote;
-      setFleteQuote(quote);
-      // Always apply cotización when route/package changes — merchant offer
-      // must follow the new recommended fare (not stale Shopify shipping).
-      setFletePrice(String(quote.recommendedFare));
-    })();
+    },
+    [
+      pickupPoint.lat,
+      pickupPoint.lng,
+      deliveryPoint.lat,
+      deliveryPoint.lng,
+      schedulePrefetchQuote,
+    ],
+  );
+
+  useEffect(() => {
+    if (!open || step !== "ruta" || !routeKey || !coordsReady) return;
+
+    const cached = quoteCacheRef.current;
+    if (cached?.routeKey === routeKey && canRecalcFleteLocally(cached.fleteQuote)) {
+      quoteAbortRef.current?.abort();
+      setQuoting(false);
+      const quote = recalcFleteFromDistance(
+        cached.fleteQuote.distanceKm!,
+        packageSize,
+        FLIPY_TYPE_MODE,
+        readQuoteSource(cached.fleteQuote),
+        { durationMinutes: cached.fleteQuote.durationMinutes },
+      );
+      applyQuoteResult(quote, routeKey);
+      return;
+    }
+
+    if (cached?.routeKey === routeKey && cached.fleteQuote) {
+      applyQuoteResult(cached.fleteQuote, routeKey);
+      return;
+    }
+
+    requestRemoteQuote(routeKey, {
+      originLat: pickupPoint.lat,
+      originLng: pickupPoint.lng,
+      destinationLat: deliveryPoint.lat,
+      destinationLng: deliveryPoint.lng,
+    });
   }, [
-    agencySlug,
-    storeSlug,
+    open,
+    step,
+    routeKey,
+    packageSize,
     coordsReady,
     pickupPoint.lat,
     pickupPoint.lng,
     deliveryPoint.lat,
     deliveryPoint.lng,
-    packageSize,
+    applyQuoteResult,
+    readQuoteSource,
+    requestRemoteQuote,
   ]);
+
+  useEffect(() => {
+    return () => {
+      quoteAbortRef.current?.abort();
+      if (prefetchDebounceRef.current) clearTimeout(prefetchDebounceRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || step !== "ruta") return;
@@ -386,12 +532,6 @@ export function FlipyCreateShipmentModal({
     deliveryPoint.lng,
   ]);
 
-  useEffect(() => {
-    if (!open || step !== "ruta" || !coordsReady) return;
-    const timer = window.setTimeout(() => requestQuote(), QUOTE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [open, step, coordsReady, pickupPoint.lat, pickupPoint.lng, deliveryPoint.lat, deliveryPoint.lng, packageSize, requestQuote]);
-
   function applyStoreOriginToPickupCard() {
     if (!storeOrigin) {
       setError("No hay origen de tienda Flipy configurado. Reconecta la integración con dirección completa.");
@@ -424,6 +564,11 @@ export function FlipyCreateShipmentModal({
   function resetFlow() {
     skippedSmartPaymentRef.current = false;
     quoteRequestIdRef.current = 0;
+    quoteCacheRef.current = null;
+    quoteAbortRef.current?.abort();
+    quoteAbortRef.current = null;
+    if (prefetchDebounceRef.current) clearTimeout(prefetchDebounceRef.current);
+    prefetchDebounceRef.current = null;
     setStep("payment");
     setError(null);
     setErrorCode(null);
@@ -1111,6 +1256,7 @@ export function FlipyCreateShipmentModal({
           setPickupCardError(null);
           setError(null);
         }}
+        onLiveCoordsChange={(coords) => handleLivePinCoords(coords, "pickup")}
       />
 
       <FlipyRouteAddressModal
@@ -1133,6 +1279,7 @@ export function FlipyCreateShipmentModal({
           setDeliveryCardError(null);
           setError(null);
         }}
+        onLiveCoordsChange={(coords) => handleLivePinCoords(coords, "delivery")}
       />
     </Dialog>
   );

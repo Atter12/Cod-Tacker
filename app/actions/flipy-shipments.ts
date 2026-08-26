@@ -5,19 +5,15 @@ import { routes } from "@/config/routes";
 import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { IntegrationError, ValidationError } from "@/lib/errors";
 import { createFlipyShipmentForOrder } from "@/lib/integrations/flipy/create-shipment-service";
-import {
-  readFlipyTiendaId,
-  resolveFlipyPartnerKeyFromIntegration,
-} from "@/lib/integrations/flipy/credentials";
-import { createFlipyPartnerClient, type FlipyFleteQuote, type FlipyPackageCareId, type FlipyPackageSize } from "@/lib/integrations/flipy/client";
+import { cotizarFlipyFleteForStore } from "@/lib/integrations/flipy/cotizar-flete-service";
+import type { FlipyPackageCareId, FlipyPackageSize } from "@/lib/integrations/flipy/client";
+import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
 import {
   flipyErrorUserHint,
   readFlipyErrorCode,
 } from "@/lib/integrations/flipy/errors";
-import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { validateFlipyFletePrice } from "@/lib/integrations/flipy/flete-rules";
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
-import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
 import { assertCanManageOrders } from "@/lib/orders/transitions";
 import { can } from "@/lib/permissions/can";
@@ -77,44 +73,18 @@ export async function cotizarFlipyFlete(input: {
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
-    const admin = createAdminClient();
-    const integration = await resolveFlipyIntegrationForStore(
-      admin,
-      membership.agencyId,
-      membership.storeId,
-    );
-    if (!integration || integration.status === "disconnected") {
-      throw new IntegrationError("Conecta Flipy en Integraciones antes de cotizar.");
-    }
-
-    const partnerKey = resolveFlipyPartnerKeyFromIntegration(integration);
-    if (!partnerKey) {
-      throw new IntegrationError("FLIPY_PARTNER_API_KEY no configurada.");
-    }
-
-    const flipyTiendaId = readFlipyTiendaId(integration.settings) ?? integration.external_account_id;
-    if (!flipyTiendaId) {
-      throw new IntegrationError("Integración Flipy sin tiendaId. Reconecta Flipy.");
-    }
-
-    const env = getFlipyEnv();
-    const client = createFlipyPartnerClient({
-      baseUrl: env.apiBaseUrl,
-      partnerKey,
-      partnerId: env.partnerId,
-      externalStoreId: membership.storeId,
-    });
-
-    const quoted = await client.cotizarEnvio({
+    const fleteQuote = await cotizarFlipyFleteForStore({
+      agencyId: membership.agencyId,
+      storeId: membership.storeId,
       originLat: input.originLat,
       originLng: input.originLng,
       destinationLat: input.destinationLat,
       destinationLng: input.destinationLng,
-      packageSize: input.packageSize ?? "mediano",
-      typeMode: input.typeMode ?? "express",
+      packageSize: input.packageSize,
+      typeMode: input.typeMode,
     });
 
-    return actionOk({ fleteQuote: quoted.fleteQuote });
+    return actionOk({ fleteQuote });
   } catch (error) {
     const errorCode = readFlipyErrorCode(error);
     const hint = flipyErrorUserHint(errorCode);

@@ -38,6 +38,8 @@ type Props = {
   defaultContactEmail?: string | null;
   prefetchedEmbed?: FlipyMapEmbedPrefetch | null;
   onSave: (point: FlipyRoutePoint) => void;
+  /** Live pin coords while editing — used to prefetch flete cotización. */
+  onLiveCoordsChange?: (coords: { lat: number; lng: number }) => void;
 };
 
 export function buildMapPrefillKey(input: {
@@ -89,6 +91,7 @@ export function FlipyRouteAddressModal({
   defaultContactEmail = null,
   prefetchedEmbed = null,
   onSave,
+  onLiveCoordsChange,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<FlipyRoutePoint>(value);
@@ -335,6 +338,7 @@ export function FlipyRouteAddressModal({
                   pinConfirmed: true,
                 }));
                 setError(null);
+                onLiveCoordsChange?.({ lat: next.lat, lng: next.lng });
               }}
             />
           ) : (
