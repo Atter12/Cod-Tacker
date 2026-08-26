@@ -495,6 +495,39 @@ export function readFlipyTransferGananciasSuccessResult(
   };
 }
 
+export type FlipyActivateAccountInitInput = {
+  contactEmail: string;
+};
+
+export type FlipyActivateAccountInitResult = {
+  token: string;
+  activationUrl?: string | null;
+  expiresAt?: string | null;
+};
+
+export function buildFlipyActivateAccountInitRequestBody(
+  input: FlipyActivateAccountInitInput,
+): Record<string, unknown> {
+  return { contactEmail: input.contactEmail.trim() };
+}
+
+/** POST /api/partner/activate-account/init — session token for tienda set-password flow. */
+export function readFlipyActivateAccountInitResult(
+  raw: unknown,
+): FlipyActivateAccountInitResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const token = readString(bag, "token", "activationToken", "activation_token");
+  if (!token) return null;
+
+  return {
+    token,
+    activationUrl: readString(bag, "activationUrl", "activation_url", "url"),
+    expiresAt: readString(bag, "expiresAt", "expires_at"),
+  };
+}
+
 function readString(bag: Record<string, unknown>, ...keys: string[]): string | null {
   for (const key of keys) {
     const v = bag[key];

@@ -24,6 +24,7 @@ import {
   readFlipyWalletSaldoResult,
   buildFlipyTransferGananciasRequestBody,
   readFlipyTransferGananciasSuccessResult,
+  readFlipyActivateAccountInitResult,
 } from "@/lib/integrations/flipy/partner-contract";
 import {
   isFlipyDevolucionPendienteConfirmacion,
@@ -139,6 +140,19 @@ describe("flipy partner contract", () => {
     assert.equal(parsed?.billeteraOperaciones, 200);
     assert.equal(parsed?.billeteraGanancias, 39.5);
     assert.equal(parsed?.idempotent, false);
+  });
+
+  it("parses activate-account init response", () => {
+    const parsed = readFlipyActivateAccountInitResult({
+      success: true,
+      token: "act-token-xyz",
+      activationUrl: "https://tienda.flipyexpress.com/activar-cuenta?token=act-token-xyz",
+      expiresAt: "2026-08-26T21:30:00.000Z",
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.token, "act-token-xyz");
+    assert.match(parsed?.activationUrl ?? "", /activar-cuenta/);
   });
 });
 

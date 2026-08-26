@@ -23,6 +23,8 @@ import {
   readFlipyWalletSaldoResult,
   buildFlipyTransferGananciasRequestBody,
   readFlipyTransferGananciasSuccessResult,
+  buildFlipyActivateAccountInitRequestBody,
+  readFlipyActivateAccountInitResult,
   type FlipyCalificarEnvioInput,
   type FlipyCalificarEnvioSuccessResult,
   type FlipyCancelEnvioInput,
@@ -40,6 +42,8 @@ import {
   type FlipyPackageCareId,
   type FlipyPackageSize,
   type FlipyShopifyPaymentInput,
+  type FlipyActivateAccountInitInput,
+  type FlipyActivateAccountInitResult,
   type FlipyTransferGananciasInput,
   type FlipyTransferGananciasSuccessResult,
   type FlipyTypeMode,
@@ -62,6 +66,8 @@ export type {
   FlipyPackageCareId,
   FlipyPackageSize,
   FlipyShopifyPaymentInput,
+  FlipyActivateAccountInitInput,
+  FlipyActivateAccountInitResult,
   FlipyTransferGananciasInput,
   FlipyTransferGananciasSuccessResult,
   FlipyTypeMode,
@@ -273,6 +279,20 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       const parsed = readFlipyTransferGananciasSuccessResult(raw);
       if (!parsed) {
         throw new FlipyPartnerApiError("Flipy no devolvió respuesta de transferencia", 502);
+      }
+      return parsed;
+    },
+
+    async initActivateAccount(
+      input: FlipyActivateAccountInitInput,
+    ): Promise<FlipyActivateAccountInitResult> {
+      const raw = await request<unknown>("/api/partner/activate-account/init", {
+        method: "POST",
+        body: buildFlipyActivateAccountInitRequestBody(input),
+      });
+      const parsed = readFlipyActivateAccountInitResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió token de activación", 502);
       }
       return parsed;
     },

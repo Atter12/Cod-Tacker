@@ -65,12 +65,14 @@ describe("flipy embed-urls", () => {
       contactEmail: "integracionFC@gmail.com",
       externalStoreId: "store-uuid",
       flipyTiendaId: "tienda-1",
+      token: "act-token-xyz",
     });
     assert.match(url, /^https:\/\/tienda\.flipyexpress\.com\/activar-cuenta\?/);
     assert.match(url, /email=integracionFC%40gmail\.com/);
     assert.match(url, /source=codtracked/);
     assert.match(url, /externalStoreId=store-uuid/);
     assert.match(url, /tiendaId=tienda-1/);
+    assert.match(url, /token=act-token-xyz/);
   });
 
   it("builds app login URL with email prefill", () => {

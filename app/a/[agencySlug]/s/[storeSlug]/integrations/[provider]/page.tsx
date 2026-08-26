@@ -293,13 +293,10 @@ export default async function IntegrationDetailPage({
           />
           {flipyContactEmail && flipyEnv ? (
             <FlipyAppAccessPanel
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
               appOrigin={flipyEnv.appOrigin}
               contactEmail={flipyContactEmail}
-              activationPath={flipyEnv.appActivationPath}
-              externalStoreId={member.storeId}
-              flipyTiendaId={
-                readFlipyTiendaId(integration.settings) ?? integration.external_account_id
-              }
             />
           ) : null}
           <FlipyWalletRecargaPanel

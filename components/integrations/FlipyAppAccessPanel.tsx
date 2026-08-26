@@ -1,38 +1,49 @@
 "use client";
 
-import {
-  buildFlipyAppActivationUrl,
-  buildFlipyAppLoginUrl,
-} from "@/lib/integrations/flipy/embed-urls";
+import { useState, useTransition } from "react";
+import { issueFlipyActivationUrlAction } from "@/app/actions/flipy-activation";
+import { buildFlipyAppLoginUrl } from "@/lib/integrations/flipy/embed-urls";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 
 type Props = {
+  agencySlug: string;
+  storeSlug: string;
   appOrigin: string;
   contactEmail: string;
-  activationPath?: string;
-  externalStoreId?: string | null;
-  flipyTiendaId?: string | null;
   /** Shown right after a successful connect in the form. */
   highlightAfterConnect?: boolean;
 };
 
 export function FlipyAppAccessPanel({
+  agencySlug,
+  storeSlug,
   appOrigin,
   contactEmail,
-  activationPath,
-  externalStoreId = null,
-  flipyTiendaId = null,
   highlightAfterConnect = false,
 }: Props) {
-  const activationUrl = buildFlipyAppActivationUrl({
-    appOrigin,
-    contactEmail,
-    activationPath,
-    externalStoreId,
-    flipyTiendaId,
-  });
   const loginUrl = buildFlipyAppLoginUrl({ appOrigin, contactEmail });
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  function openActivation() {
+    setError(null);
+    start(async () => {
+      const result = await issueFlipyActivationUrlAction({
+        agencySlug,
+        storeSlug,
+        contactEmail,
+      });
+      if (result.error || !result.activationUrl) {
+        setError(
+          result.error ??
+            "No se pudo iniciar la activación. Verifica que Flipy esté conectado e intenta de nuevo.",
+        );
+        return;
+      }
+      window.open(result.activationUrl, "_blank", "noopener,noreferrer");
+    });
+  }
 
   return (
     <div className="rounded-lg border border-border bg-surface-elevated p-4">
@@ -53,12 +64,18 @@ export function FlipyAppAccessPanel({
         </div>
       ) : null}
 
+      {error ? (
+        <div className="mt-3">
+          <Alert variant="warning" title="Activación Flipy">
+            {error}
+          </Alert>
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap gap-2">
-        <a href={activationUrl} target="_blank" rel="noopener noreferrer">
-          <Button size="sm" type="button">
-            Activar cuenta en Flipy
-          </Button>
-        </a>
+        <Button size="sm" type="button" disabled={pending} onClick={() => openActivation()}>
+          {pending ? "Preparando enlace…" : "Activar cuenta en Flipy"}
+        </Button>
         <a
           href={loginUrl}
           target="_blank"
@@ -70,8 +87,9 @@ export function FlipyAppAccessPanel({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
-        COD-tracked no guarda ni pide tu contraseña de Flipy. Si la página de activación no carga,
-        usa «Olvidé mi contraseña» en la app Flipy con el mismo correo.
+        COD-tracked no guarda ni pide tu contraseña de Flipy. El enlace de activación es de un solo
+        uso y caduca en pocos minutos; si expira, vuelve a pulsar «Activar cuenta en Flipy». Si ya
+        activaste, usa «Entrar» o «Olvidé mi contraseña» en la app Flipy.
       </p>
     </div>
   );
