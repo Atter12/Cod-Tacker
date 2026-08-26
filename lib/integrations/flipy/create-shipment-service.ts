@@ -7,6 +7,7 @@ import {
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
+import { deriveCodAmountFromD3 } from "@/lib/integrations/flipy/labels";
 import { validateFlipyFletePrice } from "@/lib/integrations/flipy/flete-rules";
 import {
   mapShopifyPackageCare,
@@ -263,11 +264,11 @@ export async function createFlipyShipmentForOrder(input: {
   const operationalMode = paymentResolution.flipyFulfillmentMode ?? (smartEligible ? "smart" : "bid");
   const fleteQuote = input.fleteQuote ?? null;
 
-  const codAmount =
-    input.escenarioPago === "1A"
-      ? null
-      : paymentResolution.codAmount ??
-        (order.subtotal_amount > 0 ? order.subtotal_amount : null);
+  const codAmount = deriveCodAmountFromD3(
+    input.escenarioPago,
+    paymentResolution,
+    order.subtotal_amount,
+  );
 
   const fleteValidation = validateFlipyFletePrice(
     input.escenarioPago,

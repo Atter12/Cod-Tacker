@@ -29,9 +29,14 @@ import {
   validateFlipyFletePrice,
 } from "@/lib/integrations/flipy/flete-rules";
 import {
+  buildFlipyShopifyPaymentSummary,
+  deriveCodAmountFromD3,
   flipyEscenarioOptionsForUi,
   initialFlipyEscenarioForUi,
   labelFlipyEscenario,
+  shouldSkipFlipyCodPaymentStep,
+  shouldSuggestFlipyEscenario1DForYape,
+  FLIPY_YAPE_COD_TOPE,
 } from "@/lib/integrations/flipy/labels";
 import {
   FLIPY_PACKAGE_CARE_IDS,
@@ -96,7 +101,7 @@ type CreateResult = {
 };
 
 const PACKAGE_SIZES: FlipyPackageSize[] = ["pequeno", "mediano", "grande"];
-const QUOTE_DEBOUNCE_MS = 500;
+const QUOTE_DEBOUNCE_MS = 150;
 
 function buildInitialPickup(storeOrigin: FlipyStoreOriginDefaults | null): FlipyRoutePoint {
   if (!storeOrigin) return emptyFlipyRoutePoint();
@@ -180,6 +185,13 @@ export function FlipyCreateShipmentModal({
     () => flipyEscenarioOptionsForUi(paymentResolution),
     [paymentResolution],
   );
+  const shopifyPaymentSummary = useMemo(
+    () =>
+      buildFlipyShopifyPaymentSummary(paymentResolution, (value) =>
+        formatCurrency(value, currencyCode),
+      ),
+    [paymentResolution, currencyCode],
+  );
   const skippedSmartPaymentRef = useRef(false);
   const quoteRequestIdRef = useRef(0);
 
@@ -190,6 +202,10 @@ export function FlipyCreateShipmentModal({
   const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [escenario, setEscenario] = useState<FlipyEscenarioPago>(() =>
     initialFlipyEscenarioForUi(paymentResolution),
+  );
+  const codAmountForEscenario = useMemo(
+    () => deriveCodAmountFromD3(escenario, paymentResolution),
+    [escenario, paymentResolution],
   );
 
   const [pickupPoint, setPickupPoint] = useState<FlipyRoutePoint>(() =>
@@ -277,11 +293,19 @@ export function FlipyCreateShipmentModal({
       setFleteQuote(quote);
       if (fleteLocked) {
         setFletePrice(String(quote.recommendedFare));
-      } else if (!fletePrice.trim()) {
-        setFletePrice(initialFleteInputValue(escenario, paymentResolution.suggestedFlete, {
-          smartEligible,
-          fleteQuote: quote,
-        }));
+      } else {
+        // Always seed from cotización when empty/invalid so the offer card
+        // does not stay on "—" after a multi-second Flipy Directions call.
+        const current = Number.parseFloat(fletePrice.trim());
+        const needsSeed = !fletePrice.trim() || !Number.isFinite(current) || current <= 0;
+        if (needsSeed) {
+          setFletePrice(
+            initialFleteInputValue(escenario, paymentResolution.suggestedFlete, {
+              smartEligible,
+              fleteQuote: quote,
+            }) || String(quote.recommendedFare),
+          );
+        }
       }
     });
   }, [
@@ -361,6 +385,7 @@ export function FlipyCreateShipmentModal({
     return () => {
       cancelled = true;
     };
+    // Prefetch only when coords change — not on every reverse-geocode address string.
   }, [
     open,
     step,
@@ -371,10 +396,8 @@ export function FlipyCreateShipmentModal({
     storeOrigin,
     prefillAddress,
     prefillCoords,
-    pickupPoint.address,
     pickupPoint.lat,
     pickupPoint.lng,
-    deliveryPoint.address,
     deliveryPoint.lat,
     deliveryPoint.lng,
   ]);
@@ -472,7 +495,7 @@ export function FlipyCreateShipmentModal({
       skippedSmartPaymentRef.current = false;
       return;
     }
-    if (!smartEligible || skippedSmartPaymentRef.current) return;
+    if (!shouldSkipFlipyCodPaymentStep(paymentResolution) || skippedSmartPaymentRef.current) return;
     if (step !== "payment") return;
     skippedSmartPaymentRef.current = true;
     setEscenario("1A");
@@ -481,7 +504,7 @@ export function FlipyCreateShipmentModal({
     );
     goToRutaStep();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot skip on open
-  }, [open, smartEligible]);
+  }, [open, paymentResolution]);
 
   function loadWalletEmbed() {
     setError(null);
@@ -645,8 +668,33 @@ export function FlipyCreateShipmentModal({
         {step === "payment" ? (
           <div className="space-y-3">
             <Alert variant="info" title="Modalidad de pago">
-              El flete no viene prepagado en Shopify. Elige cómo cobrará el motorizado (1C, 1E o 1D).
+              {shopifyPaymentSummary.alertBody}
             </Alert>
+            <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Montos según Shopify
+              </p>
+              <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div>
+                  <dt className="text-text-secondary">Producto</dt>
+                  <dd className="font-medium">{shopifyPaymentSummary.productLabel}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">Envío en checkout</dt>
+                  <dd className="font-medium">{shopifyPaymentSummary.shippingLabel}</dd>
+                </div>
+                {shopifyPaymentSummary.codProductLabel ? (
+                  <div className="sm:col-span-2">
+                    <dt className="text-text-secondary">COD producto (codAmount → Flipy)</dt>
+                    <dd className="font-medium">{shopifyPaymentSummary.codProductLabel}</dd>
+                  </div>
+                ) : null}
+                <div className="sm:col-span-2">
+                  <dt className="text-text-secondary">Cobro en destino (D3)</dt>
+                  <dd className="font-medium">{shopifyPaymentSummary.destinoCobroLabel}</dd>
+                </div>
+              </dl>
+            </div>
             {paymentResolution.suggestedEscenario === "1C" ||
             paymentResolution.suggestedEscenario === "1E" ||
             paymentResolution.suggestedEscenario === "1D" ? (
@@ -686,6 +734,12 @@ export function FlipyCreateShipmentModal({
                 </label>
               ))}
             </fieldset>
+            {shouldSuggestFlipyEscenario1DForYape(escenario, codAmountForEscenario) ? (
+              <Alert variant="warning" title="Tope Yape">
+                El COD producto supera S/ {FLIPY_YAPE_COD_TOPE}. Flipy puede rechazar 1C — considera 1D (cobro digital
+                en rastreo).
+              </Alert>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => closeModal(false)}>
                 Cancelar
@@ -808,7 +862,13 @@ export function FlipyCreateShipmentModal({
               quoteError={quoteError}
               fleteQuote={fleteQuote}
               coordsReady={coordsReady}
-              validationError={fleteValidation.ok ? null : fleteValidation.error}
+              validationError={
+                quoting || !coordsReady
+                  ? null
+                  : fleteValidation.ok
+                    ? null
+                    : fleteValidation.error
+              }
             />
 
             <FormField label="Notas para el motorizado (opcional)" htmlFor="flipy-notes">
@@ -850,6 +910,14 @@ export function FlipyCreateShipmentModal({
                 <dt className="text-text-secondary">Escenario</dt>
                 <dd className="font-medium">{escenarioLabel}</dd>
               </div>
+              {codAmountForEscenario != null ? (
+                <div>
+                  <dt className="text-text-secondary">COD producto (Flipy)</dt>
+                  <dd className="font-medium">
+                    {formatCurrency(codAmountForEscenario, currencyCode)}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-text-secondary">Recojo</dt>
                 <dd>{pickupPoint.address}</dd>

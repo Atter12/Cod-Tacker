@@ -163,6 +163,21 @@ export function FlipyLocationEmbed({
       setLiveCoords({ lat: confirmed.lat, lng: confirmed.lng });
 
       if (needsGeocode) {
+        // Optimistic UI: show pin coords / provisional address immediately,
+        // then upgrade via reverse-geocode (often 2–4s via Flipy API).
+        const provisionalAddress =
+          confirmed.address.trim() && !isWeakLocationAddress(confirmed.address)
+            ? confirmed.address.trim()
+            : `Ubicación ${formatCoordsLabel(confirmed.lat, confirmed.lng)}`;
+        setLiveAddress(provisionalAddress);
+        setSyncStatus(
+          `Pin actualizado · ${formatCoordsLabel(confirmed.lat, confirmed.lng)} · refinando dirección…`,
+        );
+        onConfirmedRef.current({
+          address: provisionalAddress,
+          lat: confirmed.lat,
+          lng: confirmed.lng,
+        });
         void resolveAddressFromPin({
           lat: confirmed.lat,
           lng: confirmed.lng,

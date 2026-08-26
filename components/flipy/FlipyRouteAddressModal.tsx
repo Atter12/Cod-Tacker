@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyLocationEmbed } from "@/components/flipy/FlipyLocationEmbed";
 import type { FlipyStoreOriginDefaults } from "@/lib/integrations/flipy/route-address";
@@ -97,6 +97,7 @@ export function FlipyRouteAddressModal({
   const [mapNonce, setMapNonce] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadedPrefillKeyRef = useRef<string | null>(null);
 
   const title = kind === "pickup" ? "Recojo" : "Entrega";
   const isPickup = kind === "pickup";
@@ -110,26 +111,32 @@ export function FlipyRouteAddressModal({
   const mapPrefillKey = buildMapPrefillKey(mapPrefill);
 
   useEffect(() => {
-    if (!open) {
-      setEmbedUrl(null);
-      setLoadError(null);
-      return;
-    }
+    if (!open) return;
     setDraft(value);
     setError(null);
+    setLoadError(null);
   }, [open, value]);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     const hasWarmPrefetch = prefetchedEmbed?.prefillKey === mapPrefillKey;
+    const alreadyLoadedForKey =
+      Boolean(embedUrl) && loadedPrefillKeyRef.current === mapPrefillKey;
 
+    // Prefer warm token — skip blank state and avoid remounting the iframe.
     if (hasWarmPrefetch) {
-      setEmbedUrl(prefetchedEmbed.embedUrl);
-      setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
+      if (!alreadyLoadedForKey || embedUrl !== prefetchedEmbed.embedUrl) {
+        setEmbedUrl(prefetchedEmbed.embedUrl);
+        setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
+        setMapNonce((n) => n + 1);
+        loadedPrefillKeyRef.current = mapPrefillKey;
+      }
       setLoadError(null);
-      setMapNonce((n) => n + 1);
+      return;
     }
+
+    if (alreadyLoadedForKey) return;
 
     startTransition(async () => {
       const tokenResult = await issueFlipyWidgetTokenAction({
@@ -142,14 +149,13 @@ export function FlipyRouteAddressModal({
       });
       if (cancelled) return;
       if (tokenResult.error || !tokenResult.embedUrl) {
-        if (!hasWarmPrefetch) {
-          setLoadError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
-        }
+        setLoadError(tokenResult.error ?? "No se pudo cargar el mapa Flipy.");
         return;
       }
       setEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
       setLoadError(null);
+      loadedPrefillKeyRef.current = mapPrefillKey;
       setMapNonce((n) => n + 1);
     });
 
@@ -167,6 +173,7 @@ export function FlipyRouteAddressModal({
     mapPrefill.address,
     mapPrefill.lat,
     mapPrefill.lng,
+    embedUrl,
   ]);
 
   function reloadMap(input: {
@@ -190,6 +197,7 @@ export function FlipyRouteAddressModal({
       }
       setEmbedUrl(tokenResult.embedUrl);
       setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
+      loadedPrefillKeyRef.current = buildMapPrefillKey(input);
       setMapNonce((n) => n + 1);
     });
   }
