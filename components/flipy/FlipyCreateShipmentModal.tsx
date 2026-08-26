@@ -9,6 +9,7 @@ import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
 import { FlipyConfirmStepPanel } from "@/components/flipy/FlipyConfirmStepPanel";
 import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
+import { FlipyMapWarmup } from "@/components/flipy/FlipyMapWarmup";
 import { FlipyPaymentStepPanel } from "@/components/flipy/FlipyPaymentStepPanel";
 import { FlipyRutaStepPanel } from "@/components/flipy/FlipyRutaStepPanel";
 import { FlipyWizardFooter } from "@/components/flipy/FlipyWizardFooter";
@@ -495,7 +496,7 @@ export function FlipyCreateShipmentModal({
   }, []);
 
   useEffect(() => {
-    if (!open || step !== "ruta") return;
+    if (!open || step === "success" || step === "recarga") return;
     let cancelled = false;
 
     const pickupPrefill = resolveMapPrefill({
@@ -510,8 +511,17 @@ export function FlipyCreateShipmentModal({
       isPickup: false,
       storeOrigin,
     });
+    const pickupKey = buildMapPrefillKey(pickupPrefill);
+    const deliveryKey = buildMapPrefillKey(deliveryPrefill);
 
-    startTransition(async () => {
+    if (
+      mapEmbedPrefetch.pickup?.prefillKey === pickupKey &&
+      mapEmbedPrefetch.delivery?.prefillKey === deliveryKey
+    ) {
+      return;
+    }
+
+    void (async () => {
       const [pickupToken, deliveryToken] = await Promise.all([
         issueFlipyWidgetTokenAction({
           agencySlug,
@@ -538,7 +548,7 @@ export function FlipyCreateShipmentModal({
             ? {
                 embedUrl: pickupToken.embedUrl,
                 embedOrigin: pickupToken.embedOrigin ?? embedOrigin,
-                prefillKey: buildMapPrefillKey(pickupPrefill),
+                prefillKey: pickupKey,
               }
             : null,
         delivery:
@@ -546,11 +556,11 @@ export function FlipyCreateShipmentModal({
             ? {
                 embedUrl: deliveryToken.embedUrl,
                 embedOrigin: deliveryToken.embedOrigin ?? embedOrigin,
-                prefillKey: buildMapPrefillKey(deliveryPrefill),
+                prefillKey: deliveryKey,
               }
             : null,
       });
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -570,6 +580,8 @@ export function FlipyCreateShipmentModal({
     pickupPoint.lng,
     deliveryPoint.lat,
     deliveryPoint.lng,
+    mapEmbedPrefetch.pickup?.prefillKey,
+    mapEmbedPrefetch.delivery?.prefillKey,
   ]);
 
   function applyStoreOriginToPickupCard() {
@@ -804,6 +816,18 @@ export function FlipyCreateShipmentModal({
   const wizardEyebrow = step !== "success" && step !== "recarga" ? "CREAR ENVÍO · FLIPY" : undefined;
   const orderLabel = formatOrderLabel(orderNumber);
 
+  const mapWarmupTargets = useMemo(() => {
+    if (!open || step !== "ruta") return [];
+    const targets: { id: "pickup" | "delivery"; prefetch: FlipyMapEmbedPrefetch }[] = [];
+    if (mapEmbedPrefetch.pickup) {
+      targets.push({ id: "pickup", prefetch: mapEmbedPrefetch.pickup });
+    }
+    if (mapEmbedPrefetch.delivery) {
+      targets.push({ id: "delivery", prefetch: mapEmbedPrefetch.delivery });
+    }
+    return targets;
+  }, [open, step, mapEmbedPrefetch.pickup, mapEmbedPrefetch.delivery]);
+
   const wizardFooter =
     wizardStep && step === "payment"
       ? (
@@ -854,6 +878,7 @@ export function FlipyCreateShipmentModal({
           : null;
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={closeModal}
@@ -1151,5 +1176,7 @@ export function FlipyCreateShipmentModal({
         onLiveCoordsChange={(coords) => handleLivePinCoords(coords, "delivery")}
       />
     </Dialog>
+    <FlipyMapWarmup targets={mapWarmupTargets} />
+    </>
   );
 }

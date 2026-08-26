@@ -15,6 +15,11 @@ import {
 } from "@/lib/integrations/flipy/embed-urls";
 import { parseFlipyLocationMessage } from "@/lib/integrations/flipy/post-message";
 
+function readClientParentOrigin(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.origin;
+}
+
 export type FlipyDestination = {
   address: string;
   lat: number;
@@ -65,7 +70,7 @@ export function FlipyLocationEmbed({
       ? "Mueve el pin en el mapa para elegir la ubicación."
       : "Mueve el pin y confirma con el botón verde del mapa.",
   );
-  const [parentOrigin, setParentOrigin] = useState<string | null>(null);
+  const [parentOrigin] = useState(readClientParentOrigin);
   const shellRef = useRef<HTMLDivElement>(null);
   const onConfirmedRef = useRef(onConfirmed);
   const prefillAddressRef = useRef(prefillAddress);
@@ -75,10 +80,6 @@ export function FlipyLocationEmbed({
   onConfirmedRef.current = onConfirmed;
   prefillAddressRef.current = prefillAddress;
   prefillCoordsRef.current = prefillCoords;
-
-  useEffect(() => {
-    setParentOrigin(window.location.origin);
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -270,6 +271,7 @@ export function FlipyLocationEmbed({
   }
 
   const mapSrc = withFlipyLocationClientParams(embedUrl, parentOrigin, { liveSync });
+  const iframeKey = `${purpose}-${liveSync ? "live" : "standalone"}-${embedUrl}`;
   const addressLabel =
     purpose === "pickup" ? "Dirección de recojo" : "Dirección de entrega";
 
@@ -285,7 +287,7 @@ export function FlipyLocationEmbed({
         data-flipy-map-shell
       >
         <iframe
-          key={mapSrc}
+          key={iframeKey}
           title={purpose === "pickup" ? "Mapa Flipy — recojo" : "Mapa Flipy — entrega"}
           src={mapSrc}
           className={`block w-full border-0 ${mapHeightClassName}`}

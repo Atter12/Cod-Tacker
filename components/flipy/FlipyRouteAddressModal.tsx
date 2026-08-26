@@ -129,10 +129,12 @@ export function FlipyRouteAddressModal({
 
     // Prefer warm token — skip blank state and avoid remounting the iframe.
     if (hasWarmPrefetch) {
-      if (!alreadyLoadedForKey || embedUrl !== prefetchedEmbed.embedUrl) {
-        setEmbedUrl(prefetchedEmbed.embedUrl);
+      const nextUrl = prefetchedEmbed.embedUrl;
+      const urlChanged = embedUrl !== nextUrl;
+      if (!alreadyLoadedForKey || urlChanged) {
+        setEmbedUrl(nextUrl);
         setResolvedEmbedOrigin(prefetchedEmbed.embedOrigin);
-        setMapNonce((n) => n + 1);
+        if (urlChanged) setMapNonce((n) => n + 1);
         loadedPrefillKeyRef.current = mapPrefillKey;
       }
       setLoadError(null);
