@@ -8,6 +8,7 @@ import {
 } from "@/app/actions/flipy-shipments";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
 import { FlipyBidsEmbed } from "@/components/flipy/FlipyBidsEmbed";
+import { FlipyFleteOfferCard } from "@/components/flipy/FlipyFleteOfferCard";
 import { FlipyRouteAddressCard } from "@/components/flipy/FlipyRouteAddressCard";
 import { FlipyRouteAddressModal, buildMapPrefillKey, resolveMapPrefill, type FlipyMapEmbedPrefetch } from "@/components/flipy/FlipyRouteAddressModal";
 import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
@@ -23,7 +24,6 @@ import {
 import { FLIPY_ERROR_CODES } from "@/lib/integrations/flipy/errors";
 import { buildFlipyOperationDeepLink } from "@/lib/integrations/flipy/embed-urls";
 import {
-  getFlipyFleteUiRule,
   initialFleteInputValue,
   isFlipyFleteLocked,
   validateFlipyFletePrice,
@@ -231,10 +231,6 @@ export function FlipyCreateShipmentModal({
 
   const [result, setResult] = useState<CreateResult | null>(null);
 
-  const fleteRule = useMemo(
-    () => getFlipyFleteUiRule(escenario, fleteContext),
-    [escenario, fleteContext],
-  );
   const fleteLocked = isFlipyFleteLocked(fleteContext);
   const fleteValidation = useMemo(
     () => validateFlipyFletePrice(escenario, fletePrice, { ...fleteContext, fleteQuote }),
@@ -804,50 +800,16 @@ export function FlipyCreateShipmentModal({
               </FormField>
             </div>
 
-            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-              <FormField label={fleteRule.label} htmlFor="flipy-flete" hint={fleteRule.hint}>
-                <Input
-                  id="flipy-flete"
-                  inputMode="decimal"
-                  value={fletePrice}
-                  readOnly={fleteLocked}
-                  disabled={fleteLocked}
-                  onChange={(e) => setFletePrice(e.target.value)}
-                  placeholder={
-                    fleteQuote?.recommendedFare != null
-                      ? String(fleteQuote.recommendedFare)
-                      : paymentResolution.suggestedFlete
-                        ? String(paymentResolution.suggestedFlete)
-                        : "15.00"
-                  }
-                  className={fleteLocked ? "bg-muted/50" : undefined}
-                />
-              </FormField>
-              {quoting ? (
-                <p className="text-xs text-text-secondary">Cotizando flete…</p>
-              ) : quoteError ? (
-                <p className="text-xs text-danger">{quoteError}</p>
-              ) : fleteQuote ? (
-                <p className="text-xs text-text-secondary">
-                  Cotización Flipy: {formatCurrency(fleteQuote.recommendedFare, currencyCode)}
-                  {fleteQuote.distanceKm != null ? ` · ${fleteQuote.distanceKm.toFixed(1)} km` : ""}
-                  {fleteQuote.durationMinutes != null ? ` · ~${fleteQuote.durationMinutes} min` : ""}
-                  {!fleteLocked && fleteQuote.minOffer != null && fleteQuote.maxOffer != null
-                    ? ` · rango S/ ${fleteQuote.minOffer.toFixed(2)}–${fleteQuote.maxOffer.toFixed(2)}`
-                    : ""}
-                </p>
-              ) : coordsReady ? (
-                <p className="text-xs text-text-secondary">Completa recojo y entrega para cotizar.</p>
-              ) : (
-                <p className="text-xs text-text-secondary">Indica recojo y entrega para cotizar el flete.</p>
-              )}
-              {fleteValidation.ok && fleteValidation.value != null ? (
-                <p className="text-xs font-medium text-text-primary">
-                  {fleteLocked ? "Flete fijo" : "Oferta"}:{" "}
-                  {formatCurrency(fleteValidation.value, currencyCode)}
-                </p>
-              ) : null}
-            </div>
+            <FlipyFleteOfferCard
+              value={fletePrice}
+              onChange={setFletePrice}
+              locked={fleteLocked}
+              quoting={quoting}
+              quoteError={quoteError}
+              fleteQuote={fleteQuote}
+              coordsReady={coordsReady}
+              validationError={fleteValidation.ok ? null : fleteValidation.error}
+            />
 
             <FormField label="Notas para el motorizado (opcional)" htmlFor="flipy-notes">
               <Input
