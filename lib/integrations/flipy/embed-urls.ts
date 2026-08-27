@@ -182,11 +182,32 @@ export type FlipyWalletEmbedParams = {
   token: string;
 };
 
+/**
+ * Partner wallet top-up embed. Requests light chrome for COD-tracked hosts
+ * (Flipy panel may honor `theme=light` / `appearance=light`).
+ */
 export function buildFlipyWalletEmbedUrl(input: FlipyWalletEmbedParams): string {
   const base = normalizeFlipyEmbedOrigin(input.embedOrigin);
   const url = new URL(`${base}/partner/recarga`);
   url.searchParams.set("token", input.token);
+  url.searchParams.set("theme", "light");
+  url.searchParams.set("appearance", "light");
+  url.searchParams.set("partner", "codtracked");
   return url.toString();
+}
+
+/** Prefer light theme on any wallet embed URL (API or fallback). */
+export function withFlipyWalletLightTheme(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl);
+    if (!url.pathname.includes("/partner/recarga")) return embedUrl;
+    url.searchParams.set("theme", "light");
+    url.searchParams.set("appearance", "light");
+    url.searchParams.set("partner", "codtracked");
+    return url.toString();
+  } catch {
+    return embedUrl;
+  }
 }
 
 export type FlipyBidsEmbedParams = {

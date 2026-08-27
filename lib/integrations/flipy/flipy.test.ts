@@ -45,6 +45,9 @@ describe("flipy embed-urls", () => {
     });
     assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/recarga\?/);
     assert.match(url, /token=jwt-token/);
+    assert.match(url, /theme=light/);
+    assert.match(url, /appearance=light/);
+    assert.match(url, /partner=codtracked/);
   });
 
   it("builds tienda operation web URL for envío", () => {

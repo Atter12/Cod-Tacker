@@ -7,7 +7,7 @@ import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl } from "@/lib/integrations/flipy/embed-urls";
+import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl, withFlipyWalletLightTheme } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -130,17 +130,19 @@ export async function issueFlipyWidgetTokenAction(input: {
     try {
       embedUrl =
         scope === "wallet_topup"
-          ? resolveFlipyScopedEmbedUrl({
-              scope: "wallet_topup",
-              apiEmbedUrl: issued.recargaEmbedUrl,
-              embedOrigin: env.embedOrigin,
-              appOrigin: env.appOrigin,
-              buildFallback: () =>
-                buildFlipyWalletEmbedUrl({
-                  embedOrigin: env.embedOrigin,
-                  token: issued.token,
-                }),
-            })
+          ? withFlipyWalletLightTheme(
+              resolveFlipyScopedEmbedUrl({
+                scope: "wallet_topup",
+                apiEmbedUrl: issued.recargaEmbedUrl,
+                embedOrigin: env.embedOrigin,
+                appOrigin: env.appOrigin,
+                buildFallback: () =>
+                  buildFlipyWalletEmbedUrl({
+                    embedOrigin: env.embedOrigin,
+                    token: issued.token,
+                  }),
+              }),
+            )
           : scope === "bids_panel"
             ? resolveFlipyScopedEmbedUrl({
                 scope: "bids_panel",

@@ -274,9 +274,14 @@ export function FlipyTransferGananciasPanel({
       </div>
 
       {walletEmbedUrl ? (
-        <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+        <div className="space-y-3 rounded-[11px] border border-border bg-brand-softer/40 p-4 shadow-[var(--card-shadow)]">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-text-secondary">Recarga Operaciones (embed Flipy)</p>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Recargar operaciones</p>
+              <p className="text-[12px] text-text-secondary">
+                Pago con tarjeta vía Flipy · mínimo S/ 10
+              </p>
+            </div>
             <Button size="sm" variant="outline" onClick={() => closeWalletTopup()}>
               Cerrar
             </Button>
