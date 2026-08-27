@@ -91,53 +91,38 @@ export function FlipyAppAccessPanel({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface-elevated p-4">
-      <h2 className="text-sm font-semibold">Acceso a la app tienda Flipy</h2>
-      <p className="mt-1 text-[12.5px] leading-relaxed text-text-secondary">
-        La integración creó tu tienda en Flipy con{" "}
-        <span className="font-medium text-text-primary">{contactEmail}</span>, sin contraseña.
-        Para operar en la app móvil o web de Flipy (fuera de los embeds de COD-tracked), activa
-        tu cuenta y define una contraseña en Flipy. CT certifica el correo verificado vía partner
-        trust (v0.2.1) — sin OTP duplicado en Flipy.
-      </p>
-
-      <ul className="mt-3 flex flex-wrap gap-2 text-[11px]">
-        <li
-          className={
-            emailVerified
-              ? "rounded-full bg-success/10 px-2 py-0.5 font-medium text-success"
-              : "rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning"
-          }
+    <div className="rounded-[11px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)] sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <h2 className="text-sm font-semibold text-text-primary">Acceso a la app tienda Flipy</h2>
+          <p className="text-[12.5px] text-text-secondary">
+            Opera fuera de los embeds de COD-tracked con el mismo correo de tienda.
+          </p>
+        </div>
+        <a
+          href={loginUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-brand-primary px-3 text-xs font-medium text-white transition-colors hover:bg-brand-primary/90"
         >
-          Email {emailVerified ? "verificado" : "pendiente verificación"}
-        </li>
-        <li
-          className={
-            alreadyActivated
-              ? "rounded-full bg-success/10 px-2 py-0.5 font-medium text-success"
-              : activationReady
-                ? "rounded-full bg-info/10 px-2 py-0.5 font-medium text-info"
-                : "rounded-full bg-muted px-2 py-0.5 font-medium text-text-secondary"
-          }
-        >
-          {alreadyActivated ? "Contraseña creada" : activationReady ? "Pendiente contraseña" : "Sin activar"}
-        </li>
-      </ul>
+          Entrar en Flipy ↗
+        </a>
+      </div>
 
       {alreadyActivated ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="success" title="Cuenta Flipy activa">
-            Ya puedes iniciar sesión en la app Flipy con este correo.
+            Ya puedes iniciar sesión en la app móvil o web con este correo.
           </Alert>
         </div>
       ) : activationReady ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="info" title="Pendiente de contraseña">
             Falta crear tu contraseña en Flipy para usar la app fuera de COD-tracked.
           </Alert>
         </div>
       ) : !emailVerified ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="warning" title="Correo no verificado">
             Verifica el correo operativo de la tienda en Configuración antes de activar la app Flipy.
           </Alert>
@@ -145,7 +130,7 @@ export function FlipyAppAccessPanel({
       ) : null}
 
       {highlightAfterConnect && !alreadyActivated ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="success" title="Flipy conectado">
             Siguiente paso: activa tu acceso a la app Flipy con el correo verificado de la tienda.
           </Alert>
@@ -153,41 +138,69 @@ export function FlipyAppAccessPanel({
       ) : null}
 
       {error ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="warning" title="Activación Flipy">
             {error}
           </Alert>
         </div>
       ) : null}
       {info ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Alert variant="info" title="Flipy">
             {info}
           </Alert>
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {!alreadyActivated && activationReady ? (
+      {!alreadyActivated && activationReady ? (
+        <div className="mt-4">
           <Button size="sm" type="button" disabled={pending} onClick={() => openActivation()}>
             {pending ? "Preparando enlace…" : "Activar cuenta en Flipy"}
           </Button>
-        ) : null}
-        <a
-          href={loginUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted"
-        >
-          {alreadyActivated ? "Entrar en Flipy" : "Ya tengo contraseña → Entrar"}
-        </a>
-      </div>
+        </div>
+      ) : null}
 
-      <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
-        COD-tracked no guarda ni pide tu contraseña de Flipy. Un correo operativo = una tienda Flipy
-        (limitación Flipy). El enlace de activación caduca en ~1 hora; si expira, vuelve a pulsar
-        «Activar cuenta en Flipy».
-      </p>
+      <div className="mt-4 grid gap-4 border-t border-dashed border-border pt-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+            Correo operativo
+          </p>
+          <p className="truncate text-sm font-medium text-text-primary">{contactEmail}</p>
+          <ul className="flex flex-wrap gap-1.5">
+            <li
+              className={
+                emailVerified
+                  ? "rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success"
+                  : "rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+              }
+            >
+              {emailVerified ? "Email verificado" : "Email pendiente"}
+            </li>
+            <li
+              className={
+                alreadyActivated
+                  ? "rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success"
+                  : activationReady
+                    ? "rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand-primary"
+                    : "rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+              }
+            >
+              {alreadyActivated
+                ? "Contraseña creada"
+                : activationReady
+                  ? "Pendiente contraseña"
+                  : "Sin activar"}
+            </li>
+          </ul>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+            Certificación
+          </p>
+          <p className="text-sm font-medium text-text-primary">Partner Trust v0.2.1</p>
+          <p className="text-[12px] text-text-secondary">Sin OTP duplicado en Flipy</p>
+        </div>
+      </div>
     </div>
   );
 }

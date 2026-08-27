@@ -147,7 +147,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | 1 | Webhooks `shipment.created` / `assigned` / `smart_fallback_to_bid` | ✅ `flipy.shipment.lifecycle` | ⏳ `smoke:v02` + staging |
 | 2 | Matriz D3 — 4 casos pago parcial | ✅ resolve-payment + create v0.2 | ⏳ `e2e:v02` manual |
 | 3 | Auto-create v0.2 smart + cotizar server-side | ✅ `flipy-auto-create-shipment` | ⏳ |
-| 4 | Regresión v0.1.1 sin `flipy_v02` | ✅ `v02-create-extensions` gate | ⏳ |
+| 4 | Partner API v0.2 always on | ✅ `readFlipyV02Enabled` → true | — |
 | 5 | Smoke CT espejo Flipy A4 | ✅ `scripts/flipy-v0.2-smoke.ts` | ⏳ coordinar A4 |
 | 6 | Freeze `PARTNER_CODTRACKED.md` 0.2.0 | ✅ draft CT | ⏳ espejo Flipy post-A4 |
 
@@ -156,7 +156,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 - [ ] `npm run smoke:v02` green contra staging Flipy (A4)
 - [ ] 4 casos D3 verificados en wizard + metadata `shopify_flipy_payment`
 - [ ] D1 fallback probado (`smart_fallback_to_bid` → alerta + pujas)
-- [ ] Tienda sin `flipy_v02` sigue create v0.1.1
+- [x] v0.2 es el contrato actual (sin opt-in `flipy_v02`)
 - [ ] `PARTNER_CODTRACKED.md` 0.2.0 sincronizado ambos repos
 
 ---

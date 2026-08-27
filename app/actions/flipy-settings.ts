@@ -8,13 +8,11 @@ import {
   mergeFlipyAutoCreateSettings,
   mergeFlipyEmbedBidsEvalSettings,
   mergeFlipyPickupKeywords,
-  mergeFlipyV02Settings,
   normalizePickupKeywordInput,
   readFlipyAutoCreateEnabled,
   readFlipyAutoCreateMinConfidence,
   readFlipyEmbedBidsEvalEnabled,
   readFlipyPickupKeywords,
-  readFlipyV02Enabled,
   type FlipyAutoCreateMinConfidence,
 } from "@/lib/integrations/flipy/settings";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
@@ -168,53 +166,6 @@ export async function updateFlipyEmbedBidsEvalAction(input: {
 
     revalidatePath(routes.store.integrationDetail(input.agencySlug, input.storeSlug, "flipy"));
     return actionOk({ enabled: readFlipyEmbedBidsEvalEnabled(updated.data.settings) });
-  } catch (error) {
-    return actionFail(error);
-  }
-}
-
-export async function updateFlipyV02SettingsAction(input: {
-  agencySlug: string;
-  storeSlug: string;
-  enabled: boolean;
-}): Promise<ActionResult<{ enabled: boolean }>> {
-  try {
-    await requireUser();
-    const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
-    if (!can(membership.roles, "integrations.manage")) {
-      throw new ValidationError("No tienes permiso para editar integraciones.");
-    }
-    if (!membership.storeId) throw new ValidationError("Tienda inválida.");
-
-    const admin = createAdminClient();
-    const integration = await resolveFlipyIntegrationForStore(
-      admin,
-      membership.agencyId,
-      membership.storeId,
-    );
-    if (!integration || integration.status === "disconnected") {
-      throw new IntegrationError("Conecta Flipy antes de editar v0.2.");
-    }
-
-    const nextSettings = mergeFlipyV02Settings(integration.settings, input.enabled);
-
-    const updated = await admin
-      .from("integrations")
-      .update({
-        settings: nextSettings as Json,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", integration.id)
-      .eq("store_id", membership.storeId)
-      .select("settings")
-      .maybeSingle();
-
-    if (updated.error || !updated.data) {
-      throw new ValidationError("No se pudo guardar la preferencia v0.2.");
-    }
-
-    revalidatePath(routes.store.integrationDetail(input.agencySlug, input.storeSlug, "flipy"));
-    return actionOk({ enabled: readFlipyV02Enabled(updated.data.settings) });
   } catch (error) {
     return actionFail(error);
   }

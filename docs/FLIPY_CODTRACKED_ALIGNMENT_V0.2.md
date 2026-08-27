@@ -414,7 +414,7 @@ Fase A (Flipy API) ──► Fase B (CT UI + mapper) ──► Fase C (E2E + fre
 
 - [ ] Wizard manual: prepago flete → sin paso flete editable
 - [ ] Create body incluye `fulfillmentMode`, `packageSize`, `fleteQuote`, `shopifyPayment` completo
-- [ ] Feature flag `flipy_v02` por tienda (rollout seguro)
+- [x] Partner API v0.2 es el contrato actual (sin feature flag por tienda)
 
 ---
 
@@ -424,7 +424,7 @@ Fase A (Flipy API) ──► Fase B (CT UI + mapper) ──► Fase C (E2E + fre
 | --- | --- | --- | --- |
 | **C1** | E2E staging: 4 casos matriz pagos parciales (D3) | A4 + B4 | ⏳ `npm run e2e:v02` manual |
 | **C1** | Webhook CT: `shipment.created`, `assigned`, `smart_fallback_to_bid` | A3 + CT handler | ✅ |
-| **C1** | Regresión v0.1.1 (CT sin flag sigue funcionando) | A3 retrocompat | ✅ |
+| **C1** | Regresión v0.1.1 — N/A (v0.2 es contrato actual) | — | ✅ |
 | **C2** | Auto-create v0.2: smart en prepago flete, defaults tamaño | B2 + A2 | ✅ |
 | **C3** | Freeze `PARTNER_CODTRACKED.md` v0.2.0 ambos repos | C1 green | ✅ draft CT · ⏳ espejo Flipy |
 | **C3** | Actualizar `FLIPY_INTEGRATION_GATES.md` | C3 | ✅ |
@@ -477,9 +477,7 @@ SMART_ASSIGNMENT_FALLBACK_TIMEOUT_MS=180000
 
 ## Anexo — Feature flag (CT)
 
-```env
-FLIPY_V02_ENABLED=true   # por tienda en settings.integrations.flipy
-```
+**Deprecated.** Partner API v0.2 es el contrato actual. `FLIPY_V02_ENABLED` y `settings.flipy_v02` se ignoran (`readFlipyV02Enabled` siempre true).
 
 ---
 

@@ -5,7 +5,7 @@ import type {
   FlipyOperationalFulfillmentMode,
 } from "@/lib/integrations/flipy/partner-contract";
 
-/** v0.2 fields gated per-store (`flipy_v02`). Returns undefined when disabled (v0.1.1 path). */
+/** v0.2 create-body extensions. `v02Enabled` kept for call-site clarity; product path is always on. */
 export function buildFlipyV02CreateExtensions(input: {
   v02Enabled: boolean;
   smartEligible: boolean;

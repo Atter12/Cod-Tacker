@@ -10,8 +10,6 @@ export type FlipyIntegrationSettings = {
   autoCreateMinConfidence: FlipyAutoCreateMinConfidence;
   /** F4-03 — embed panel pujas (evaluación, opt-in). */
   embedBidsEvalEnabled: boolean;
-  /** v0.2 Partner API rollout per store (§ Fase B B4). */
-  v02Enabled: boolean;
 };
 
 const DEFAULT_PICKUP_KEYWORDS: string[] = [];
@@ -48,13 +46,12 @@ export function readFlipyEmbedBidsEvalEnabled(settings: unknown): boolean {
   return Boolean(bag.embed_bids_eval_enabled ?? bag.embedBidsEvalEnabled);
 }
 
-/** Per-store v0.2 rollout; env FLIPY_V02_ENABLED=true enables globally as default-on. */
-export function readFlipyV02Enabled(settings: unknown): boolean {
-  const envDefault = process.env.FLIPY_V02_ENABLED === "true";
-  const bag = readSettingsBag(settings);
-  const raw = bag.flipy_v02 ?? bag.flipyV02 ?? bag.v02_enabled ?? bag.v02Enabled;
-  if (typeof raw === "boolean") return raw;
-  return envDefault;
+/**
+ * Partner API v0.2 is the current contract — always on.
+ * Legacy `flipy_v02` / `FLIPY_V02_ENABLED` are ignored.
+ */
+export function readFlipyV02Enabled(_settings?: unknown): boolean {
+  return true;
 }
 
 export function normalizePickupKeywordInput(input: string): string[] {
@@ -96,14 +93,6 @@ export function mergeFlipyEmbedBidsEvalSettings(
   return {
     ...base,
     embed_bids_eval_enabled: enabled,
-  };
-}
-
-export function mergeFlipyV02Settings(settings: unknown, enabled: boolean): Record<string, unknown> {
-  const base = readSettingsBag(settings);
-  return {
-    ...base,
-    flipy_v02: enabled,
   };
 }
 

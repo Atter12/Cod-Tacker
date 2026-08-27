@@ -5,7 +5,6 @@ import { FlipyAutoCreateSettings } from "@/components/integrations/FlipyAutoCrea
 import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
 import { FlipyEmbedBidsSettings } from "@/components/integrations/FlipyEmbedBidsSettings";
-import { FlipyV02Settings } from "@/components/integrations/FlipyV02Settings";
 import { FlipyPickupSettings } from "@/components/integrations/FlipyPickupSettings";
 import { FlipySaldoCard } from "@/components/integrations/FlipySaldoCard";
 import { FlipyWalletRecargaPanel } from "@/components/integrations/FlipyWalletRecargaPanel";
@@ -42,7 +41,6 @@ import {
   readFlipyContactEmail,
   readFlipyEmbedBidsEvalEnabled,
   readFlipyPickupKeywords,
-  readFlipyV02Enabled,
 } from "@/lib/integrations/flipy/settings";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
 import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
@@ -380,13 +378,6 @@ export default async function IntegrationDetailPage({
             appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
             contactEmail={flipyContactEmail}
           />
-          {canManage ? (
-            <FlipyV02Settings
-              agencySlug={p.agencySlug}
-              storeSlug={p.storeSlug}
-              defaultEnabled={readFlipyV02Enabled(integration.settings)}
-            />
-          ) : null}
           {canManage ? (
             <FlipyPickupSettings
               agencySlug={p.agencySlug}

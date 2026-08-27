@@ -90,18 +90,10 @@ const steps: Step[] = [
     status: "manual",
   },
   {
-    id: "regression-v011",
-    title: "Regresión v0.1.1 sin flipy_v02",
-    how:
-      "Tienda con flipy_v02=false → create sin fulfillmentMode/packageSize en body → wizard y pujas legacy OK",
-    metadataKeys: [],
-    status: "manual",
-  },
-  {
     id: "auto-create-v02",
     title: "Auto-create v0.2 smart",
     how:
-      "flipy_v02 + auto_create ON → pedido P+F prepago → job cotiza server-side mediano → create smart 1A",
+      "auto_create ON → pedido P+F prepago → job cotiza server-side mediano → create smart 1A (v0.2 always on)",
     metadataKeys: ["flipy_auto_create.status=created", "shopify_flipy_payment.fleteQuote"],
     status: "manual",
   },

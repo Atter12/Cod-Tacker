@@ -250,13 +250,13 @@ CT actualiza `orders.metadata`: `flipy_envio_id`, `flipy_tracking_*`, `shopify_f
 
 | Variable | Notas |
 | --- | --- |
-| `FLIPY_V02_ENABLED` | default global; override `settings.flipy_v02` por tienda |
 | `FLIPY_PARTNER_API_KEY` | secret compartido |
 | `FLIPY_API_BASE_URL` | Partner API |
 | `FLIPY_EMBED_ORIGIN` | panel partner iframes |
 | `FLIPY_APP_ORIGIN` | app tienda / deep links |
+| `PARTNER_EMAIL_ASSERTION_SECRET` | HS256 email trust v0.2.1 (mismo valor en Flipy) |
 
-Sin `flipy_v02` → create body v0.1.1 (retrocompat).
+Partner API **v0.2 es el contrato actual** (sin feature flag por tienda). `FLIPY_V02_ENABLED` / `settings.flipy_v02` están deprecated e ignorados.
 
 ---
 
@@ -276,4 +276,5 @@ npm run jobs:process # tras webhooks CT
 | --- | --- |
 | 0.1.0 | Draft inicial |
 | 0.1.1 | Freeze F1 |
-| 0.2.0 | Cotizar, smart/bid, shopifyPayment, lifecycle WH, packageSize/Care, flipy_v02 |
+| 0.2.0 | Cotizar, smart/bid, shopifyPayment, lifecycle WH, packageSize/Care |
+| 0.2.1 | Partner email trust; v0.2 siempre on (sin flag por tienda) |

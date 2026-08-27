@@ -7,18 +7,7 @@ import {
 } from "@/lib/integrations/flipy/map-lifecycle-webhook";
 import { buildFlipyV02CreateExtensions } from "@/lib/integrations/flipy/v02-create-extensions";
 
-describe("v02 create extensions gate", () => {
-  it("returns undefined when flipy_v02 disabled (v0.1.1 regression)", () => {
-    const ext = buildFlipyV02CreateExtensions({
-      v02Enabled: false,
-      smartEligible: true,
-      operationalMode: "smart",
-      packageSize: "mediano",
-      fleteQuote: { recommendedFare: 14.5 },
-    });
-    assert.equal(ext, undefined);
-  });
-
+describe("v02 create extensions", () => {
   it("includes smart body when v02 enabled", () => {
     const ext = buildFlipyV02CreateExtensions({
       v02Enabled: true,
@@ -46,6 +35,17 @@ describe("v02 create extensions gate", () => {
     assert.ok(ext);
     assert.equal(ext?.fulfillmentMode, "bid");
     assert.equal(ext?.priceLocked, false);
+  });
+
+  it("returns undefined only if caller passes v02Enabled false (legacy helper guard)", () => {
+    const ext = buildFlipyV02CreateExtensions({
+      v02Enabled: false,
+      smartEligible: true,
+      operationalMode: "smart",
+      packageSize: "mediano",
+      fleteQuote: { recommendedFare: 14.5 },
+    });
+    assert.equal(ext, undefined);
   });
 });
 
