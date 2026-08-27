@@ -24,12 +24,10 @@ export function FlipyAppAccessPanel({
 }: Props) {
   const loginUrl = buildFlipyAppLoginUrl({ appOrigin, contactEmail });
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   function openActivation() {
     setError(null);
-    setInfo(null);
     start(async () => {
       const result = await issueFlipyActivationUrlAction({
         agencySlug,
@@ -42,11 +40,6 @@ export function FlipyAppAccessPanel({
             "No se pudo iniciar la activación. Verifica que Flipy esté conectado e intenta de nuevo.",
         );
         return;
-      }
-      if (result.usedPasswordRecoveryFallback) {
-        setInfo(
-          "La activación directa aún no está en el backend Flipy. Te abrimos recuperación de contraseña con tu correo de contacto para que definas tu clave.",
-        );
       }
       window.open(result.activationUrl, "_blank", "noopener,noreferrer");
     });
@@ -67,14 +60,6 @@ export function FlipyAppAccessPanel({
           <Alert variant="success" title="Flipy conectado">
             Siguiente paso: activa tu acceso a la app Flipy con el correo de contacto que
             registraste.
-          </Alert>
-        </div>
-      ) : null}
-
-      {info ? (
-        <div className="mt-3">
-          <Alert variant="info" title="Activación Flipy">
-            {info}
           </Alert>
         </div>
       ) : null}

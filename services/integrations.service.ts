@@ -1021,26 +1021,24 @@ export async function connectFlipyLive(
   });
 
   const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
-  const linkedTiendaId =
-    readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
+  const hadLinkedTienda =
+    Boolean(readFlipyTiendaId(existing?.settings)) ||
+    Boolean(existing?.external_account_id?.trim());
 
-  const tiendaId = linkedTiendaId
-    ? linkedTiendaId
-    : (
-        await flipyClient.provisionTienda(
-          {
-            nombre,
-            contactEmail,
-            ruc: input.ruc?.trim() || null,
-            telefono: input.telefono?.trim() || null,
-            originAddress,
-            originLat: input.originLat,
-            originLng: input.originLng,
-            webhookUrl,
-          },
-          `codtracked:store:${scope.storeId}`,
-        )
-      ).tiendaId;
+  const provisioned = await flipyClient.provisionTienda(
+    {
+      nombre,
+      contactEmail,
+      ruc: input.ruc?.trim() || null,
+      telefono: input.telefono?.trim() || null,
+      originAddress,
+      originLat: input.originLat,
+      originLng: input.originLng,
+      webhookUrl,
+    },
+    `codtracked:store:${scope.storeId}`,
+  );
+  const tiendaId = provisioned.tiendaId;
 
   try {
     await flipyClient.registerWebhook(tiendaId, {
@@ -1050,10 +1048,10 @@ export async function connectFlipyLive(
   } catch (error) {
     throw new IntegrationError(
       error instanceof Error
-        ? linkedTiendaId
+        ? hadLinkedTienda
           ? `Webhook Flipy falló: ${error.message}`
           : `Tienda provisionada pero webhook falló: ${error.message}`
-        : linkedTiendaId
+        : hadLinkedTienda
           ? "No se pudo actualizar el webhook Flipy."
           : "Tienda provisionada pero webhook falló.",
     );

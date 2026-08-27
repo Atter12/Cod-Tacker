@@ -2,17 +2,8 @@
 
 import { actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { IntegrationError, ValidationError } from "@/lib/errors";
-import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
-import { FlipyPartnerApiError } from "@/lib/integrations/flipy/errors";
-import {
-  readFlipyTiendaId,
-  resolveFlipyPartnerKeyFromIntegration,
-} from "@/lib/integrations/flipy/credentials";
-import {
-  buildFlipyAppActivationUrl,
-  buildFlipyAppForgotPasswordUrl,
-  isFlipyAppActivationUrl,
-} from "@/lib/integrations/flipy/embed-urls";
+import { readFlipyTiendaId } from "@/lib/integrations/flipy/credentials";
+import { buildFlipyAppActivationUrl } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -24,14 +15,7 @@ import { toUserMessage } from "@/lib/errors/to-user-message";
 
 export type FlipyActivationUrlResult = {
   activationUrl: string;
-  usedPasswordRecoveryFallback?: boolean;
 };
-
-function isFlipyActivationRouteMissing(error: unknown): boolean {
-  if (!(error instanceof FlipyPartnerApiError)) return false;
-  if (error.status === 404 || error.code === "ACTIVATION_NOT_AVAILABLE") return true;
-  return /ruta no encontrada/i.test(error.message);
-}
 
 export async function issueFlipyActivationUrlAction(input: {
   agencySlug: string;
@@ -65,49 +49,23 @@ export async function issueFlipyActivationUrlAction(input: {
       throw new IntegrationError("Conecta Flipy en Integraciones antes de activar la cuenta.");
     }
 
-    const partnerKey = resolveFlipyPartnerKeyFromIntegration(integration);
-    if (!partnerKey) {
-      throw new IntegrationError("FLIPY_PARTNER_API_KEY no configurada.");
+    const flipyTiendaId =
+      readFlipyTiendaId(integration.settings) ?? integration.external_account_id?.trim() ?? null;
+    if (!flipyTiendaId) {
+      throw new IntegrationError(
+        "Integración Flipy sin tiendaId. Usa «Conectar Flipy» para provisionar la tienda en Flipy.",
+      );
     }
 
-    const flipyTiendaId = readFlipyTiendaId(integration.settings) ?? integration.external_account_id;
     const env = getFlipyEnv();
-    const client = createFlipyPartnerClient({
-      baseUrl: env.apiBaseUrl,
-      partnerKey,
-      partnerId: env.partnerId,
-      externalStoreId: membership.storeId,
+    const activationUrl = buildFlipyAppActivationUrl({
+      appOrigin: env.appOrigin,
+      contactEmail,
+      activationPath: env.appActivationPath,
+      flipyTiendaId,
     });
 
-    try {
-      const session = await client.initActivateAccount({ contactEmail, flipyTiendaId });
-      const partnerActivationUrl = session.activationUrl?.trim();
-      const activationUrl =
-        partnerActivationUrl && isFlipyAppActivationUrl(partnerActivationUrl)
-          ? partnerActivationUrl
-          : buildFlipyAppActivationUrl({
-              appOrigin: env.appOrigin,
-              contactEmail,
-              activationPath: env.appActivationPath,
-              externalStoreId: membership.storeId,
-              flipyTiendaId,
-              token: session.token,
-            });
-
-      return actionOk({ activationUrl });
-    } catch (error) {
-      if (!isFlipyActivationRouteMissing(error)) {
-        throw error;
-      }
-
-      return actionOk({
-        activationUrl: buildFlipyAppForgotPasswordUrl({
-          appOrigin: env.appOrigin,
-          contactEmail,
-        }),
-        usedPasswordRecoveryFallback: true,
-      });
-    }
+    return actionOk({ activationUrl });
   } catch (error) {
     return { error: toUserMessage(error) };
   }

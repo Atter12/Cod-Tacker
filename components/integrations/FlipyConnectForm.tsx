@@ -13,7 +13,11 @@ type Props = {
   webhookUrl: string;
   connected?: boolean;
   flipyTiendaId?: string | null;
+  defaultNombre?: string | null;
+  defaultEmail?: string | null;
   defaultOriginAddress?: string | null;
+  defaultOriginLat?: number | null;
+  defaultOriginLng?: number | null;
   disabled?: boolean;
 };
 
@@ -23,17 +27,25 @@ export function FlipyConnectForm({
   webhookUrl,
   connected = false,
   flipyTiendaId = null,
+  defaultNombre = null,
+  defaultEmail = null,
   defaultOriginAddress = null,
+  defaultOriginLat = null,
+  defaultOriginLng = null,
   disabled = false,
 }: Props) {
   const router = useRouter();
-  const [nombre, setNombre] = useState("");
+  const [nombre, setNombre] = useState(defaultNombre ?? "");
   const [ruc, setRuc] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(defaultEmail ?? "");
   const [telefono, setTelefono] = useState("");
   const [originAddress, setOriginAddress] = useState(defaultOriginAddress ?? "");
-  const [originLat, setOriginLat] = useState("");
-  const [originLng, setOriginLng] = useState("");
+  const [originLat, setOriginLat] = useState(
+    defaultOriginLat != null ? String(defaultOriginLat) : "",
+  );
+  const [originLng, setOriginLng] = useState(
+    defaultOriginLng != null ? String(defaultOriginLng) : "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);

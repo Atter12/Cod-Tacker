@@ -354,7 +354,11 @@ export default async function IntegrationDetailPage({
           webhookUrl={flipyWebhookUrl}
           connected={connected}
           flipyTiendaId={readFlipyTiendaId(integration?.settings) ?? integration?.external_account_id}
+          defaultNombre={integration?.display_name}
+          defaultEmail={flipyContactEmail}
           defaultOriginAddress={flipyOrigin?.address}
+          defaultOriginLat={flipyOrigin?.lat}
+          defaultOriginLng={flipyOrigin?.lng}
         />
       ) : null}
 
