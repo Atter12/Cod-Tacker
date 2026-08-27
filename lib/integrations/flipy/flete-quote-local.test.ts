@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildFlipyRouteKey,
   canRecalcFleteLocally,
+  isUsableFlipyFleteDistance,
   recalcFleteFromDistance,
 } from "@/lib/integrations/flipy/flete-quote-local";
 
@@ -37,9 +38,23 @@ describe("flete-quote-local", () => {
     assert.ok(grande.recommendedFare > pequeno.recommendedFare);
   });
 
-  it("canRecalcFleteLocally requires finite distanceKm", () => {
+  it("canRecalcFleteLocally requires usable distanceKm", () => {
     assert.equal(canRecalcFleteLocally(null), false);
     assert.equal(canRecalcFleteLocally({ recommendedFare: 10 }), false);
+    assert.equal(canRecalcFleteLocally({ recommendedFare: 10, distanceKm: 0 }), false);
+    assert.equal(canRecalcFleteLocally({ recommendedFare: 10, distanceKm: 0.05 }), false);
     assert.equal(canRecalcFleteLocally({ recommendedFare: 10, distanceKm: 3.2 }), true);
+  });
+
+  it("isUsableFlipyFleteDistance rejects ~0 km quotes", () => {
+    assert.equal(isUsableFlipyFleteDistance(0), false);
+    assert.equal(isUsableFlipyFleteDistance(0.0), false);
+    assert.equal(isUsableFlipyFleteDistance(7.6), true);
+  });
+
+  it("0 km + grande yields the stale 9.50 fare (why we gate distance)", () => {
+    const quote = recalcFleteFromDistance(0, "grande", "express");
+    assert.equal(quote.recommendedFare, 9.5);
+    assert.equal(isUsableFlipyFleteDistance(quote.distanceKm), false);
   });
 });

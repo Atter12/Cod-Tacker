@@ -1,6 +1,7 @@
 "use client";
 
 import { Info, Minus, Plus, Send } from "lucide-react";
+import { isUsableFlipyFleteDistance } from "@/lib/integrations/flipy/flete-quote-local";
 import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { cn } from "@/lib/utils/cn";
@@ -81,13 +82,18 @@ export function FlipyFleteOfferCard({
   variant = "default",
 }: Props) {
   const parsedValue = parseFleteAmount(value);
-  const recommended = fleteQuote?.recommendedFare;
+  const quoteUsable = isUsableFlipyFleteDistance(fleteQuote?.distanceKm);
+  const recommended =
+    quoteUsable && fleteQuote?.recommendedFare != null && Number.isFinite(fleteQuote.recommendedFare)
+      ? fleteQuote.recommendedFare
+      : null;
   const displayAmount =
-    parsedValue ?? (recommended != null && Number.isFinite(recommended) ? recommended : null);
+    parsedValue ?? (recommended != null ? recommended : null);
 
-  const minBound = fleteQuote?.minOffer;
-  const maxBound = fleteQuote?.maxOffer;
-  const competitiveRange = fleteQuote ? readCompetitiveRange(fleteQuote) : null;
+  const minBound = quoteUsable ? fleteQuote?.minOffer : undefined;
+  const maxBound = quoteUsable ? fleteQuote?.maxOffer : undefined;
+  const competitiveRange =
+    quoteUsable && fleteQuote ? readCompetitiveRange(fleteQuote) : null;
   const suggestions = buildSuggestions(recommended, competitiveRange);
 
   function applyAmount(amount: number) {
@@ -222,7 +228,7 @@ export function FlipyFleteOfferCard({
         </div>
       ) : null}
 
-      {!locked && competitiveRange && fleteQuote?.distanceKm != null ? (
+      {!locked && competitiveRange && quoteUsable && fleteQuote?.distanceKm != null ? (
         <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-text-secondary">
           <Info className="mt-0.5 size-3.5 shrink-0 text-brand-primary" aria-hidden />
           <span>

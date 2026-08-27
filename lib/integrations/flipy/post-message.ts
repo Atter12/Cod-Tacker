@@ -8,6 +8,7 @@ export const FLIPY_MESSAGE_TYPES = {
   WALLET_ERROR: "flipy-wallet-error",
   BIDS_UPDATED: "flipy-bids-updated",
   BID_ACCEPTED: "flipy-bid-accepted",
+  BID_REJECTED: "flipy-bid-rejected",
   BIDS_ERROR: "flipy-bids-error",
 } as const;
 
@@ -105,6 +106,14 @@ export type FlipyBidAcceptedMessage = {
   bidId?: string;
 };
 
+export type FlipyBidRejectedMessage = {
+  type: typeof FLIPY_MESSAGE_TYPES.BID_REJECTED;
+  envioId?: string;
+  bidId?: string;
+  ofertaId?: string;
+  bidsRemaining?: number;
+};
+
 export type FlipyBidsErrorMessage = {
   type: typeof FLIPY_MESSAGE_TYPES.BIDS_ERROR;
   code: string;
@@ -141,6 +150,27 @@ export function parseFlipyBidAcceptedMessage(data: unknown): FlipyBidAcceptedMes
     type: FLIPY_MESSAGE_TYPES.BID_ACCEPTED,
     envioId: typeof msg.envioId === "string" ? msg.envioId : undefined,
     bidId: typeof msg.bidId === "string" ? msg.bidId : undefined,
+  };
+}
+
+export function parseFlipyBidRejectedMessage(data: unknown): FlipyBidRejectedMessage | null {
+  const msg = parseBidsEnvelope(data);
+  if (!msg || msg.type !== FLIPY_MESSAGE_TYPES.BID_REJECTED) return null;
+  const remainingRaw = msg.bidsRemaining ?? msg.bids_remaining ?? msg.pujasRestantes;
+  const remaining = remainingRaw != null ? Number(remainingRaw) : undefined;
+  const ofertaId =
+    typeof msg.ofertaId === "string"
+      ? msg.ofertaId
+      : typeof msg.oferta_id === "string"
+        ? msg.oferta_id
+        : undefined;
+  const bidId = typeof msg.bidId === "string" ? msg.bidId : ofertaId;
+  return {
+    type: FLIPY_MESSAGE_TYPES.BID_REJECTED,
+    envioId: typeof msg.envioId === "string" ? msg.envioId : undefined,
+    bidId,
+    ofertaId: ofertaId ?? bidId,
+    bidsRemaining: remaining != null && Number.isFinite(remaining) ? remaining : undefined,
   };
 }
 

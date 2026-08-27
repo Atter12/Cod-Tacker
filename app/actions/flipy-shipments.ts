@@ -59,6 +59,7 @@ export type CancelFlipyShipmentResult = {
   appWebUrl?: string | null;
   trackingUrl?: string | null;
   supportHint?: string | null;
+  resolution?: string | null;
 };
 
 export type ConfirmFlipyDevolucionResult = {
@@ -309,6 +310,7 @@ export async function cancelFlipyShipment(input: {
 
     revalidatePath(routes.store.orderDetail(input.agencySlug, input.storeSlug, input.orderId));
     revalidatePath(routes.store.operations(input.agencySlug, input.storeSlug));
+    revalidatePath(routes.store.flipy(input.agencySlug, input.storeSlug));
 
     if (result.blocked) {
       return {
@@ -320,6 +322,7 @@ export async function cancelFlipyShipment(input: {
         appWebUrl: result.appWebUrl,
         trackingUrl: result.trackingUrl,
         supportHint: result.supportHint,
+        resolution: result.resolution,
         errorCode: result.code,
         error: result.message,
       };

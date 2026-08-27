@@ -17,6 +17,7 @@ export type FlipyCancelShipmentBlockedResult = {
   message: string;
   envioId: string;
   estado?: string | null;
+  resolution?: string | null;
   appWebUrl?: string | null;
   appDeepLink?: string | null;
   trackingUrl?: string | null;
@@ -159,6 +160,7 @@ export async function cancelFlipyShipmentForOrder(input: {
         message: error.message,
         envioId: details?.envioId ?? envioId,
         estado: details?.estado ?? null,
+        resolution: details?.resolution ?? null,
         appWebUrl: details?.appWebUrl ?? null,
         appDeepLink: details?.appDeepLink ?? null,
         trackingUrl: details?.trackingUrl ?? null,

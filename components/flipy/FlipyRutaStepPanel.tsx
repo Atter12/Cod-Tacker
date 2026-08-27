@@ -2,6 +2,7 @@
 
 import { Box, Check } from "lucide-react";
 import type { FlipyFleteQuote } from "@/lib/integrations/flipy/partner-contract";
+import { isUsableFlipyFleteDistance } from "@/lib/integrations/flipy/flete-quote-local";
 import type { FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
 import { FLIPY_PACKAGE_CARE_IDS, FLIPY_PACKAGE_CARE_LABELS } from "@/lib/integrations/flipy/map-package-care";
 import {
@@ -91,10 +92,10 @@ export function FlipyRutaStepPanel({
   currencyCode,
 }: Props) {
   const routeMeta =
-    fleteQuote?.distanceKm != null && fleteQuote?.durationMinutes != null
-      ? `≈ ${fleteQuote.distanceKm.toFixed(1)} km · tiempo estimado ${fleteQuote.durationMinutes} min`
-      : fleteQuote?.distanceKm != null
-        ? `≈ ${fleteQuote.distanceKm.toFixed(1)} km`
+    isUsableFlipyFleteDistance(fleteQuote?.distanceKm) && fleteQuote?.durationMinutes != null
+      ? `≈ ${fleteQuote.distanceKm!.toFixed(1)} km · tiempo estimado ${fleteQuote.durationMinutes} min`
+      : isUsableFlipyFleteDistance(fleteQuote?.distanceKm)
+        ? `≈ ${fleteQuote!.distanceKm!.toFixed(1)} km`
         : quoting
           ? "Calculando ruta…"
           : coordsReady

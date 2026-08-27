@@ -1,12 +1,12 @@
 /**
- * Partner API contract helpers (v0.2.0).
+ * Partner API contract helpers (v0.2.2).
  * Canonical doc: docs/FLIPY_CODTRACKED_ALIGNMENT_V0.2.md · docs/PARTNER_CODTRACKED.md
  * Keep in sync with flipy/docs/PARTNER_CODTRACKED.md
  */
 
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
 
-export const FLIPY_PARTNER_CONTRACT_VERSION = "0.2.1";
+export const FLIPY_PARTNER_CONTRACT_VERSION = "0.2.3";
 
 export type FlipyOriginLocation = {
   address: string;
@@ -1122,4 +1122,263 @@ export function readFlipyCreateEnvioResult(raw: unknown): FlipyCreateEnvioPartne
     fleteQuote: readFlipyFleteQuote(bag),
     assignedMotorizado: readAssignedMotorizado(bag.assignedMotorizado ?? bag.assigned_motorizado),
   };
+}
+
+// --- v0.2.2 inbox + reject oferta -------------------------------------------
+
+export type FlipyEnviosInboxScope = "activos" | "historial" | "atencion" | "all";
+
+export type FlipyAttentionTag = "bids" | "waiting" | "devolucion";
+
+export const FLIPY_CANCEL_RESOLUTION_MOTORIZADO_LIBERAR = "motorizado_liberar_or_support";
+
+export type FlipyEnvioListItem = {
+  envioId: string;
+  estado: string;
+  externalOrderId?: string | null;
+  title?: string | null;
+  fulfillmentMode?: FlipyOperationalFulfillmentMode | null;
+  attentionTags: FlipyAttentionTag[];
+  bidsCount?: number | null;
+  trackingUrl?: string | null;
+  appWebUrl?: string | null;
+  assignedMotorizado?: FlipyAssignedMotorizado | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type FlipyListEnviosQuery = {
+  scope?: FlipyEnviosInboxScope;
+  estado?: string | null;
+  q?: string | null;
+  page?: number;
+  pageSize?: number;
+};
+
+export type FlipyListEnviosResult = {
+  items: FlipyEnvioListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  scope: FlipyEnviosInboxScope;
+};
+
+export type FlipyRejectOfertaInput = {
+  motivo?: string | null;
+};
+
+export type FlipyRejectOfertaResult = {
+  success: true;
+  envioId: string;
+  ofertaId: string;
+  estado?: string | null;
+  message?: string | null;
+  bidsRemaining?: number | null;
+};
+
+const ATTENTION_TAGS = new Set<string>(["bids", "waiting", "devolucion"]);
+
+function readAttentionTags(raw: unknown): FlipyAttentionTag[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FlipyAttentionTag[] = [];
+  for (const entry of raw) {
+    const value = typeof entry === "string" ? entry.trim().toLowerCase() : "";
+    if (ATTENTION_TAGS.has(value)) out.push(value as FlipyAttentionTag);
+  }
+  return out;
+}
+
+export function readFlipyEnvioListItem(raw: unknown): FlipyEnvioListItem | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+  const envioId = readString(bag, "envioId", "envio_id", "id");
+  if (!envioId) return null;
+  const fulfillmentRaw = readString(bag, "fulfillmentMode", "fulfillment_mode");
+  const fulfillmentMode =
+    fulfillmentRaw === "smart" || fulfillmentRaw === "bid" ? fulfillmentRaw : null;
+  return {
+    envioId,
+    estado: readString(bag, "estado", "status") ?? "PENDIENTE_PUJAS",
+    externalOrderId: readString(bag, "externalOrderId", "external_order_id"),
+    title: readString(bag, "title", "titulo", "orderNumber", "order_number"),
+    fulfillmentMode,
+    attentionTags: readAttentionTags(bag.attentionTags ?? bag.attention_tags ?? bag.tags),
+    bidsCount: readFiniteNumber(bag, "bidsCount", "bids_count", "pujasCount", "pujas_count"),
+    trackingUrl: readString(bag, "trackingUrl", "tracking_url"),
+    appWebUrl: readString(bag, "appWebUrl", "app_web_url"),
+    assignedMotorizado: readAssignedMotorizado(bag.assignedMotorizado ?? bag.assigned_motorizado),
+    updatedAt: readString(bag, "updatedAt", "updated_at"),
+    createdAt: readString(bag, "createdAt", "created_at"),
+  };
+}
+
+export function readFlipyListEnviosResult(
+  raw: unknown,
+  fallbackScope: FlipyEnviosInboxScope = "activos",
+): FlipyListEnviosResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const dataBag = asRecord(bag.data);
+  const root = dataBag ?? bag;
+  const listRaw = root.items ?? root.envios ?? root.results ?? bag.items ?? bag.envios;
+  if (!Array.isArray(listRaw)) return null;
+
+  const items: FlipyEnvioListItem[] = [];
+  for (const entry of listRaw) {
+    const parsed = readFlipyEnvioListItem(entry);
+    if (parsed) items.push(parsed);
+  }
+
+  const scopeRaw = (readString(root, "scope") ?? fallbackScope).toLowerCase();
+  const scope: FlipyEnviosInboxScope =
+    scopeRaw === "historial" ||
+    scopeRaw === "atencion" ||
+    scopeRaw === "all" ||
+    scopeRaw === "activos"
+      ? scopeRaw
+      : fallbackScope;
+
+  const page = Math.max(1, Math.floor(readFiniteNumber(root, "page") ?? 1));
+  const pageSize = Math.max(
+    1,
+    Math.floor(readFiniteNumber(root, "pageSize", "page_size", "limit") ?? (items.length || 25)),
+  );
+  const total = Math.max(
+    0,
+    Math.floor(readFiniteNumber(root, "total", "totalCount", "total_count") ?? items.length),
+  );
+
+  return { items, page, pageSize, total, scope };
+}
+
+export function buildFlipyRejectOfertaRequestBody(
+  input: FlipyRejectOfertaInput = {},
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (input.motivo?.trim()) body.motivo = input.motivo.trim();
+  return body;
+}
+
+export function readFlipyRejectOfertaResult(raw: unknown): FlipyRejectOfertaResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+  const dataBag = asRecord(bag.data);
+  const root = dataBag ?? bag;
+  const envioId = readString(root, "envioId", "envio_id");
+  const ofertaId = readString(root, "ofertaId", "oferta_id", "bidId", "bid_id");
+  if (!envioId || !ofertaId) return null;
+  return {
+    success: true,
+    envioId,
+    ofertaId,
+    estado: readString(root, "estado", "status"),
+    message: readString(root, "message"),
+    bidsRemaining: readFiniteNumber(root, "bidsRemaining", "bids_remaining", "pujasRestantes"),
+  };
+}
+
+// --- v0.2.3 settlement ------------------------------------------------------
+
+export type FlipySettlementItem = {
+  envioId?: string | null;
+  externalOrderId?: string | null;
+  tracking?: string | null;
+  orderNumber?: string | null;
+  grossAmount: number;
+  feeAmount: number;
+  netAmount: number;
+  currency?: string | null;
+  collectedAt?: string | null;
+  reference?: string | null;
+};
+
+export type FlipySettlementBatch = {
+  batchId: string;
+  currency: string;
+  occurredAt?: string | null;
+  items: FlipySettlementItem[];
+};
+
+export function readFlipySettlementItem(raw: unknown): FlipySettlementItem | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+  const gross =
+    readFiniteNumber(bag, "grossAmount", "gross_amount", "gross") ??
+    readFiniteNumber(bag, "amount", "total");
+  if (gross == null || gross <= 0) return null;
+  const fee = readFiniteNumber(bag, "feeAmount", "fee_amount", "fee", "fees") ?? 0;
+  const net =
+    readFiniteNumber(bag, "netAmount", "net_amount", "net") ?? Math.max(0, gross - fee);
+  return {
+    envioId: readString(bag, "envioId", "envio_id", "externalShipmentId", "external_shipment_id"),
+    externalOrderId: readString(bag, "externalOrderId", "external_order_id"),
+    tracking: readString(bag, "tracking", "trackingNumber", "tracking_number"),
+    orderNumber: readString(bag, "orderNumber", "order_number"),
+    grossAmount: gross,
+    feeAmount: fee,
+    netAmount: net,
+    currency: readString(bag, "currency", "currencyCode", "currency_code"),
+    collectedAt: readString(bag, "collectedAt", "collected_at", "occurredAt", "occurred_at", "date"),
+    reference: readString(bag, "reference", "ref"),
+  };
+}
+
+export function readFlipySettlementBatch(raw: unknown): FlipySettlementBatch | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+  const dataBag = asRecord(bag.data);
+  const root = dataBag ?? bag;
+  const batchId =
+    readString(root, "batchId", "batch_id", "id") ??
+    readString(bag, "batchId", "batch_id");
+  if (!batchId) return null;
+  const listRaw = root.items ?? root.rows ?? bag.items;
+  if (!Array.isArray(listRaw) || listRaw.length === 0) return null;
+  const items: FlipySettlementItem[] = [];
+  for (const entry of listRaw) {
+    const parsed = readFlipySettlementItem(entry);
+    if (parsed) items.push(parsed);
+  }
+  if (!items.length) return null;
+  const currency =
+    (readString(root, "currency", "currencyCode", "currency_code") ??
+      items[0]?.currency ??
+      "PEN")
+      .toUpperCase()
+      .slice(0, 3);
+  return {
+    batchId,
+    currency,
+    occurredAt: readString(root, "occurredAt", "occurred_at", "date"),
+    items,
+  };
+}
+
+/** Webhook envelope: settlement.batch.ready | cod.collected */
+export function readFlipySettlementWebhookPayload(raw: unknown): FlipySettlementBatch | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+  const type = (readString(bag, "type", "event", "event_type", "eventType") ?? "").toLowerCase();
+  if (type === "cod.collected" || type === "settlement.cod.collected") {
+    const dataBag = asRecord(bag.data) ?? bag;
+    const item = readFlipySettlementItem(dataBag);
+    if (!item) return null;
+    const batchId =
+      readString(dataBag, "batchId", "batch_id") ??
+      `flipy-cod-${item.envioId ?? item.externalOrderId ?? item.tracking ?? "item"}`;
+    return {
+      batchId,
+      currency: (item.currency ?? "PEN").toUpperCase().slice(0, 3),
+      occurredAt: item.collectedAt,
+      items: [item],
+    };
+  }
+  if (type && type !== "settlement.batch.ready" && type !== "settlement.batch.created") {
+    // Still try parse if data looks like a batch (tolerant)
+    const nested = readFlipySettlementBatch(bag);
+    if (nested) return nested;
+    return null;
+  }
+  return readFlipySettlementBatch(bag);
 }

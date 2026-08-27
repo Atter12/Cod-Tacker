@@ -54,6 +54,7 @@ import { fetchFlipyCotizar } from "@/lib/integrations/flipy/fetch-cotizar-client
 import {
   buildFlipyRouteKey,
   canRecalcFleteLocally,
+  isUsableFlipyFleteDistance,
   recalcFleteFromDistance,
   type FlipyFleteQuoteSource,
 } from "@/lib/integrations/flipy/flete-quote-local";
@@ -290,6 +291,10 @@ export function FlipyCreateShipmentModal({
   const quoteCacheRef = useRef<QuoteCache | null>(null);
   const quoteAbortRef = useRef<AbortController | null>(null);
   const prefetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** User chose +/- or a suggestion — don't clobber offer on package-size recalc. */
+  const fletePriceTouchedRef = useRef(false);
+  /** Route key for which we last auto-filled recommended fare. */
+  const appliedPriceRouteKeyRef = useRef<string | null>(null);
 
   const [step, setStep] = useState<Step>("payment");
   const [error, setError] = useState<string | null>(null);
@@ -397,11 +402,36 @@ export function FlipyCreateShipmentModal({
     });
   }, [coordsReady, pickupPoint.lat, pickupPoint.lng, deliveryPoint.lat, deliveryPoint.lng]);
 
-  const applyQuoteResult = useCallback((quote: FlipyFleteQuote, nextRouteKey: string) => {
-    quoteCacheRef.current = { routeKey: nextRouteKey, fleteQuote: quote };
-    setFleteQuote(quote);
-    setFletePrice(String(quote.recommendedFare));
-    setQuoteError(null);
+  const applyQuoteResult = useCallback(
+    (quote: FlipyFleteQuote, nextRouteKey: string) => {
+      if (!isUsableFlipyFleteDistance(quote.distanceKm)) {
+        // Cache route attempt to avoid refetch loops; do not publish quote to UI.
+        quoteCacheRef.current = { routeKey: nextRouteKey, fleteQuote: quote };
+        setQuoteError("Confirma recojo y entrega para cotizar el flete.");
+        return;
+      }
+
+      quoteCacheRef.current = { routeKey: nextRouteKey, fleteQuote: quote };
+      setFleteQuote(quote);
+      setQuoteError(null);
+
+      const routeChanged = appliedPriceRouteKeyRef.current !== nextRouteKey;
+      if (routeChanged) {
+        fletePriceTouchedRef.current = false;
+      }
+
+      const shouldSyncPrice = fleteLocked || !fletePriceTouchedRef.current || routeChanged;
+      if (shouldSyncPrice && quote.recommendedFare != null && Number.isFinite(quote.recommendedFare)) {
+        setFletePrice(String(quote.recommendedFare));
+        appliedPriceRouteKeyRef.current = nextRouteKey;
+      }
+    },
+    [fleteLocked],
+  );
+
+  const handleFletePriceChange = useCallback((value: string) => {
+    fletePriceTouchedRef.current = true;
+    setFletePrice(value);
   }, []);
 
   const readQuoteSource = useCallback((quote: FlipyFleteQuote): FlipyFleteQuoteSource => {
@@ -527,6 +557,11 @@ export function FlipyCreateShipmentModal({
     }
 
     if (cached?.routeKey === routeKey && cached.fleteQuote) {
+      if (!isUsableFlipyFleteDistance(cached.fleteQuote.distanceKm)) {
+        setQuoting(false);
+        setQuoteError("Confirma recojo y entrega para cotizar el flete.");
+        return;
+      }
       applyQuoteResult(cached.fleteQuote, routeKey);
       return;
     }
@@ -724,6 +759,9 @@ export function FlipyCreateShipmentModal({
     setFleteQuote(null);
     setQuoting(false);
     setQuoteError(null);
+    quoteCacheRef.current = null;
+    fletePriceTouchedRef.current = false;
+    appliedPriceRouteKeyRef.current = null;
     const nextEscenario = initialFlipyEscenarioForUi(paymentResolution);
     setEscenario(nextEscenario);
     setFletePrice(
@@ -1202,6 +1240,8 @@ export function FlipyCreateShipmentModal({
             yapeTop={FLIPY_YAPE_COD_TOPE}
             onSelectEscenario={(value) => {
               setEscenario(value);
+              fletePriceTouchedRef.current = false;
+              appliedPriceRouteKeyRef.current = null;
               setFletePrice(
                 initialFleteInputValue(value, paymentResolution.suggestedFlete, {
                   smartEligible,
@@ -1253,7 +1293,7 @@ export function FlipyCreateShipmentModal({
             packageCareNote={packageCareNote}
             onPackageCareNoteChange={setPackageCareNote}
             fletePrice={fletePrice}
-            onFletePriceChange={setFletePrice}
+            onFletePriceChange={handleFletePriceChange}
             fleteLocked={fleteLocked}
             quoteError={quoteError}
             coordsReady={coordsReady}

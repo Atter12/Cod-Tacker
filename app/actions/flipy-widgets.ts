@@ -7,7 +7,7 @@ import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl, withFlipyWalletLightTheme } from "@/lib/integrations/flipy/embed-urls";
+import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl, withFlipyBidsLightTheme, withFlipyWalletLightTheme } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -144,18 +144,20 @@ export async function issueFlipyWidgetTokenAction(input: {
               }),
             )
           : scope === "bids_panel"
-            ? resolveFlipyScopedEmbedUrl({
-                scope: "bids_panel",
-                apiEmbedUrl: issued.pujasEmbedUrl,
-                embedOrigin: env.embedOrigin,
-                appOrigin: env.appOrigin,
-                buildFallback: () =>
-                  buildFlipyBidsEmbedUrl({
-                    embedOrigin: env.embedOrigin,
-                    token: issued.token,
-                    envioId: flipyEnvioId,
-                  }),
-              })
+            ? withFlipyBidsLightTheme(
+                resolveFlipyScopedEmbedUrl({
+                  scope: "bids_panel",
+                  apiEmbedUrl: issued.pujasEmbedUrl,
+                  embedOrigin: env.embedOrigin,
+                  appOrigin: env.appOrigin,
+                  buildFallback: () =>
+                    buildFlipyBidsEmbedUrl({
+                      embedOrigin: env.embedOrigin,
+                      token: issued.token,
+                      envioId: flipyEnvioId,
+                    }),
+                }),
+              )
             : resolveFlipyScopedEmbedUrl({
                 scope: "location_picker",
                 apiEmbedUrl: issued.ubicacionEmbedUrl,

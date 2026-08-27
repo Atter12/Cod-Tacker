@@ -28,6 +28,7 @@ export const routes = {
     adDetail: (a: string, s: string, adId: string) =>
       `${storeBase(a, s)}/ads/${encodeURIComponent(adId)}`,
     logistics: (a: string, s: string) => `${storeBase(a, s)}/logistics`,
+    flipy: (a: string, s: string) => `${storeBase(a, s)}/flipy`,
     shipmentDetail: (a: string, s: string, shipmentId: string) =>
       `${storeBase(a, s)}/logistics/${encodeURIComponent(shipmentId)}`,
     rto: (a: string, s: string) => `${storeBase(a, s)}/rto`,

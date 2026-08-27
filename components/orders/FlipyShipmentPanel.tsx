@@ -15,6 +15,8 @@ import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { FlipyMotorizadoRatingPanel } from "@/components/flipy/FlipyMotorizadoRatingPanel";
 import { buildFlipyOperationWebUrl } from "@/lib/integrations/flipy/embed-urls";
 import {
+  flipyCancelBlockedCtaLabel,
+  flipyCancelBlockedUserMessage,
   isFlipyImmediateCancelEstado,
   isFlipyTerminalEstado,
 } from "@/lib/integrations/flipy/errors";
@@ -100,6 +102,7 @@ export function FlipyShipmentPanel({
   const [success, setSuccess] = useState<string | null>(null);
   const [blockedLink, setBlockedLink] = useState<string | null>(null);
   const [blockedHint, setBlockedHint] = useState<string | null>(null);
+  const [blockedCta, setBlockedCta] = useState("Gestionar en Flipy");
   const syncAttemptedRef = useRef(false);
 
   const estadoUpper = flipyEstado?.toUpperCase() ?? null;
@@ -164,6 +167,7 @@ export function FlipyShipmentPanel({
     setSuccess(null);
     setBlockedLink(null);
     setBlockedHint(null);
+    setBlockedCta("Gestionar en Flipy");
   }
 
   function runCancel() {
@@ -181,10 +185,21 @@ export function FlipyShipmentPanel({
         });
 
         if (result.error) {
-          setError(result.error);
+          const blockedDetails = {
+            resolution: result.resolution ?? null,
+            supportHint: result.supportHint ?? null,
+          };
+          setError(
+            flipyCancelBlockedUserMessage({
+              code: result.errorCode,
+              message: result.error,
+              details: blockedDetails,
+            }),
+          );
           if (result.blocked && result.appWebUrl) {
             setBlockedLink(result.appWebUrl);
             setBlockedHint(result.supportHint ?? null);
+            setBlockedCta(flipyCancelBlockedCtaLabel(blockedDetails));
           }
           return;
         }
@@ -305,7 +320,7 @@ export function FlipyShipmentPanel({
                   rel="noopener noreferrer"
                   className="inline-flex h-8 items-center justify-center rounded-md bg-brand-primary px-3 text-xs font-medium text-white hover:bg-brand-primary/90"
                 >
-                  Gestionar en Flipy
+                  {blockedCta}
                 </a>
               ) : null}
             </div>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applyFlipyAutoCollectedForBatch } from "@/lib/integrations/flipy/apply-flipy-auto-collected";
 import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import { PermanentJobError } from "@/lib/jobs/errors";
 import type { JobHandler, JobHandlerResult } from "@/lib/jobs/types";
@@ -122,8 +123,18 @@ export const handleSettlementCsvImported: JobHandler = async ({
         demo_seed: data.demo_seed ?? null,
         job_id: job.id,
         preset_id: data.preset_id ?? null,
-        import_kind: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv",
-        source: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv_upload",
+        import_kind:
+          data.preset_id === "ecart_pay"
+            ? "ecart_pay"
+            : data.preset_id === "flipy_cod" || job.job_type.startsWith("settlement.flipy")
+              ? "flipy"
+              : "csv",
+        source:
+          data.preset_id === "ecart_pay"
+            ? "ecart_pay"
+            : data.preset_id === "flipy_cod" || job.job_type.startsWith("settlement.flipy")
+              ? "flipy"
+              : "csv_upload",
       } as Json,
     })
     .select("id")
@@ -223,7 +234,14 @@ export const handleSettlementCsvImported: JobHandler = async ({
         matched_at: m.matchStatus === "matched" || m.matchStatus === "difference" ? now : null,
         status: toBatchReconciliationStatus(m.matchStatus),
         notes: r.reference,
-        metadata: { import_kind: "csv" } as Json,
+        metadata: {
+          import_kind:
+            data.preset_id === "ecart_pay"
+              ? "ecart_pay"
+              : data.preset_id === "flipy_cod" || job.job_type.startsWith("settlement.flipy")
+                ? "flipy"
+                : "csv",
+        } as Json,
       };
     });
 
@@ -244,6 +262,19 @@ export const handleSettlementCsvImported: JobHandler = async ({
       })
       .eq("id", batchId);
 
+    const isFlipySource =
+      data.preset_id === "flipy_cod" || job.job_type.startsWith("settlement.flipy");
+    let autoCollectedDetail = "";
+    if (isFlipySource && job.store_id) {
+      const auto = await applyFlipyAutoCollectedForBatch({
+        admin,
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        batchId,
+      });
+      autoCollectedDetail = `;flipy_auto_collected=${auto.applied};skipped=${auto.skipped}`;
+    }
+
     const discrepancyCount = matches.filter(
       (m) =>
         m.matchStatus === "unmatched" ||
@@ -262,7 +293,12 @@ export const handleSettlementCsvImported: JobHandler = async ({
             discrepancyCount,
             batchStatus,
             itemCount: matches.length,
-            source: data.preset_id === "ecart_pay" ? "ecart_pay" : "csv_upload",
+            source:
+              data.preset_id === "ecart_pay"
+                ? "ecart_pay"
+                : isFlipySource
+                  ? "flipy"
+                  : "csv_upload",
           },
           entityType: "settlement_batch",
           entityId: batchId,
@@ -277,7 +313,7 @@ export const handleSettlementCsvImported: JobHandler = async ({
       action: "created",
       entityType: "settlement_batch",
       entityId: batchId,
-      detail: `items=${itemRows.length};status=${batchStatus}`,
+      detail: `items=${itemRows.length};status=${batchStatus}${autoCollectedDetail}`,
     };
   } catch (error) {
     // Avoid orphan batches (totals without items) that block retries on the same external_batch_id.

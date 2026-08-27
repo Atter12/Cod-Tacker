@@ -1,6 +1,6 @@
 # Partner API — Flipy × COD-tracked
 
-**Versión contrato:** 0.2.1 (partner email trust + activación)  
+**Versión contrato:** 0.2.3 (settlement nativo + inbox/reject 0.2.2)  
 **Copia canónica:** `COD-tracked/docs/PARTNER_CODTRACKED.md`  
 **Espejo en Flipy:** `flipy/docs/PARTNER_CODTRACKED.md` (mantener sincronizado)
 
@@ -277,4 +277,140 @@ npm run jobs:process # tras webhooks CT
 | 0.1.0 | Draft inicial |
 | 0.1.1 | Freeze F1 |
 | 0.2.0 | Cotizar, smart/bid, shopifyPayment, lifecycle WH, packageSize/Care |
-| 0.2.1 | Partner email trust; v0.2 siempre on (sin flag por tienda) |
+| 0.2.1 | Partner email trust; v0.2 siempre on (sin feature flag por tienda) |
+| 0.2.2 | Inbox list envíos; rechazar pujas (embed + S2S); resolution cancel ASIGNADO `motorizado_liberar_or_support` |
+| 0.2.3 | Conciliación nativa: webhook `settlement.batch.ready` + pull export/batches; CT auto-Cobrado al match |
+
+---
+
+## Mapa de producto: qué vive en CT vs solo Flipy (v0.2.3)
+
+| Superficie | Dónde | Notas |
+| --- | --- | --- |
+| Inbox envíos (activos / historial / atención) | **COD-tracked** | `GET /api/partner/envios?scope=…` → nav **Flipy** |
+| Crear envío + mapa + cotizar | **COD-tracked** | Wizard pedido |
+| Recarga Operaciones | **COD-tracked** (embed) | `/partner/recarga` |
+| Ver / aceptar / rechazar pujas | **COD-tracked** (embed) + S2S reject | iframe `/partner/pujas` + `…/ofertas/:id/rechazar` |
+| Cancel inmediato (borrador / pujas / asignando) | **COD-tracked** | Partner cancel |
+| Liberar motorizado / soporte (ASIGNADO) | **Flipy** (CTA desde CT) | resolution `motorizado_liberar_or_support` — ya no “cancela en Flipy” |
+| Chat motorizado, evidencias, retiros, KPIs tienda, cuenta | **Solo Flipy** | Deep link / app; no duplicar en CT |
+| Conciliación COD (Cobrado) | **COD-tracked** (nativo) | Webhook `settlement.batch.ready` / Sync pull → auto `cash_collected` |
+| Liquidado (settled) | **COD-tracked** | Aprobación humana del lote en Conciliación |
+| Conciliación CSV | Fallback | Export Partner `format=settlement` + preset `flipy_cod` |
+
+---
+
+## Conciliación settlement (v0.2.3)
+
+### Webhook push (primario)
+
+```http
+POST /api/webhooks/flipy/{agencySlug}/{storeSlug}
+X-Flipy-Signature: sha256=<hmac>
+X-Flipy-Event-Id: <uuid>
+```
+
+```json
+{
+  "type": "settlement.batch.ready",
+  "data": {
+    "batchId": "flipy_batch_…",
+    "currency": "PEN",
+    "occurredAt": "2026-08-27T12:00:00.000Z",
+    "items": [
+      {
+        "envioId": "clenv…",
+        "externalOrderId": "shopify:188752…",
+        "tracking": "…",
+        "orderNumber": "1073",
+        "grossAmount": 70.34,
+        "feeAmount": 15.0,
+        "netAmount": 55.34,
+        "collectedAt": "2026-08-27T11:40:00.000Z",
+        "reference": "optional"
+      }
+    ]
+  }
+}
+```
+
+CT job: `settlement.flipy.synced` → match → **auto Cobrado** si `matched`; Liquidado solo al aprobar lote.
+
+Opcional: `cod.collected` (un ítem) con el mismo shape de item dentro de `data`.
+
+### Pull (Sync now)
+
+Corto plazo: `GET /api/partner/tiendas/:id/conciliacion/export?format=settlement&from=&to=`
+
+Medio plazo: `GET …/conciliacion/batches` + `…/batches/:id/items` (mismo shape que webhook).
+
+Idempotencia: `X-Flipy-Event-Id` o `batchId` (nunca timestamps).
+
+---
+
+## GET /api/partner/envios — Inbox (v0.2.2)
+
+```http
+GET /api/partner/envios?scope=activos|historial|atencion|all&estado=&q=&page=1&pageSize=25
+```
+
+| Query | Valores | Notas |
+| --- | --- | --- |
+| `scope` | `activos` \| `historial` \| `atencion` \| `all` | `atencion` = tags attention |
+| `estado` | string | filtro exacto Flipy |
+| `q` | string | búsqueda libre |
+| `page` / `pageSize` | number | paginación |
+
+**Attention tags:** `bids` · `waiting` · `devolucion`
+
+**Item (flexible aliases):** `envioId`, `estado`, `externalOrderId`, `title`, `fulfillmentMode`, `attentionTags[]`, `bidsCount`, `trackingUrl`, `appWebUrl`, `assignedMotorizado`, `updatedAt`.
+
+CT: página `/a/:agency/:store/flipy` enlaza pedido por `externalOrderId` (`shopify:{id}`).
+
+---
+
+## Rechazar pujas (v0.2.2)
+
+### Embed (iframe pujas)
+
+```http
+POST /api/partner/embed/bids/reject
+Authorization: Bearer <widget JWT scope bids_panel>
+```
+
+Botón en iframe. postMessage → CT:
+
+```json
+{ "type": "flipy-bid-rejected", "envioId": "…", "ofertaId": "…", "bidsRemaining": 2 }
+```
+
+### S2S Partner
+
+```http
+POST /api/partner/envios/:envioId/ofertas/:ofertaId/rechazar
+X-Partner-Key: …
+```
+
+Body opcional: `{ "motivo": "…" }`.
+
+CT action: `rejectFlipyOferta` (`app/actions/flipy-inbox.ts`).
+
+---
+
+## Cancel ASIGNADO — copy (v0.2.2)
+
+Cuando cancel está bloqueado con `CANCEL_BLOQUEADA_ASIGNADO`, Flipy puede devolver:
+
+```json
+{
+  "code": "CANCEL_BLOQUEADA_ASIGNADO",
+  "details": {
+    "resolution": "motorizado_liberar_or_support",
+    "supportHint": "…",
+    "appWebUrl": "…"
+  }
+}
+```
+
+CT muestra: *“Libéralo desde el envío o contacta soporte Flipy”* (CTA **Liberar motorizado / soporte**). Ya no dice “cancela en Flipy”.
+

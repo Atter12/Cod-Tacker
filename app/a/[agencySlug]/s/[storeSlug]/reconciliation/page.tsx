@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { EcartPayPanel } from "@/components/reconciliation/EcartPayPanel";
 import { ReconciliationFiltersForm } from "@/components/reconciliation/ReconciliationFiltersForm";
 import {
@@ -17,6 +18,8 @@ import {
   parsePaginationParams,
   type SearchParamsRecord,
 } from "@/lib/http/search-params";
+import { readFlipyTiendaId } from "@/lib/integrations/flipy/credentials";
+import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { BATCH_STATUS_OPTIONS, labelBatchStatus } from "@/lib/reconciliation/labels";
 import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -27,6 +30,27 @@ import type { Enums } from "@/types/database.generated";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("es-PE", { style: "currency", currency }).format(amount);
+}
+
+async function loadFlipySettlementContext(
+  storeId: string,
+  agencyId: string,
+): Promise<{ tiendaId: string } | null> {
+  const admin = createAdminClient();
+  const result = await admin
+    .from("integrations")
+    .select("external_account_id, settings, status")
+    .eq("store_id", storeId)
+    .eq("agency_id", agencyId)
+    .eq("provider", "flipy")
+    .eq("status", "connected")
+    .limit(1)
+    .maybeSingle();
+  if (!result.data) return null;
+  const tiendaId =
+    readFlipyTiendaId(result.data.settings) ?? result.data.external_account_id ?? null;
+  if (!tiendaId) return null;
+  return { tiendaId };
 }
 
 async function storeHasEcartPay(storeId: string, agencyId: string): Promise<boolean> {
@@ -146,6 +170,7 @@ export default async function ReconciliationPage({
   }
 
   const canManage = can(member.roles, "reconciliation.manage");
+  const flipyCtx = await loadFlipySettlementContext(member.storeId, member.agencyId);
   const ecartConnected = await storeHasEcartPay(member.storeId, member.agencyId);
   const ecartLastSync = ecartConnected
     ? await loadEcartLastSync(member.storeId, member.agencyId)
@@ -155,7 +180,7 @@ export default async function ReconciliationPage({
     <section className="space-y-5">
       <SectionHeader
         title="Conciliación"
-        description="Verdad de caja para ROAS: CSV del courier o sync Ecart Pay (COD Envia). Entregado ≠ liquidado."
+        description="Verdad de caja para ROAS: sync Flipy (cobro en puerta), Ecart Pay (COD Envia) o CSV. Entregado ≠ Cobrado ≠ Liquidado."
         action={
           <div className="flex flex-wrap gap-2 text-sm">
             {canManage && (
@@ -175,6 +200,15 @@ export default async function ReconciliationPage({
           </div>
         }
       />
+      {flipyCtx ? (
+        <FlipyConciliacionExportPanel
+          agencySlug={p.agencySlug}
+          storeSlug={p.storeSlug}
+          apiBaseUrl={getFlipyEnv().apiBaseUrl}
+          flipyTiendaId={flipyCtx.tiendaId}
+          canManage={canManage}
+        />
+      ) : null}
       <EcartPayPanel
         agencySlug={p.agencySlug}
         storeSlug={p.storeSlug}
@@ -188,7 +222,7 @@ export default async function ReconciliationPage({
       {result.rows.length === 0 ? (
         <EmptyState
           title="Sin lotes de liquidación"
-          description="Importa un CSV de liquidación del courier o sincroniza Ecart Pay (si usas COD de Envia)."
+          description="Sincroniza Flipy o Ecart Pay, o importa un CSV de liquidación del courier."
         />
       ) : (
         <DataTable

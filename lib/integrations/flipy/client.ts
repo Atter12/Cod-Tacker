@@ -52,6 +52,13 @@ import {
   type FlipyTransferGananciasSuccessResult,
   type FlipyTypeMode,
   type FlipyWalletSaldoResult,
+  type FlipyListEnviosQuery,
+  type FlipyListEnviosResult,
+  type FlipyRejectOfertaInput,
+  type FlipyRejectOfertaResult,
+  buildFlipyRejectOfertaRequestBody,
+  readFlipyListEnviosResult,
+  readFlipyRejectOfertaResult,
 } from "@/lib/integrations/flipy/partner-contract";
 
 export type {
@@ -76,6 +83,13 @@ export type {
   FlipyTransferGananciasSuccessResult,
   FlipyTypeMode,
   FlipyWalletSaldoResult,
+  FlipyListEnviosQuery,
+  FlipyListEnviosResult,
+  FlipyRejectOfertaInput,
+  FlipyRejectOfertaResult,
+  FlipyEnviosInboxScope,
+  FlipyEnvioListItem,
+  FlipyAttentionTag,
 } from "@/lib/integrations/flipy/partner-contract";
 
 export type FlipyPartnerClientConfig = {
@@ -168,6 +182,37 @@ function readString(bag: Record<string, unknown>, ...keys: string[]): string | n
 
 export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
   const partnerId = config.partnerId ?? "codtracked";
+
+  async function requestText(
+    path: string,
+    options: { method?: string; accept?: string } = {},
+  ): Promise<string> {
+    const url = `${config.baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+    const headers: Record<string, string> = {
+      Accept: options.accept ?? "text/csv",
+      "X-Partner-Key": config.partnerKey,
+      "X-Partner-Id": partnerId,
+      "X-External-Store-Id": config.externalStoreId,
+    };
+    const res = await fetch(url, {
+      method: options.method ?? "GET",
+      headers,
+      cache: "no-store",
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      let message = `Flipy API ${res.status}`;
+      try {
+        const bag = asRecord(JSON.parse(text) as unknown);
+        message =
+          (bag ? readString(bag, "message", "error", "detail") : null) || message;
+      } catch {
+        /* keep status message */
+      }
+      throw new FlipyPartnerApiError(message, res.status);
+    }
+    return text;
+  }
 
   async function request<T>(
     path: string,
@@ -582,6 +627,61 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         throw new FlipyPartnerApiError("Flipy no devolvió respuesta de calificación", 502);
       }
       return parsed;
+    },
+
+    async listEnvios(query: FlipyListEnviosQuery = {}): Promise<FlipyListEnviosResult> {
+      const scope = query.scope ?? "activos";
+      const params = new URLSearchParams();
+      params.set("scope", scope);
+      if (query.estado?.trim()) params.set("estado", query.estado.trim());
+      if (query.q?.trim()) params.set("q", query.q.trim());
+      if (query.page != null && query.page > 0) params.set("page", String(Math.floor(query.page)));
+      if (query.pageSize != null && query.pageSize > 0) {
+        params.set("pageSize", String(Math.floor(query.pageSize)));
+      }
+      const raw = await request<unknown>(`/api/partner/envios?${params.toString()}`, {
+        method: "GET",
+      });
+      const parsed = readFlipyListEnviosResult(raw, scope);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió listado de envíos", 502);
+      }
+      return parsed;
+    },
+
+    async rejectOferta(
+      envioId: string,
+      ofertaId: string,
+      input: FlipyRejectOfertaInput = {},
+    ): Promise<FlipyRejectOfertaResult> {
+      const raw = await request<unknown>(
+        `/api/partner/envios/${encodeURIComponent(envioId)}/ofertas/${encodeURIComponent(ofertaId)}/rechazar`,
+        {
+          method: "POST",
+          body: buildFlipyRejectOfertaRequestBody(input),
+        },
+      );
+      const parsed = readFlipyRejectOfertaResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió respuesta de rechazo de oferta", 502);
+      }
+      return parsed;
+    },
+
+    /** Partner F4/0.2.3 settlement CSV export (`format=settlement`). */
+    async exportConciliacionSettlement(input: {
+      tiendaId: string;
+      from?: string | null;
+      to?: string | null;
+    }): Promise<string> {
+      const params = new URLSearchParams();
+      params.set("format", "settlement");
+      if (input.from?.trim()) params.set("from", input.from.trim().slice(0, 10));
+      if (input.to?.trim()) params.set("to", input.to.trim().slice(0, 10));
+      return requestText(
+        `/api/partner/tiendas/${encodeURIComponent(input.tiendaId)}/conciliacion/export?${params.toString()}`,
+        { accept: "text/csv" },
+      );
     },
   };
 }

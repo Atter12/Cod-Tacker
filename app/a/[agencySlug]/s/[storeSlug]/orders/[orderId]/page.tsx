@@ -41,7 +41,10 @@ import { labelTimelineKind } from "@/lib/orders/labels";
 import { displayShopifyContact, missingShopifyContactLabel } from "@/lib/orders/shopify-contact";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
-import { buildFlipyOrderShipmentContext } from "@/lib/integrations/flipy/order-shipment-context";
+import {
+  buildFlipyOrderShipmentContext,
+  shouldShowFlipyBidsEmbed,
+} from "@/lib/integrations/flipy/order-shipment-context";
 import { readFlipyEmbedBidsEvalEnabled } from "@/lib/integrations/flipy/settings";
 import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
 import { createClient } from "@/lib/supabase/server";
@@ -170,8 +173,12 @@ export default async function OrderDetailPage({
     showFlipyPanel && canManage && !flipyCtx.isPickup && !flipyCtx.flipyEnvioId;
   const showFlipyBidsEmbed =
     showFlipyPanel &&
-    flipyCtx.flipyEnvioId &&
-    readFlipyEmbedBidsEvalEnabled(flipyIntegration?.settings);
+    readFlipyEmbedBidsEvalEnabled(flipyIntegration?.settings) &&
+    shouldShowFlipyBidsEmbed({
+      flipyEnvioId: flipyCtx.flipyEnvioId,
+      flipyEstado: flipyCtx.flipyEstado,
+      smartFallbackToBid: flipyCtx.smartFallbackToBid,
+    });
   const flipyOriginSettings = flipyIntegration
     ? readFlipyOriginFromSettings(flipyIntegration.settings)
     : null;

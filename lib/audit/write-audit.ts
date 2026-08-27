@@ -38,6 +38,7 @@ export type AuditAction =
   | "settlement_csv_import_enqueued"
   | "settlement_ecart_connected"
   | "settlement_ecart_sync_enqueued"
+  | "settlement_flipy_sync_enqueued"
   | "settlement_item_collected_confirmed"
   | "settlement_batch_approved"
   | "settlement_batch_reopened"

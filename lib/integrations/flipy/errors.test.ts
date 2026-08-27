@@ -28,8 +28,9 @@ describe("flipy error user hints", () => {
     );
   });
 
-  it("surfaces hints via toUserMessage path for FlipyPartnerApiError", () => {
-    const error = new FlipyPartnerApiError("JWT invalid", 422, "ASSERTION_EXPIRED");
-    assert.equal(flipyErrorUserHint(error.code ?? null)?.includes("PARTNER_EMAIL_ASSERTION_SECRET"), true);
+  it("maps CANCEL_BLOQUEADA_ASIGNADO to liberar / soporte (not cancela en Flipy)", () => {
+    const hint = flipyErrorUserHint(FLIPY_ERROR_CODES.CANCEL_BLOQUEADA_ASIGNADO) ?? "";
+    assert.match(hint, /Libéralo|liberar|soporte/i);
+    assert.equal(/cancela desde Flipy/i.test(hint), false);
   });
 });

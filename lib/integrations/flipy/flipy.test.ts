@@ -112,6 +112,9 @@ describe("flipy embed-urls", () => {
     assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/pujas\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /envioId=env123/);
+    assert.match(url, /theme=light/);
+    assert.match(url, /appearance=light/);
+    assert.match(url, /partner=codtracked/);
   });
 
   it("validates postMessage origin against embed origin", () => {
@@ -259,5 +262,59 @@ describe("flipy webhook-auth", () => {
     const sig = signFlipyWebhook(secret, body);
     assert.equal(verifyFlipyWebhookSignature(body, sig, secret), true);
     assert.equal(verifyFlipyWebhookSignature(body, "sha256=bad", secret), false);
+  });
+});
+
+describe("flipy inbox + reject contract (v0.2.2)", () => {
+  it("parses list envios inbox payload", async () => {
+    const { readFlipyListEnviosResult } = await import("@/lib/integrations/flipy/partner-contract");
+    const parsed = readFlipyListEnviosResult({
+      scope: "atencion",
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      items: [
+        {
+          envioId: "clenv1",
+          estado: "PENDIENTE_PUJAS",
+          externalOrderId: "shopify:1042",
+          attentionTags: ["bids"],
+          bidsCount: 3,
+          fulfillmentMode: "bid",
+        },
+      ],
+    });
+    assert.ok(parsed);
+    assert.equal(parsed!.scope, "atencion");
+    assert.equal(parsed!.items[0]?.envioId, "clenv1");
+    assert.deepEqual(parsed!.items[0]?.attentionTags, ["bids"]);
+    assert.equal(parsed!.items[0]?.bidsCount, 3);
+  });
+
+  it("parses reject oferta result", async () => {
+    const { readFlipyRejectOfertaResult } = await import("@/lib/integrations/flipy/partner-contract");
+    const parsed = readFlipyRejectOfertaResult({
+      envioId: "clenv1",
+      ofertaId: "of1",
+      estado: "PENDIENTE_PUJAS",
+      bidsRemaining: 2,
+      message: "Oferta rechazada",
+    });
+    assert.ok(parsed);
+    assert.equal(parsed!.ofertaId, "of1");
+    assert.equal(parsed!.bidsRemaining, 2);
+  });
+
+  it("parses flipy-bid-rejected postMessage", async () => {
+    const { parseFlipyBidRejectedMessage } = await import("@/lib/integrations/flipy/post-message");
+    const parsed = parseFlipyBidRejectedMessage({
+      type: "flipy-bid-rejected",
+      envioId: "clenv1",
+      ofertaId: "of1",
+      bidsRemaining: 1,
+    });
+    assert.ok(parsed);
+    assert.equal(parsed!.ofertaId, "of1");
+    assert.equal(parsed!.bidsRemaining, 1);
   });
 });

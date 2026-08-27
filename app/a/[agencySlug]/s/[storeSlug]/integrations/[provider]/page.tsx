@@ -385,8 +385,11 @@ export default async function IntegrationDetailPage({
             </div>
           ) : null}
           <FlipyConciliacionExportPanel
+            agencySlug={p.agencySlug}
+            storeSlug={p.storeSlug}
             apiBaseUrl={getFlipyEnv().apiBaseUrl}
             flipyTiendaId={readFlipyTiendaId(integration.settings) ?? integration.external_account_id}
+            canManage={canManage}
           />
         </>
       ) : null}

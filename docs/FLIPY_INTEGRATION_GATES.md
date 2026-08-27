@@ -122,21 +122,24 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 
 ---
 
-## Fase 4 — Automatización gate (código ✅ 2026-08-24, E2E manual pendiente)
+## Fase 4 — Automatización gate (código ✅ 2026-08-27 settlement nativo, E2E manual pendiente)
 
 | # | Criterio | COD-tracked | Flipy | E2E |
 | --- | --- | --- | --- | --- |
 | 1 | Job auto-create envío con reglas tienda | ✅ `flipy.auto_create.shipment` + settings | — | ⏳ |
-| 2 | Conciliación export CSV settlement | ✅ preset `flipy_cod` + import wizard | ✅ `GET .../conciliacion/export?format=settlement` | ⏳ |
+| 2 | Conciliación settlement **nativa** (primario) | ✅ webhook `settlement.batch.ready` + job `settlement.flipy.synced` + Sync now + auto `cash_collected` al match; Liquidado humano | ⏳ push webhook / batches API (export settlement ya existe) | ⏳ |
+| 2b | CSV settlement (fallback) | ✅ preset `flipy_cod` + import wizard | ✅ `GET .../conciliacion/export?format=settlement` | ⏳ |
 | 3 | Embed panel pujas (siempre on) | ✅ `FlipyBidsEmbed` + scope `bids_panel` | ✅ `/partner/pujas` + embed API | ⏳ |
+
+**Producto F4 cobro:** Flipy = verdad de cobro en puerta. Tras sync/webhook, ítems **matched** → badge **Cobrado** (`cash_collected`). **Liquidado** solo con `approveSettlementBatch`. Entregado ≠ Cobrado.
 
 **Probar E2E F4** (tienda `holistic-ecommerce/flipy`):
 
 1. Integraciones → activar auto-create (confianza alta) → pedido Shopify elegible → job crea envío sin modal.
-2. Export Flipy `format=settlement` → importar en Conciliación con preset Flipy → match pedidos entregados.
+2. Conciliación → **Sincronizar ahora** (o webhook `settlement.batch.ready`) → lote `source=flipy` → pedidos matched en **Cobrado**; aprobar lote → **Liquidado**. CSV solo si falla sync.
 3. Activar embed pujas → pedido con envío → iframe resumen pujas + CTA abrir app Flipy.
 
-**Smoke API F4 (2026-08-24):** incluido en `smoke:f3f4` — conciliación csv/json/settlement + embed pujas.
+**Smoke API F4 (2026-08-24):** incluido en `smoke:f3f4` — conciliación csv/json/settlement + embed pujas. Unit: `lib/integrations/flipy/settlement.test.ts`.
 
 ---
 
@@ -183,3 +186,4 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | 1.4 | 2026-08-24 | **F4 código** — auto-create, conciliación CSV, embed pujas evaluación |
 | 1.5 | 2026-08-24 | Smoke F3/F4 API `scripts/flipy-f3-f4-smoke.ts` |
 | 1.6 | 2026-08-25 | **Fase C v0.2** — lifecycle webhooks, D3, `smoke:v02`, PARTNER 0.2.0 draft |
+| 1.7 | 2026-08-27 | **F4 settlement nativo** — Partner 0.2.3, webhook/pull Sync, auto-Cobrado; CSV = fallback |

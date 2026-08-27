@@ -10,6 +10,10 @@ import {
   mapFlipyLifecycleWebhookToJobPayload,
   readFlipyWebhookEventType,
 } from "@/lib/integrations/flipy/map-lifecycle-webhook";
+import {
+  isFlipySettlementWebhookEvent,
+  mapFlipySettlementWebhookToJobPayload,
+} from "@/lib/integrations/flipy/map-settlement-webhook";
 import { mapFlipyWebhookToJobPayload } from "@/lib/integrations/flipy/map-webhook";
 import { verifyFlipyWebhookSignature } from "@/lib/integrations/flipy/webhook-auth";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
@@ -115,6 +119,49 @@ export async function handleFlipyWebhookIngress(input: {
         eventType: lifecycle.payload.event_type,
         jobId: enqueued.jobId,
         envioId: lifecycle.payload.envio_id,
+      },
+    };
+  }
+
+  if (isFlipySettlementWebhookEvent(eventType)) {
+    const settlement = mapFlipySettlementWebhookToJobPayload(json, {
+      eventId: input.eventIdHeader,
+    });
+    if (!settlement.ok) {
+      return { status: 400, body: { error: settlement.error } };
+    }
+
+    const idempotencyKey = `flipy:wh:settlement:${settlement.payload.external_event_id}`;
+    const enqueued = await enqueueRawEventAndJob(admin, {
+      agencyId: resolved.agencyId,
+      storeId: resolved.storeId,
+      provider: "flipy",
+      integrationId: resolved.integrationId,
+      eventType: "settlement.batch.ready",
+      jobType: "settlement.flipy.synced",
+      idempotencyKey,
+      externalEventId: settlement.payload.external_event_id,
+      payload: settlement.payload as unknown as Json,
+    });
+
+    logger.info("flipy.webhook.settlement_enqueued", {
+      store_id: resolved.storeId,
+      job_id: enqueued.jobId,
+      batch_id: settlement.batch.batchId,
+      items: settlement.payload.rows.length,
+    });
+
+    return {
+      status: 200,
+      enqueued: true,
+      body: {
+        ok: true,
+        enqueued: true,
+        settlement: true,
+        eventType: "settlement.batch.ready",
+        jobId: enqueued.jobId,
+        batchId: settlement.batch.batchId,
+        itemCount: settlement.payload.rows.length,
       },
     };
   }

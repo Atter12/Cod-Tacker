@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { isAllowedFlipyPostMessageOrigin } from "@/lib/integrations/flipy/embed-urls";
 import {
   parseFlipyBidAcceptedMessage,
+  parseFlipyBidRejectedMessage,
   parseFlipyBidsErrorMessage,
   parseFlipyBidsUpdatedMessage,
 } from "@/lib/integrations/flipy/post-message";
@@ -25,6 +26,7 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
   const [resolvedOrigin, setResolvedOrigin] = useState(embedOrigin);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
+  const [bidCount, setBidCount] = useState<number | null>(null);
   const [iframeFailed, setIframeFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -63,17 +65,29 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
       if (!isAllowedFlipyPostMessageOrigin(event.origin, resolvedOrigin)) return;
       const updated = parseFlipyBidsUpdatedMessage(event.data);
       if (updated) {
+        if (updated.count != null) setBidCount(updated.count);
         setStatusHint(
           updated.count != null
-            ? `Pujas actualizadas (${updated.count}).`
-            : "Pujas actualizadas.",
+            ? `Ofertas actualizadas (${updated.count}).`
+            : "Ofertas actualizadas.",
         );
         router.refresh();
         return;
       }
       const accepted = parseFlipyBidAcceptedMessage(event.data);
       if (accepted) {
-        setStatusHint("Puja aceptada en Flipy.");
+        setStatusHint("Oferta aceptada. Motorizado asignado.");
+        router.refresh();
+        return;
+      }
+      const rejected = parseFlipyBidRejectedMessage(event.data);
+      if (rejected) {
+        if (rejected.bidsRemaining != null) setBidCount(rejected.bidsRemaining);
+        setStatusHint(
+          rejected.bidsRemaining != null
+            ? `Oferta rechazada. Quedan ${rejected.bidsRemaining}.`
+            : "Oferta rechazada.",
+        );
         router.refresh();
         return;
       }
@@ -104,7 +118,11 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
   }
 
   if (!embedUrl) {
-    return <p className="text-[12px] text-text-secondary">Cargando panel de pujas…</p>;
+    return (
+      <div className="overflow-hidden rounded-[11px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
+        <p className="text-[12.5px] text-text-secondary">Cargando ofertas de motorizados…</p>
+      </div>
+    );
   }
 
   if (iframeFailed) {
@@ -128,18 +146,43 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
     );
   }
 
+  const subtitle =
+    bidCount != null
+      ? bidCount === 1
+        ? "1 oferta · acepta o rechaza desde el panel"
+        : `${bidCount} ofertas · acepta o rechaza desde el panel`
+      : "Compara ofertas, rechaza las que no sirvan y acepta una para asignar";
+
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-surface-elevated p-3 shadow-[var(--card-shadow)]">
-      <h3 className="text-sm font-semibold">Pujas Flipy</h3>
-      {statusHint ? <p className="text-xs text-emerald-600">{statusHint}</p> : null}
-      <iframe
-        key={`${embedUrl}:${reloadKey}`}
-        title="Flipy pujas"
-        src={embedUrl}
-        className="h-[min(48vh,420px)] w-full rounded-md border border-border bg-white"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-        onError={() => setIframeFailed(true)}
-      />
+    <div className="overflow-hidden rounded-[11px] border border-border bg-surface-elevated shadow-[var(--card-shadow)] ring-1 ring-brand-primary/10">
+      <div className="border-b border-border bg-brand-softer px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-primary">
+              Pujas Flipy
+            </p>
+            <p className="mt-0.5 text-[12.5px] leading-snug text-text-secondary">{subtitle}</p>
+          </div>
+          {bidCount != null ? (
+            <span className="shrink-0 rounded-md bg-surface px-2 py-1 text-[11px] font-semibold text-text-primary ring-1 ring-border">
+              {bidCount} {bidCount === 1 ? "oferta" : "ofertas"}
+            </span>
+          ) : null}
+        </div>
+        {statusHint ? (
+          <p className="mt-2 text-[12px] font-medium text-brand-primary">{statusHint}</p>
+        ) : null}
+      </div>
+      <div className="bg-surface px-3 py-3 sm:px-4">
+        <iframe
+          key={`${embedUrl}:${reloadKey}`}
+          title="Flipy pujas"
+          src={embedUrl}
+          className="h-[min(38vh,340px)] w-full rounded-md border border-border/80 bg-surface"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          onError={() => setIframeFailed(true)}
+        />
+      </div>
     </div>
   );
 }

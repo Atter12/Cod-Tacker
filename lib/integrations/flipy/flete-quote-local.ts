@@ -16,6 +16,16 @@ const FLETE = {
   maxOfferFactor: 3,
 };
 
+/**
+ * Cotizaciones con ~0 km (pin incompleto / mismo punto) producen ofertas basura
+ * (p.ej. S/ 9.50 = base + grande + express). No usarlas para UI ni auto-fill.
+ */
+export const MIN_USABLE_FLETE_DISTANCE_KM = 0.1;
+
+export function isUsableFlipyFleteDistance(distanceKm: number | null | undefined): boolean {
+  return distanceKm != null && Number.isFinite(distanceKm) && distanceKm >= MIN_USABLE_FLETE_DISTANCE_KM;
+}
+
 export type FlipyFleteQuoteSource = "directions" | "haversine";
 
 function roundMoney(n: number): number {
@@ -62,5 +72,5 @@ export function recalcFleteFromDistance(
 }
 
 export function canRecalcFleteLocally(quote: FlipyFleteQuote | null | undefined): boolean {
-  return quote != null && quote.distanceKm != null && Number.isFinite(quote.distanceKm);
+  return quote != null && isUsableFlipyFleteDistance(quote.distanceKm);
 }

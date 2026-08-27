@@ -216,7 +216,10 @@ export type FlipyBidsEmbedParams = {
   envioId?: string | null;
 };
 
-/** F4-03 — embed evaluación panel pujas (read-only summary). */
+/**
+ * Partner pujas embed. Requests light chrome for COD-tracked hosts
+ * (Flipy panel may honor `theme=light` / `appearance=light`).
+ */
 export function buildFlipyBidsEmbedUrl(input: FlipyBidsEmbedParams): string {
   const base = normalizeFlipyEmbedOrigin(input.embedOrigin);
   const url = new URL(`${base}/partner/pujas`);
@@ -224,7 +227,24 @@ export function buildFlipyBidsEmbedUrl(input: FlipyBidsEmbedParams): string {
   if (input.envioId?.trim()) {
     url.searchParams.set("envioId", input.envioId.trim());
   }
+  url.searchParams.set("theme", "light");
+  url.searchParams.set("appearance", "light");
+  url.searchParams.set("partner", "codtracked");
   return url.toString();
+}
+
+/** Prefer light theme on any pujas embed URL (API or fallback). */
+export function withFlipyBidsLightTheme(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl);
+    if (!url.pathname.includes("/partner/pujas")) return embedUrl;
+    url.searchParams.set("theme", "light");
+    url.searchParams.set("appearance", "light");
+    url.searchParams.set("partner", "codtracked");
+    return url.toString();
+  } catch {
+    return embedUrl;
+  }
 }
 
 /** Rastreo cliente (loop público /rastreo) — no usar para pujas tienda. */

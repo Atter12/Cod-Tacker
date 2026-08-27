@@ -6,6 +6,7 @@ export const storeNavigation: NavigationItem[] = [
   { label: "Atribución", href: "/attribution" },
   { label: "Campañas", href: "/campaigns" },
   { label: "Logística", href: "/logistics" },
+  { label: "Flipy", href: "/flipy" },
   { label: "RTO", href: "/rto" },
   { label: "Conciliación", href: "/reconciliation" },
   { label: "Automatizaciones", href: "/automations" },

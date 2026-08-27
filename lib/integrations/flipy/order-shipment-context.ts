@@ -35,6 +35,7 @@ export type FlipyOrderShipmentContext = {
   shippingAddress1: string | null;
   shippingCoords: { lat: number; lng: number } | null;
   isPickup: boolean;
+  smartFallbackToBid: boolean;
   currencyCode: string;
   shippingAmount: number;
   customerName: string | null;
@@ -106,6 +107,23 @@ function readFlipyDevolucionFromMeta(meta: Record<string, unknown>): FlipyDevolu
     resenaHabilitada:
       typeof bag.resenaHabilitada === "boolean" ? bag.resenaHabilitada : null,
   };
+}
+
+function readSmartFallbackToBid(meta: Record<string, unknown>): boolean {
+  const paymentMeta = meta.shopify_flipy_payment;
+  if (!paymentMeta || typeof paymentMeta !== "object" || Array.isArray(paymentMeta)) return false;
+  return (paymentMeta as { smartFallbackToBid?: unknown }).smartFallbackToBid === true;
+}
+
+export function shouldShowFlipyBidsEmbed(input: {
+  flipyEnvioId: string | null;
+  flipyEstado: string | null;
+  smartFallbackToBid: boolean;
+}): boolean {
+  if (!input.flipyEnvioId) return false;
+  const estado = input.flipyEstado?.trim().toUpperCase() ?? "";
+  if (estado === "PENDIENTE_PUJAS") return true;
+  return input.smartFallbackToBid && estado !== "CANCELADO" && estado !== "ENTREGADO";
 }
 
 function readFlipyTiendaResenaFromMeta(meta: Record<string, unknown>): FlipyTiendaResena | null {
@@ -216,6 +234,7 @@ export function buildFlipyOrderShipmentContext(
       shipping_longitude: order.shipping_longitude ?? null,
     }),
     isPickup: payment.fulfillmentMode === "pickup",
+    smartFallbackToBid: readSmartFallbackToBid(meta),
     currencyCode: order.currency_code,
     shippingAmount: Number(order.shipping_amount) || 0,
     customerName,

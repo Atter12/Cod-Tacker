@@ -1,4 +1,5 @@
-import type { FlipyPartnerApiErrorDetails } from "@/lib/integrations/flipy/partner-contract";
+import type { FlipyPartnerApiErrorDetails, FlipyCancelEnvioBlockedDetails } from "@/lib/integrations/flipy/partner-contract";
+import { FLIPY_CANCEL_RESOLUTION_MOTORIZADO_LIBERAR } from "@/lib/integrations/flipy/partner-contract";
 
 export class FlipyPartnerApiError extends Error {
   readonly status: number;
@@ -80,7 +81,7 @@ export function flipyErrorUserHint(code: string | null): string | null {
     case FLIPY_ERROR_CODES.TIENDA_NOT_LINKED:
       return "Reconecta Flipy en Integraciones.";
     case FLIPY_ERROR_CODES.CANCEL_BLOQUEADA_ASIGNADO:
-      return "Ya hay un motorizado asignado. Cancela desde Flipy o contacta soporte.";
+      return "Ya hay un motorizado asignado. Libéralo desde el envío o contacta soporte Flipy.";
     case FLIPY_ERROR_CODES.CANCEL_BLOQUEADA_EN_CURSO:
       return "El envío está en curso. Gestiona devolución o soporte desde Flipy.";
     case FLIPY_ERROR_CODES.YA_ENTREGADO:
@@ -141,4 +142,29 @@ export function isFlipyTerminalEstado(estado: string | null | undefined): boolea
   if (!estado) return false;
   const normalized = estado.trim().toUpperCase();
   return normalized === "CANCELADO" || normalized === "ENTREGADO";
+}
+
+export function flipyCancelBlockedCtaLabel(
+  details?: Pick<FlipyCancelEnvioBlockedDetails, "resolution"> | null,
+): string {
+  if (details?.resolution === FLIPY_CANCEL_RESOLUTION_MOTORIZADO_LIBERAR) {
+    return "Liberar motorizado / soporte";
+  }
+  return "Gestionar en Flipy";
+}
+
+export function flipyCancelBlockedUserMessage(input: {
+  code?: string | null;
+  message?: string | null;
+  details?: Pick<FlipyCancelEnvioBlockedDetails, "resolution" | "supportHint"> | null;
+}): string {
+  if (input.details?.supportHint?.trim()) return input.details.supportHint.trim();
+  if (input.details?.resolution === FLIPY_CANCEL_RESOLUTION_MOTORIZADO_LIBERAR) {
+    return "Ya hay un motorizado asignado. Libéralo desde el envío o contacta soporte Flipy.";
+  }
+  return (
+    flipyErrorUserHint(input.code ?? null) ??
+    input.message?.trim() ??
+    "No se pudo cancelar el envío Flipy."
+  );
 }
