@@ -129,14 +129,14 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-surface-elevated p-3">
+    <div className="space-y-2 rounded-lg border border-border bg-surface-elevated p-3 shadow-[var(--card-shadow)]">
       <h3 className="text-sm font-semibold">Pujas Flipy</h3>
       {statusHint ? <p className="text-xs text-emerald-600">{statusHint}</p> : null}
       <iframe
         key={`${embedUrl}:${reloadKey}`}
         title="Flipy pujas"
         src={embedUrl}
-        className="h-[320px] w-full rounded-md border border-border bg-white"
+        className="h-[min(48vh,420px)] w-full rounded-md border border-border bg-white"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
         onError={() => setIframeFailed(true)}
       />

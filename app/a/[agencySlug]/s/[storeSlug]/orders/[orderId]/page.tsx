@@ -193,24 +193,35 @@ export default async function OrderDetailPage({
 
   return (
     <section className="min-w-0 space-y-5">
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <Link
-            href={routes.store.orders(p.agencySlug, p.storeSlug)}
-            className="text-xs text-text-secondary hover:text-text-primary hover:underline"
-          >
-            ← Volver a pedidos
-          </Link>
-          <SectionHeader
-            title={order.order_number ?? order.external_order_id}
-            description={`Externo: ${order.external_order_id} · ${formatCurrency(Number(order.total_amount), order.currency_code)}`}
-          />
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <OrderStatusBadge status={order.order_status} />
-            <PaymentStatusBadge status={order.payment_status} />
-            <ConfirmationStatusBadge status={order.confirmation_status} />
-            <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:gap-6 lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="min-w-0">
+            <Link
+              href={routes.store.orders(p.agencySlug, p.storeSlug)}
+              className="text-xs text-text-secondary hover:text-text-primary hover:underline"
+            >
+              ← Volver a pedidos
+            </Link>
+            <SectionHeader
+              title={order.order_number ?? order.external_order_id}
+              description={`Externo: ${order.external_order_id} · ${formatCurrency(Number(order.total_amount), order.currency_code)}`}
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <OrderStatusBadge status={order.order_status} />
+              <PaymentStatusBadge status={order.payment_status} />
+              <ConfirmationStatusBadge status={order.confirmation_status} />
+              <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
+            </div>
           </div>
+          {showFlipyBidsEmbed && flipyCtx.flipyEnvioId ? (
+            <FlipyBidsEmbed
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              orderId={order.id}
+              envioId={flipyCtx.flipyEnvioId}
+              embedOrigin={flipyEmbedOrigin}
+            />
+          ) : null}
         </div>
         <div className="w-full min-w-0 max-w-md shrink-0 space-y-4 lg:ml-auto">
           {showFlipyPanel ? (
@@ -246,15 +257,6 @@ export default async function OrderDetailPage({
               canCreate={flipyCanCreate}
               canManage={canManage}
               pickupOrder={flipyCtx.isPickup}
-            />
-          ) : null}
-          {showFlipyBidsEmbed && flipyCtx.flipyEnvioId ? (
-            <FlipyBidsEmbed
-              agencySlug={p.agencySlug}
-              storeSlug={p.storeSlug}
-              orderId={order.id}
-              envioId={flipyCtx.flipyEnvioId}
-              embedOrigin={flipyEmbedOrigin}
             />
           ) : null}
           <OrderActionsPanel
