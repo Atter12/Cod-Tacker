@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { transferFlipyGananciasToOperaciones } from "@/app/actions/flipy-wallet";
+import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
+import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
 import { buildFlipyAppFinanzasUrl } from "@/lib/integrations/flipy/embed-urls";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { Alert } from "@/components/ui/Alert";
@@ -19,6 +21,7 @@ type Props = {
   transferGananciasDisponible?: boolean | null;
   destinoRetiroConfigurado?: boolean | null;
   appOrigin?: string | null;
+  embedOrigin: string;
 };
 
 export function FlipyTransferGananciasPanel({
@@ -31,6 +34,7 @@ export function FlipyTransferGananciasPanel({
   transferGananciasDisponible = false,
   destinoRetiroConfigurado = false,
   appOrigin = null,
+  embedOrigin,
 }: Props) {
   const router = useRouter();
   const [operaciones, setOperaciones] = useState(initialOperaciones);
@@ -40,8 +44,18 @@ export function FlipyTransferGananciasPanel({
   const [showCustomMonto, setShowCustomMonto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [walletPending, startWallet] = useTransition();
+  const [refreshPending, startRefresh] = useTransition();
   const idempotencyKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setOperaciones(initialOperaciones);
+    setGanancias(initialGanancias);
+    setReservado(initialReservado);
+  }, [initialOperaciones, initialGanancias, initialReservado]);
 
   const gananciasDisponibles = ganancias ?? 0;
   const reserved = reservado ?? 0;
@@ -121,6 +135,44 @@ export function FlipyTransferGananciasPanel({
     submitTransfer(parsed);
   }
 
+  function openWalletTopup() {
+    setWalletError(null);
+    startWallet(async () => {
+      const tokenResult = await issueFlipyWidgetTokenAction({
+        agencySlug,
+        storeSlug,
+        scope: "wallet_topup",
+      });
+      if (tokenResult.error || !tokenResult.embedUrl) {
+        setWalletError(tokenResult.error ?? "No se pudo cargar la recarga embed.");
+        return;
+      }
+      setWalletEmbedUrl(tokenResult.embedUrl);
+    });
+  }
+
+  function closeWalletTopup() {
+    setWalletEmbedUrl(null);
+    setWalletError(null);
+    startRefresh(() => {
+      router.refresh();
+    });
+  }
+
+  function handleWalletToppedUp(newBalance: number) {
+    setOperaciones(newBalance);
+    setWalletError(null);
+    startRefresh(() => {
+      router.refresh();
+    });
+  }
+
+  function refreshSaldo() {
+    startRefresh(() => {
+      router.refresh();
+    });
+  }
+
   const finanzasUrl =
     appOrigin && destinoRetiroConfigurado
       ? buildFlipyAppFinanzasUrl({ appOrigin })
@@ -157,11 +209,21 @@ export function FlipyTransferGananciasPanel({
         </div>
 
         <div className="space-y-2 border-t border-border pt-4 sm:border-t-0 sm:border-l sm:pl-6 sm:pt-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-text-primary">Ganancias</p>
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
-              COD
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-text-primary">Ganancias</p>
+              <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
+                COD
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => refreshSaldo()}
+              disabled={refreshPending}
+              className="text-[11px] font-medium text-text-secondary underline-offset-2 hover:text-text-primary hover:underline disabled:opacity-50"
+            >
+              {refreshPending ? "Actualizando…" : "Actualizar saldos"}
+            </button>
           </div>
           <p className="text-2xl font-semibold tracking-tight text-text-primary">
             {formatCurrency(gananciasDisponibles, "PEN")}
@@ -183,14 +245,21 @@ export function FlipyTransferGananciasPanel({
           {success}
         </Alert>
       ) : null}
+      {walletError ? (
+        <Alert variant="warning" title="Recarga">
+          {walletError}
+        </Alert>
+      ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <a
-          href="#flipy-recarga"
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-brand-primary px-4 text-sm font-medium text-white transition-colors hover:bg-brand-primary/90 sm:flex-none"
+        <Button
+          size="md"
+          className="flex-1 sm:flex-none"
+          disabled={walletPending}
+          onClick={() => openWalletTopup()}
         >
-          + Recargar operaciones
-        </a>
+          {walletPending ? "Cargando recarga…" : "+ Recargar operaciones"}
+        </Button>
         {canTransfer ? (
           <Button
             size="md"
@@ -203,6 +272,22 @@ export function FlipyTransferGananciasPanel({
           </Button>
         ) : null}
       </div>
+
+      {walletEmbedUrl ? (
+        <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-text-secondary">Recarga Operaciones (embed Flipy)</p>
+            <Button size="sm" variant="outline" onClick={() => closeWalletTopup()}>
+              Cerrar
+            </Button>
+          </div>
+          <FlipyWalletEmbed
+            embedUrl={walletEmbedUrl}
+            embedOrigin={embedOrigin}
+            onToppedUp={handleWalletToppedUp}
+          />
+        </div>
+      ) : null}
 
       {canTransfer ? (
         <div className="space-y-2">

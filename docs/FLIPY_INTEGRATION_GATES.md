@@ -93,7 +93,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | # | Criterio | Código CT | Código Flipy | E2E |
 | --- | --- | --- | --- | --- |
 | 1 | Embed recarga `/partner/recarga` + `flipy-wallet-topped-up` | ✅ `FlipyWalletEmbed` + widget `wallet_topup` | ✅ `/partner/recarga` + embed API | ⏳ |
-| 2 | Error `SALDO_INSUFICIENTE_HOLD` → CTA recarga | ✅ modal + `FlipyWalletRecargaPanel` | ✅ Partner API 400 + code | ⏳ |
+| 2 | Error `SALDO_INSUFICIENTE_HOLD` → CTA recarga | ✅ modal + wallet embed en saldos | ✅ Partner API 400 + code | ⏳ |
 | 3 | Deep link operación post-create (pujas / envío) | ✅ `FLIPY_APP_ORIGIN` + `appWebUrl` API | ✅ `appDeepLink` / `appWebUrl` en create | ⏳ |
 | 4 | Settings reglas recojo por tienda | ✅ `FlipyPickupSettings` | — | ⏳ |
 | 5 | `note_attributes` escenario override | ✅ `resolve-payment` + `noteAttributes` en API | ✅ `resolveEscenarioPago` | ⏳ |
@@ -128,7 +128,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 | --- | --- | --- | --- | --- |
 | 1 | Job auto-create envío con reglas tienda | ✅ `flipy.auto_create.shipment` + settings | — | ⏳ |
 | 2 | Conciliación export CSV settlement | ✅ preset `flipy_cod` + import wizard | ✅ `GET .../conciliacion/export?format=settlement` | ⏳ |
-| 3 | Embed panel pujas (evaluación) | ✅ `FlipyBidsEmbed` + scope `bids_panel` | ✅ `/partner/pujas` + embed API | ⏳ |
+| 3 | Embed panel pujas (siempre on) | ✅ `FlipyBidsEmbed` + scope `bids_panel` | ✅ `/partner/pujas` + embed API | ⏳ |
 
 **Probar E2E F4** (tienda `holistic-ecommerce/flipy`):
 

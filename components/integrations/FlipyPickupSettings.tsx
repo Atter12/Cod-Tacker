@@ -45,7 +45,7 @@ export function FlipyPickupSettings({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
+    <div className="flex h-full flex-col space-y-3 rounded-[11px] border border-border bg-surface-elevated p-4 shadow-[var(--card-shadow)]">
       <h2 className="text-sm font-semibold">Reglas de recojo (Shopify)</h2>
       <p className="text-[12.5px] text-text-secondary">
         Palabras clave adicionales en título o código de línea de envío que indican recojo en
@@ -62,11 +62,13 @@ export function FlipyPickupSettings({
           placeholder="retiro en tienda, click and collect"
         />
       </FormField>
-      {error ? <Alert variant="danger" title="Error">{error}</Alert> : null}
-      {success ? <Alert variant="success" title="Guardado">{success}</Alert> : null}
-      <Button size="sm" disabled={disabled || pending} onClick={save}>
-        {pending ? "Guardando…" : "Guardar reglas"}
-      </Button>
+      <div className="mt-auto space-y-3 pt-1">
+        {error ? <Alert variant="danger" title="Error">{error}</Alert> : null}
+        {success ? <Alert variant="success" title="Guardado">{success}</Alert> : null}
+        <Button size="sm" disabled={disabled || pending} onClick={save}>
+          {pending ? "Guardando…" : "Guardar reglas"}
+        </Button>
+      </div>
     </div>
   );
 }

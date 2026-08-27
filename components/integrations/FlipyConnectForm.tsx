@@ -17,6 +17,7 @@ type Props = {
   flipyTiendaId?: string | null;
   defaultNombre?: string | null;
   defaultEmail?: string | null;
+  defaultTelefono?: string | null;
   defaultOriginAddress?: string | null;
   defaultOriginLat?: number | null;
   defaultOriginLng?: number | null;
@@ -33,6 +34,7 @@ export function FlipyConnectForm({
   flipyTiendaId = null,
   defaultNombre = null,
   defaultEmail = null,
+  defaultTelefono = null,
   defaultOriginAddress = null,
   defaultOriginLat = null,
   defaultOriginLng = null,
@@ -44,7 +46,7 @@ export function FlipyConnectForm({
   const [nombre, setNombre] = useState(defaultNombre ?? "");
   const [ruc, setRuc] = useState("");
   const [email, setEmail] = useState(defaultEmail ?? "");
-  const [telefono, setTelefono] = useState("");
+  const [telefono, setTelefono] = useState(defaultTelefono ?? "");
   const [originAddress, setOriginAddress] = useState(defaultOriginAddress ?? "");
   const [originLat, setOriginLat] = useState(
     defaultOriginLat != null ? String(defaultOriginLat) : "",

@@ -1160,16 +1160,23 @@ export async function connectFlipyLive(
   let tiendaId: string;
   if (linkedTiendaId) {
     tiendaId = linkedTiendaId;
+    const existingSettings =
+      existing?.settings && typeof existing.settings === "object" && !Array.isArray(existing.settings)
+        ? (existing.settings as Record<string, unknown>)
+        : {};
+    const prevTelefono = String(existingSettings.telefono ?? "").trim();
+    const nextTelefono = input.telefono?.trim() || "";
+    const prevOriginAddress = String(existingSettings.origin_address ?? "").trim();
+    const prevLat = Number(existingSettings.origin_lat);
+    const prevLng = Number(existingSettings.origin_lng);
     const profileChanged =
       (readFlipyContactEmail(existing?.settings)?.trim().toLowerCase() ?? "") !==
         contactEmail.toLowerCase() ||
       (existing?.display_name?.trim() ?? "") !== nombre ||
-      (existing?.settings &&
-      typeof existing.settings === "object" &&
-      !Array.isArray(existing.settings)
-        ? String((existing.settings as Record<string, unknown>).origin_address ?? "").trim() !==
-          originAddress
-        : false);
+      prevOriginAddress !== originAddress ||
+      prevTelefono !== nextTelefono ||
+      (Number.isFinite(prevLat) ? prevLat : null) !== input.originLat ||
+      (Number.isFinite(prevLng) ? prevLng : null) !== input.originLng;
 
     if (profileChanged) {
       try {

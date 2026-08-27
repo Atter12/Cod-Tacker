@@ -4,10 +4,8 @@ import { FlipyAppAccessPanel } from "@/components/integrations/FlipyAppAccessPan
 import { FlipyAutoCreateSettings } from "@/components/integrations/FlipyAutoCreateSettings";
 import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
-import { FlipyEmbedBidsSettings } from "@/components/integrations/FlipyEmbedBidsSettings";
 import { FlipyPickupSettings } from "@/components/integrations/FlipyPickupSettings";
 import { FlipySaldoCard } from "@/components/integrations/FlipySaldoCard";
-import { FlipyWalletRecargaPanel } from "@/components/integrations/FlipyWalletRecargaPanel";
 import { IntegrationActions } from "@/components/integrations/IntegrationActions";
 import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import { WhatsAppConnectForm } from "@/components/integrations/WhatsAppConnectForm";
@@ -39,7 +37,6 @@ import {
   readFlipyAutoCreateEnabled,
   readFlipyAutoCreateMinConfidence,
   readFlipyContactEmail,
-  readFlipyEmbedBidsEvalEnabled,
   readFlipyPickupKeywords,
 } from "@/lib/integrations/flipy/settings";
 import { readMetaAdsCredentialsFromEnv } from "@/lib/integrations/meta/env";
@@ -358,6 +355,7 @@ export default async function IntegrationDetailPage({
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
             appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
+            embedOrigin={flipyEnv?.embedOrigin ?? getFlipyEnv().embedOrigin}
             canManage={canManage}
           />
           {flipyContactEmail && flipyEnv ? (
@@ -371,34 +369,20 @@ export default async function IntegrationDetailPage({
               initialEmailVerified={flipyEmailVerified}
             />
           ) : null}
-          <FlipyWalletRecargaPanel
-            agencySlug={p.agencySlug}
-            storeSlug={p.storeSlug}
-            embedOrigin={flipyEnv?.embedOrigin ?? getFlipyEnv().embedOrigin}
-            appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
-            contactEmail={flipyContactEmail}
-          />
           {canManage ? (
-            <FlipyPickupSettings
-              agencySlug={p.agencySlug}
-              storeSlug={p.storeSlug}
-              defaultKeywords={readFlipyPickupKeywords(integration.settings)}
-            />
-          ) : null}
-          {canManage ? (
-            <FlipyAutoCreateSettings
-              agencySlug={p.agencySlug}
-              storeSlug={p.storeSlug}
-              defaultEnabled={readFlipyAutoCreateEnabled(integration.settings)}
-              defaultMinConfidence={readFlipyAutoCreateMinConfidence(integration.settings)}
-            />
-          ) : null}
-          {canManage ? (
-            <FlipyEmbedBidsSettings
-              agencySlug={p.agencySlug}
-              storeSlug={p.storeSlug}
-              defaultEnabled={readFlipyEmbedBidsEvalEnabled(integration.settings)}
-            />
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+              <FlipyPickupSettings
+                agencySlug={p.agencySlug}
+                storeSlug={p.storeSlug}
+                defaultKeywords={readFlipyPickupKeywords(integration.settings)}
+              />
+              <FlipyAutoCreateSettings
+                agencySlug={p.agencySlug}
+                storeSlug={p.storeSlug}
+                defaultEnabled={readFlipyAutoCreateEnabled(integration.settings)}
+                defaultMinConfidence={readFlipyAutoCreateMinConfidence(integration.settings)}
+              />
+            </div>
           ) : null}
           <FlipyConciliacionExportPanel
             apiBaseUrl={getFlipyEnv().apiBaseUrl}
@@ -420,6 +404,14 @@ export default async function IntegrationDetailPage({
               ? storeContact.contactEmail
               : flipyContactEmail ?? storeContact.contactEmail
           }
+          defaultTelefono={
+            integration?.settings &&
+            typeof integration.settings === "object" &&
+            !Array.isArray(integration.settings) &&
+            typeof (integration.settings as Record<string, unknown>).telefono === "string"
+              ? String((integration.settings as Record<string, unknown>).telefono)
+              : flipyOrigin?.phone ?? null
+          }
           defaultOriginAddress={flipyOrigin?.address}
           defaultOriginLat={flipyOrigin?.lat}
           defaultOriginLng={flipyOrigin?.lng}
@@ -435,6 +427,7 @@ export default async function IntegrationDetailPage({
           agencySlug={p.agencySlug}
           storeSlug={p.storeSlug}
           appOrigin={getFlipyEnv().appOrigin}
+          embedOrigin={getFlipyEnv().embedOrigin}
           canManage={canManage}
         />
       ) : null}

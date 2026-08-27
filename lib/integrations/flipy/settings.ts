@@ -8,8 +8,6 @@ export type FlipyIntegrationSettings = {
   pickupKeywords: string[];
   autoCreateEnabled: boolean;
   autoCreateMinConfidence: FlipyAutoCreateMinConfidence;
-  /** F4-03 — embed panel pujas (evaluación, opt-in). */
-  embedBidsEvalEnabled: boolean;
 };
 
 const DEFAULT_PICKUP_KEYWORDS: string[] = [];
@@ -41,9 +39,12 @@ export function readFlipyAutoCreateMinConfidence(settings: unknown): FlipyAutoCr
   return DEFAULT_AUTO_CREATE_MIN_CONFIDENCE;
 }
 
-export function readFlipyEmbedBidsEvalEnabled(settings: unknown): boolean {
-  const bag = readSettingsBag(settings);
-  return Boolean(bag.embed_bids_eval_enabled ?? bag.embedBidsEvalEnabled);
+/**
+ * Embed panel pujas in order detail — always on (was F4 eval opt-in).
+ * Legacy `embed_bids_eval_enabled` is ignored.
+ */
+export function readFlipyEmbedBidsEvalEnabled(_settings?: unknown): boolean {
+  return true;
 }
 
 /**
@@ -82,17 +83,6 @@ export function mergeFlipyAutoCreateSettings(
     ...base,
     auto_create_enabled: input.enabled,
     auto_create_min_confidence: input.minConfidence,
-  };
-}
-
-export function mergeFlipyEmbedBidsEvalSettings(
-  settings: unknown,
-  enabled: boolean,
-): Record<string, unknown> {
-  const base = readSettingsBag(settings);
-  return {
-    ...base,
-    embed_bids_eval_enabled: enabled,
   };
 }
 

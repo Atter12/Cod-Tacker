@@ -16,6 +16,7 @@ type Props = {
   agencySlug: string;
   storeSlug: string;
   appOrigin?: string | null;
+  embedOrigin?: string | null;
   canManage?: boolean;
 };
 
@@ -25,10 +26,13 @@ export async function FlipySaldoCard({
   agencySlug,
   storeSlug,
   appOrigin = null,
+  embedOrigin = null,
   canManage = false,
 }: Props) {
   const flipyTiendaId = readFlipyTiendaId(integration.settings) ?? integration.external_account_id;
   const partnerKey = resolveFlipyPartnerKeyFromIntegration(integration);
+  const env = getFlipyEnv();
+  const resolvedEmbedOrigin = (embedOrigin ?? env.embedOrigin).replace(/\/$/, "");
   if (!flipyTiendaId || !partnerKey) {
     return (
       <section className="space-y-3">
@@ -47,7 +51,6 @@ export async function FlipySaldoCard({
     );
   }
 
-  const env = getFlipyEnv();
   const client = createFlipyPartnerClient({
     baseUrl: env.apiBaseUrl,
     partnerKey,
@@ -87,6 +90,7 @@ export async function FlipySaldoCard({
             }
             destinoRetiroConfigurado={saldo.destinoRetiroConfigurado}
             appOrigin={appOrigin}
+            embedOrigin={resolvedEmbedOrigin}
           />
         </div>
       </section>
