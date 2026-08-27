@@ -3,6 +3,10 @@ import "server-only";
 import { buildPrefillShippingAddress } from "@/lib/integrations/flipy/destination-consistency";
 import { readOrderDestinationCoords } from "@/lib/integrations/flipy/auto-create";
 import {
+  resolveFlipyFletePaymentStatus,
+  type FlipyFletePaymentStatus,
+} from "@/lib/integrations/flipy/flete-payment-status";
+import {
   resolveShopifyFlipyPayment,
   type FlipyEscenarioPago,
   type FlipyPaymentResolution,
@@ -36,6 +40,7 @@ export type FlipyOrderShipmentContext = {
   shippingCoords: { lat: number; lng: number } | null;
   isPickup: boolean;
   smartFallbackToBid: boolean;
+  fletePaymentStatus: FlipyFletePaymentStatus | null;
   currencyCode: string;
   shippingAmount: number;
   customerName: string | null;
@@ -212,10 +217,20 @@ export function buildFlipyOrderShipmentContext(
 
   const flipyDevolucion = readFlipyDevolucionFromMeta(meta);
   const flipyTiendaResena = readFlipyTiendaResenaFromMeta(meta);
+  const flipyEnvioId = typeof meta.flipy_envio_id === "string" ? meta.flipy_envio_id : null;
+  const flipyEstado = typeof meta.flipy_estado === "string" ? meta.flipy_estado : null;
+  const paymentMeta = meta.shopify_flipy_payment;
+  const confirmedEscenario =
+    paymentMeta &&
+    typeof paymentMeta === "object" &&
+    !Array.isArray(paymentMeta) &&
+    typeof (paymentMeta as { confirmedEscenario?: unknown }).confirmedEscenario === "string"
+      ? ((paymentMeta as { confirmedEscenario: string }).confirmedEscenario as FlipyEscenarioPago)
+      : null;
 
   return {
-    flipyEnvioId: typeof meta.flipy_envio_id === "string" ? meta.flipy_envio_id : null,
-    flipyEstado: typeof meta.flipy_estado === "string" ? meta.flipy_estado : null,
+    flipyEnvioId,
+    flipyEstado,
     flipyDevolucion,
     flipyDevolucionPendiente: isFlipyDevolucionPendienteConfirmacion(flipyDevolucion),
     flipyTiendaResena,
@@ -235,6 +250,13 @@ export function buildFlipyOrderShipmentContext(
     }),
     isPickup: payment.fulfillmentMode === "pickup",
     smartFallbackToBid: readSmartFallbackToBid(meta),
+    fletePaymentStatus: resolveFlipyFletePaymentStatus({
+      metadata: order.metadata,
+      flipyEnvioId,
+      flipyEstado,
+      payment,
+      confirmedEscenario,
+    }),
     currencyCode: order.currency_code,
     shippingAmount: Number(order.shipping_amount) || 0,
     customerName,

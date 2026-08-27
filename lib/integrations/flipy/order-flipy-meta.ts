@@ -3,6 +3,11 @@ import type {
   FlipyEnvioSummaryResult,
   FlipyTiendaResena,
 } from "@/lib/integrations/flipy/partner-contract";
+import {
+  mergeFlipyFletePaymentIntoMetadata,
+  parseStoredFlipyFletePaymentStatus,
+  shouldMarkFlipyFleteCollectedOnDelivered,
+} from "@/lib/integrations/flipy/flete-payment-status";
 import type { JobsAdminClient } from "@/lib/jobs/types";
 import type { Json } from "@/types/database.generated";
 
@@ -11,6 +16,16 @@ function readMeta(metadata: Json): Record<string, unknown> {
     return metadata as Record<string, unknown>;
   }
   return {};
+}
+
+function readStoredFleteStatus(meta: Record<string, unknown>) {
+  const paymentMeta = meta.shopify_flipy_payment;
+  if (!paymentMeta || typeof paymentMeta !== "object" || Array.isArray(paymentMeta)) {
+    return null;
+  }
+  return parseStoredFlipyFletePaymentStatus(
+    (paymentMeta as Record<string, unknown>).fletePaymentStatus,
+  );
 }
 
 export type FlipyEnvioMetaPatch = {
@@ -39,7 +54,7 @@ export async function patchOrderFlipyEnvioMeta(
 
   const meta = readMeta(orderRes.data.metadata);
   const now = new Date().toISOString();
-  const nextMeta: Record<string, unknown> = {
+  let nextMeta: Record<string, unknown> = {
     ...meta,
     flipy_estado: input.estado,
     ...(input.envioId ? { flipy_envio_id: input.envioId } : {}),
@@ -66,6 +81,19 @@ export async function patchOrderFlipyEnvioMeta(
   }
   if (input.calificacionPeso !== undefined) {
     nextMeta.flipy_calificacion_peso = input.calificacionPeso;
+  }
+
+  // Door delivery with COD flete → flete cobrado (producto sigue en payment_status).
+  const estadoNorm = input.estado.trim().toUpperCase();
+  if (estadoNorm === "ENTREGADO") {
+    const currentFlete = readStoredFleteStatus(nextMeta);
+    if (shouldMarkFlipyFleteCollectedOnDelivered(currentFlete)) {
+      nextMeta = mergeFlipyFletePaymentIntoMetadata(nextMeta as Json, {
+        status: "collected",
+        via: "delivered",
+        at: now,
+      });
+    }
   }
 
   await admin

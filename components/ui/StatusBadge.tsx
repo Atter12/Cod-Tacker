@@ -1,6 +1,11 @@
 import { Badge } from "./Badge";
 import { cn } from "@/lib/utils/cn";
 import {
+  flipyFletePaymentBadgeStatus,
+  labelFlipyFletePaymentStatus,
+  type FlipyFletePaymentStatus,
+} from "@/lib/integrations/flipy/flete-payment-status";
+import {
   labelConfirmationStatus,
   labelOrderStatus,
   labelPaymentStatus,
@@ -34,6 +39,10 @@ const statusClasses: Record<string, string> = {
   rejected: "bg-danger/10 text-danger",
   returned: "bg-danger-soft text-danger",
   unpaid: "bg-warning/10 text-warning",
+  flete_expected: "bg-warning/10 text-warning",
+  flete_collected: "bg-success/10 text-success",
+  flete_prepaid: "bg-success/10 text-success",
+  flete_na: "bg-muted text-text-secondary",
   created: "bg-warning/10 text-warning",
   pending_confirmation: "bg-warning/10 text-warning",
   shipped: "bg-brand-primary/10 text-brand-primary",
@@ -83,6 +92,15 @@ export function OrderStatusBadge({ status }: { status: string }) {
 
 export function PaymentStatusBadge({ status }: { status: string }) {
   return <StatusBadge status={status} label={labelPaymentStatus(status)} />;
+}
+
+export function FlipyFletePaymentBadge({ status }: { status: FlipyFletePaymentStatus }) {
+  return (
+    <StatusBadge
+      status={flipyFletePaymentBadgeStatus(status)}
+      label={labelFlipyFletePaymentStatus(status)}
+    />
+  );
 }
 
 export function ConfirmationStatusBadge({ status }: { status: string }) {

@@ -21,6 +21,7 @@ import {
   DataConfidenceBadge,
   DataTable,
   EmptyState,
+  FlipyFletePaymentBadge,
   OrderStatusBadge,
   PaymentStatusBadge,
   SectionHeader,
@@ -216,6 +217,9 @@ export default async function OrderDetailPage({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <OrderStatusBadge status={order.order_status} />
               <PaymentStatusBadge status={order.payment_status} />
+              {flipyCtx.fletePaymentStatus ? (
+                <FlipyFletePaymentBadge status={flipyCtx.fletePaymentStatus} />
+              ) : null}
               <ConfirmationStatusBadge status={order.confirmation_status} />
               <OrdersRealtimeBridge storeId={member.storeId} orderId={order.id} />
             </div>
@@ -255,6 +259,7 @@ export default async function OrderDetailPage({
               customerEmail={flipyCtx.customerEmail}
               flipyEnvioId={flipyCtx.flipyEnvioId}
               flipyEstado={flipyCtx.flipyEstado}
+              fletePaymentStatus={flipyCtx.fletePaymentStatus}
               flipyDevolucion={flipyCtx.flipyDevolucion}
               flipyDevolucionPendiente={flipyCtx.flipyDevolucionPendiente}
               flipyTiendaResena={flipyCtx.flipyTiendaResena}

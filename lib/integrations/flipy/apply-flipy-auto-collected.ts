@@ -1,11 +1,12 @@
 import "server-only";
 
 import { recordPurchaseConversionEvent } from "@/lib/conversions/record-purchase-conversion";
+import { mergeFlipyFletePaymentIntoMetadata } from "@/lib/integrations/flipy/flete-payment-status";
 import { logger } from "@/lib/observability/logger";
 import { applyCollectedPatch } from "@/lib/reconciliation/effects";
 import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
 import type { JobsAdminClient } from "@/lib/jobs/types";
-import type { Enums } from "@/types/database.generated";
+import type { Enums, Json } from "@/types/database.generated";
 
 type MatchedItemRef = {
   id: string;
@@ -59,7 +60,7 @@ export async function applyFlipyAutoCollectedForBatch(input: {
     const orderRes = await input.admin
       .from("orders")
       .select(
-        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount",
+        "id, expected_cod_amount, collected_cod_amount, settled_cod_amount, payment_status, cost_of_goods_amount, shipping_cost_amount, return_cost_amount, currency_code, total_amount, metadata",
       )
       .eq("id", item.order_id)
       .eq("store_id", input.storeId)
@@ -76,6 +77,15 @@ export async function applyFlipyAutoCollectedForBatch(input: {
       order.payment_status === "settlement_pending" ||
       order.payment_status === "settled"
     ) {
+      const fleteMeta = mergeFlipyFletePaymentIntoMetadata(order.metadata as Json, {
+        status: "collected",
+        via: "settlement",
+      });
+      await input.admin
+        .from("orders")
+        .update({ metadata: fleteMeta as Json, updated_at: new Date().toISOString() })
+        .eq("id", order.id)
+        .eq("store_id", input.storeId);
       await input.admin
         .from("settlement_items")
         .update({ collected_applied_at: new Date().toISOString() })
@@ -116,9 +126,14 @@ export async function applyFlipyAutoCollectedForBatch(input: {
       collectedAmount: gate.newCollected,
     });
 
+    const fleteMeta = mergeFlipyFletePaymentIntoMetadata(order.metadata as Json, {
+      status: "collected",
+      via: "settlement",
+    });
+
     const upd = await input.admin
       .from("orders")
-      .update(patch)
+      .update({ ...patch, metadata: fleteMeta as Json })
       .eq("id", order.id)
       .eq("store_id", input.storeId);
     if (upd.error) {

@@ -20,12 +20,14 @@ import {
   isFlipyImmediateCancelEstado,
   isFlipyTerminalEstado,
 } from "@/lib/integrations/flipy/errors";
+import type { FlipyFletePaymentStatus } from "@/lib/integrations/flipy/flete-payment-status";
 import type { FlipyPackageCareId } from "@/lib/integrations/flipy/map-package-care";
 import type { FlipyPackageSize } from "@/lib/integrations/flipy/map-package-size";
 import type { FlipyDevolucionInfo, FlipyTiendaResena } from "@/lib/integrations/flipy/partner-contract";
 import type { FlipyPaymentResolution } from "@/lib/integrations/flipy/resolve-payment";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { FlipyFletePaymentBadge } from "@/components/ui/StatusBadge";
 
 type Props = {
   agencySlug: string;
@@ -50,6 +52,7 @@ type Props = {
   customerEmail?: string | null;
   flipyEnvioId?: string | null;
   flipyEstado?: string | null;
+  fletePaymentStatus?: FlipyFletePaymentStatus | null;
   flipyDevolucion?: FlipyDevolucionInfo | null;
   flipyDevolucionPendiente?: boolean;
   flipyTiendaResena?: FlipyTiendaResena | null;
@@ -84,6 +87,7 @@ export function FlipyShipmentPanel({
   customerEmail = null,
   flipyEnvioId = null,
   flipyEstado = null,
+  fletePaymentStatus = null,
   flipyDevolucion = null,
   flipyDevolucionPendiente = false,
   flipyTiendaResena = null,
@@ -270,6 +274,12 @@ export function FlipyShipmentPanel({
             Estado Flipy: <span className="font-medium text-text-primary">{flipyEstado}</span>
             {syncing ? <span className="ml-2 text-text-secondary">· sincronizando…</span> : null}
           </p>
+        ) : null}
+        {fletePaymentStatus ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+            <span>Flete:</span>
+            <FlipyFletePaymentBadge status={fletePaymentStatus} />
+          </div>
         ) : null}
         <p className="font-mono text-xs break-all">{flipyEnvioId}</p>
 

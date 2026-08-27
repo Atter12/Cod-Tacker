@@ -8,6 +8,7 @@ import {
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { deriveCodAmountFromD3 } from "@/lib/integrations/flipy/labels";
+import { initialFlipyFletePaymentStatus } from "@/lib/integrations/flipy/flete-payment-status";
 import { validateFlipyFletePrice } from "@/lib/integrations/flipy/flete-rules";
 import {
   mapShopifyPackageCare,
@@ -360,6 +361,13 @@ export async function createFlipyShipmentForOrder(input: {
       packageSize: v02Enabled ? packageSize : undefined,
       confirmedAt: now,
       confirmedBy: input.confirmedByUserId ?? null,
+      fletePaymentStatus: initialFlipyFletePaymentStatus({
+        payment: paymentResolution,
+        escenario: input.escenarioPago,
+        fletePrice: flete,
+      }),
+      fletePaymentVia: "create",
+      fletePaymentUpdatedAt: now,
     },
   };
 

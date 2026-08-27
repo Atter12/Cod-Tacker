@@ -20,7 +20,7 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 
 const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   // unpaid = prepago Shopify / sin COD de producto (no “cliente no pagó”).
-  // El flete Flipy en puerta no vive en este badge; pasa a Cobrado vía Conciliación.
+  // El flete Flipy en puerta es un badge aparte (Flete por cobrar / Flete cobrado).
   unpaid: "Producto pagado",
   cash_expected: "COD esperado",
   cash_collected: "Cobrado",
