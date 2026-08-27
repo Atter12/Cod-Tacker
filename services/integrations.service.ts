@@ -52,6 +52,7 @@ import {
   packFlipyWebhookSecret,
   readFlipyTiendaId,
 } from "@/lib/integrations/flipy/credentials";
+import { readFlipyContactEmail } from "@/lib/integrations/flipy/settings";
 import { getFlipyEnv, isFlipyConfigured } from "@/lib/integrations/flipy/env";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
 import { ensureFlipyAutomationRules } from "@/lib/integrations/flipy/ensure-automations";
@@ -1021,24 +1022,57 @@ export async function connectFlipyLive(
   });
 
   const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
-  const hadLinkedTienda =
-    Boolean(readFlipyTiendaId(existing?.settings)) ||
-    Boolean(existing?.external_account_id?.trim());
+  const linkedTiendaId =
+    readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
+  const previousEmail = readFlipyContactEmail(existing?.settings);
+  const profileInput = {
+    nombre,
+    contactEmail,
+    ruc: input.ruc?.trim() || null,
+    telefono: input.telefono?.trim() || null,
+    originAddress,
+    originLat: input.originLat,
+    originLng: input.originLng,
+  };
 
-  const provisioned = await flipyClient.provisionTienda(
-    {
-      nombre,
-      contactEmail,
-      ruc: input.ruc?.trim() || null,
-      telefono: input.telefono?.trim() || null,
-      originAddress,
-      originLat: input.originLat,
-      originLng: input.originLng,
-      webhookUrl,
-    },
-    `codtracked:store:${scope.storeId}`,
-  );
-  const tiendaId = provisioned.tiendaId;
+  let tiendaId: string;
+  if (linkedTiendaId) {
+    tiendaId = linkedTiendaId;
+    const emailChanged =
+      Boolean(previousEmail) &&
+      previousEmail!.trim().toLowerCase() !== contactEmail.toLowerCase();
+    const profileChanged =
+      emailChanged ||
+      (existing?.display_name?.trim() ?? "") !== nombre ||
+      (existing?.settings &&
+      typeof existing.settings === "object" &&
+      !Array.isArray(existing.settings)
+        ? String((existing.settings as Record<string, unknown>).origin_address ?? "").trim() !==
+          originAddress
+        : false);
+
+    if (profileChanged) {
+      try {
+        await flipyClient.updateTiendaProfile(linkedTiendaId, profileInput);
+      } catch (error) {
+        if (emailChanged) {
+          throw new ValidationError(
+            `No se pudo cambiar el correo de la cuenta Flipy a ${contactEmail}. ` +
+              `Flipy sigue vinculado a ${previousEmail}. ` +
+              "La Partner API no permite reprovisionar con otro email (conflicto de idempotencia). " +
+              "Pide a soporte Flipy que actualice el email de la tienda partner, o activa la app con el correo original.",
+          );
+        }
+        // Origin/nombre: persist locally even if Flipy has no update endpoint yet.
+      }
+    }
+  } else {
+    const provisioned = await flipyClient.provisionTienda(
+      { ...profileInput, webhookUrl },
+      `codtracked:store:${scope.storeId}`,
+    );
+    tiendaId = provisioned.tiendaId;
+  }
 
   try {
     await flipyClient.registerWebhook(tiendaId, {
@@ -1048,10 +1082,10 @@ export async function connectFlipyLive(
   } catch (error) {
     throw new IntegrationError(
       error instanceof Error
-        ? hadLinkedTienda
+        ? linkedTiendaId
           ? `Webhook Flipy falló: ${error.message}`
           : `Tienda provisionada pero webhook falló: ${error.message}`
-        : hadLinkedTienda
+        : linkedTiendaId
           ? "No se pudo actualizar el webhook Flipy."
           : "Tienda provisionada pero webhook falló.",
     );

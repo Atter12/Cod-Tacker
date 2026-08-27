@@ -149,6 +149,12 @@ export function FlipyConnectForm({
             disabled={disabled || pending}
             placeholder="ops@tienda.pe"
           />
+          {connected ? (
+            <p className="mt-1 text-[11px] text-text-secondary">
+              Este correo es la cuenta de login en la app Flipy. Cambiarlo requiere que Flipy lo
+              actualice en su backend; si falla, usa el correo original para activar.
+            </p>
+          ) : null}
         </FormField>
         <FormField label="Teléfono" htmlFor="flipy-telefono">
           <Input

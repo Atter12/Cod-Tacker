@@ -246,6 +246,54 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       };
     },
 
+    async updateTiendaProfile(
+      tiendaId: string,
+      input: {
+        nombre: string;
+        contactEmail: string;
+        originAddress: string;
+        originLat: number;
+        originLng: number;
+        telefono?: string | null;
+        ruc?: string | null;
+      },
+    ): Promise<void> {
+      const body = buildFlipyProvisionRequestBody({
+        externalStoreId: config.externalStoreId,
+        nombre: input.nombre,
+        contactEmail: input.contactEmail,
+        telefono: input.telefono,
+        ruc: input.ruc,
+        originAddress: input.originAddress,
+        originLat: input.originLat,
+        originLng: input.originLng,
+      });
+      const paths = [
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`,
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/profile`,
+      ];
+      let lastError: unknown = null;
+      for (const path of paths) {
+        for (const method of ["PATCH", "PUT"] as const) {
+          try {
+            await request<unknown>(path, { method, body });
+            return;
+          } catch (error) {
+            lastError = error;
+            const status = error instanceof FlipyPartnerApiError ? error.status : null;
+            if (status === 404 || status === 405 || status === 501) continue;
+            throw error;
+          }
+        }
+      }
+      if (lastError instanceof FlipyPartnerApiError) throw lastError;
+      throw new FlipyPartnerApiError(
+        "Flipy no expone actualización de tienda partner en Partner API.",
+        501,
+        "TIENDA_UPDATE_NOT_AVAILABLE",
+      );
+    },
+
     async registerWebhook(
       tiendaId: string,
       input: { webhookUrl: string; webhookSecret: string },
