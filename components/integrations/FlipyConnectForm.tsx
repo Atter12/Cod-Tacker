@@ -151,8 +151,8 @@ export function FlipyConnectForm({
           />
           {connected ? (
             <p className="mt-1 text-[11px] text-text-secondary">
-              Este correo es la cuenta de login en la app Flipy. Cambiarlo requiere que Flipy lo
-              actualice en su backend; si falla, usa el correo original para activar.
+              Correo de la cuenta Flipy (login y activación). Al actualizar, CT guarda el cambio y
+              sincroniza con Flipy cuando la Partner API lo expone.
             </p>
           ) : null}
         </FormField>

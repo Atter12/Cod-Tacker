@@ -500,6 +500,43 @@ export type FlipyActivateAccountInitInput = {
   flipyTiendaId?: string | null;
 };
 
+export type FlipyTiendaProfileResult = {
+  tiendaId: string;
+  contactEmail: string | null;
+  nombre: string | null;
+  activationReady: boolean | null;
+};
+
+/** GET /api/partner/tiendas/:id — partner tienda profile (email sync). */
+export function readFlipyTiendaProfileResult(raw: unknown): FlipyTiendaProfileResult | null {
+  const bag = asRecord(raw);
+  if (!bag) return null;
+
+  const tiendaId = readString(bag, "tiendaId", "tienda_id", "id");
+  if (!tiendaId) return null;
+
+  const userBag = asRecord(bag.user) ?? asRecord(bag.tiendaUser) ?? null;
+  const contactEmail =
+    readString(bag, "contactEmail", "contact_email", "email") ??
+    (userBag ? readString(userBag, "email", "contactEmail", "contact_email") : null);
+
+  const activationReadyRaw =
+    bag.activationReady ?? bag.activation_ready ?? bag.passwordSetAt ?? bag.password_set_at;
+  let activationReady: boolean | null = null;
+  if (typeof activationReadyRaw === "boolean") {
+    activationReady = activationReadyRaw;
+  } else if (activationReadyRaw === null) {
+    activationReady = false;
+  }
+
+  return {
+    tiendaId,
+    contactEmail,
+    nombre: readString(bag, "nombre", "name", "displayName", "display_name"),
+    activationReady,
+  };
+}
+
 export type FlipyActivateAccountInitResult = {
   token: string;
   activationUrl?: string | null;

@@ -58,6 +58,7 @@ import {
   getByProvider,
   latestHealth,
   listSyncRuns,
+  syncFlipyContactEmailFromPartner,
 } from "@/services/integrations.service";
 
 export default async function IntegrationDetailPage({
@@ -82,7 +83,33 @@ export default async function IntegrationDetailPage({
 
   const catalog = getCatalogEntry(p.provider);
   const client = await createClient();
-  const integration = await getByProvider(client, member.agencyId, member.storeId, p.provider);
+  let integration = await getByProvider(client, member.agencyId, member.storeId, p.provider);
+  const flipyProvider = p.provider === "flipy";
+  const liveMode = getIntegrationRuntimeMode() === "live";
+  const flipyLive = flipyProvider && liveMode;
+
+  if (
+    flipyLive &&
+    integration &&
+    integration.status !== "disconnected" &&
+    integration.status !== "revoked"
+  ) {
+    const beforeEmail = readFlipyContactEmail(integration.settings);
+    const syncedEmail = await syncFlipyContactEmailFromPartner(client, {
+      agencyId: member.agencyId,
+      storeId: member.storeId,
+      integrationId: integration.id,
+      settings: integration.settings,
+      externalAccountId: integration.external_account_id,
+    });
+    if (
+      syncedEmail &&
+      syncedEmail.trim().toLowerCase() !== beforeEmail?.trim().toLowerCase()
+    ) {
+      integration = await getByProvider(client, member.agencyId, member.storeId, p.provider);
+    }
+  }
+
   const connected =
     !!integration && integration.status !== "disconnected" && integration.status !== "revoked";
   const health = integration ? await latestHealth(client, member.agencyId, member.storeId, integration.id) : null;
@@ -96,9 +123,6 @@ export default async function IntegrationDetailPage({
   const canManage = can(member.roles, "integrations.manage");
   const shopifyLive = p.provider === "shopify" && isShopifyConfigured();
   const enviaProvider = p.provider === "envia_com";
-  const flipyProvider = p.provider === "flipy";
-  const liveMode = getIntegrationRuntimeMode() === "live";
-  const flipyLive = flipyProvider && liveMode;
   const metaLive = p.provider === "meta" && liveMode;
   const tiktokLive = p.provider === "tiktok" && liveMode;
   const whatsappLive = p.provider === "whatsapp" && liveMode;

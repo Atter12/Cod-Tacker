@@ -26,6 +26,7 @@ import {
   readFlipyTransferGananciasSuccessResult,
   buildFlipyActivateAccountInitRequestBody,
   readFlipyActivateAccountInitResult,
+  readFlipyTiendaProfileResult,
   type FlipyCalificarEnvioInput,
   type FlipyCalificarEnvioSuccessResult,
   type FlipyCancelEnvioInput,
@@ -45,6 +46,7 @@ import {
   type FlipyShopifyPaymentInput,
   type FlipyActivateAccountInitInput,
   type FlipyActivateAccountInitResult,
+  type FlipyTiendaProfileResult,
   type FlipyTransferGananciasInput,
   type FlipyTransferGananciasSuccessResult,
   type FlipyTypeMode,
@@ -246,6 +248,25 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
       };
     },
 
+    async getTiendaProfile(tiendaId: string): Promise<FlipyTiendaProfileResult | null> {
+      const paths = [
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`,
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/profile`,
+      ];
+      for (const path of paths) {
+        try {
+          const raw = await request<unknown>(path, { method: "GET" });
+          const parsed = readFlipyTiendaProfileResult(raw);
+          if (parsed) return parsed;
+        } catch (error) {
+          const status = error instanceof FlipyPartnerApiError ? error.status : null;
+          if (status === 404 || status === 405) continue;
+          throw error;
+        }
+      }
+      return null;
+    },
+
     async updateTiendaProfile(
       tiendaId: string,
       input: {
@@ -269,11 +290,27 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         originLng: input.originLng,
       });
       const paths = [
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contact-email`,
+        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contactEmail`,
         `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`,
         `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/profile`,
       ];
+      const emailBody = { contactEmail: input.contactEmail.trim() };
       let lastError: unknown = null;
-      for (const path of paths) {
+      for (const path of paths.slice(0, 2)) {
+        for (const method of ["PATCH", "PUT"] as const) {
+          try {
+            await request<unknown>(path, { method, body: emailBody });
+            return;
+          } catch (error) {
+            lastError = error;
+            const status = error instanceof FlipyPartnerApiError ? error.status : null;
+            if (status === 404 || status === 405 || status === 501) continue;
+            throw error;
+          }
+        }
+      }
+      for (const path of paths.slice(2)) {
         for (const method of ["PATCH", "PUT"] as const) {
           try {
             await request<unknown>(path, { method, body });

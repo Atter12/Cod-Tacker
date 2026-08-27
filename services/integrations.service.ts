@@ -951,6 +951,67 @@ export async function connectEnviaLive(
 }
 
 /**
+ * Sync contact email from Flipy Partner API into integrations.settings.email.
+ * Flipy is source of truth when the profile endpoint returns contactEmail.
+ */
+export async function syncFlipyContactEmailFromPartner(
+  client: DatabaseClient,
+  input: {
+    agencyId: string;
+    storeId: string;
+    integrationId: string;
+    settings: unknown;
+    externalAccountId?: string | null;
+  },
+): Promise<string | null> {
+  const localEmail = readFlipyContactEmail(input.settings);
+  if (!isFlipyConfigured()) return localEmail;
+
+  const flipyTiendaId =
+    readFlipyTiendaId(input.settings) ?? input.externalAccountId?.trim() ?? null;
+  if (!flipyTiendaId) return localEmail;
+
+  const env = getFlipyEnv();
+  const partnerKey = env.partnerApiKey;
+  if (!partnerKey) return localEmail;
+
+  const flipyClient = createFlipyPartnerClient({
+    baseUrl: env.apiBaseUrl,
+    partnerKey,
+    partnerId: env.partnerId,
+    externalStoreId: input.storeId,
+  });
+
+  let remoteEmail: string | null = null;
+  try {
+    const profile = await flipyClient.getTiendaProfile(flipyTiendaId);
+    remoteEmail = profile?.contactEmail?.trim() ?? null;
+  } catch {
+    return localEmail;
+  }
+
+  if (!remoteEmail) return localEmail;
+  if (localEmail?.trim().toLowerCase() === remoteEmail.toLowerCase()) return localEmail;
+
+  const base =
+    input.settings && typeof input.settings === "object" && !Array.isArray(input.settings)
+      ? (input.settings as Record<string, unknown>)
+      : {};
+
+  const result = await client
+    .from("integrations")
+    .update({
+      settings: { ...base, email: remoteEmail } as Json,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.integrationId)
+    .eq("agency_id", input.agencyId)
+    .eq("store_id", input.storeId);
+  throwQueryError(result.error);
+  return remoteEmail;
+}
+
+/**
  * Live Flipy connect: provision partner tienda + register webhook.
  */
 export async function connectFlipyLive(
@@ -1024,7 +1085,6 @@ export async function connectFlipyLive(
   const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
   const linkedTiendaId =
     readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
-  const previousEmail = readFlipyContactEmail(existing?.settings);
   const profileInput = {
     nombre,
     contactEmail,
@@ -1038,11 +1098,9 @@ export async function connectFlipyLive(
   let tiendaId: string;
   if (linkedTiendaId) {
     tiendaId = linkedTiendaId;
-    const emailChanged =
-      Boolean(previousEmail) &&
-      previousEmail!.trim().toLowerCase() !== contactEmail.toLowerCase();
     const profileChanged =
-      emailChanged ||
+      (readFlipyContactEmail(existing?.settings)?.trim().toLowerCase() ?? "") !==
+        contactEmail.toLowerCase() ||
       (existing?.display_name?.trim() ?? "") !== nombre ||
       (existing?.settings &&
       typeof existing.settings === "object" &&
@@ -1054,16 +1112,8 @@ export async function connectFlipyLive(
     if (profileChanged) {
       try {
         await flipyClient.updateTiendaProfile(linkedTiendaId, profileInput);
-      } catch (error) {
-        if (emailChanged) {
-          throw new ValidationError(
-            `No se pudo cambiar el correo de la cuenta Flipy a ${contactEmail}. ` +
-              `Flipy sigue vinculado a ${previousEmail}. ` +
-              "La Partner API no permite reprovisionar con otro email (conflicto de idempotencia). " +
-              "Pide a soporte Flipy que actualice el email de la tienda partner, o activa la app con el correo original.",
-          );
-        }
-        // Origin/nombre: persist locally even if Flipy has no update endpoint yet.
+      } catch {
+        // Best-effort: persist locally even if Partner API has no update route yet.
       }
     }
   } else {

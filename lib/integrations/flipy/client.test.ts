@@ -25,6 +25,7 @@ import {
   buildFlipyTransferGananciasRequestBody,
   readFlipyTransferGananciasSuccessResult,
   readFlipyActivateAccountInitResult,
+  readFlipyTiendaProfileResult,
 } from "@/lib/integrations/flipy/partner-contract";
 import {
   isFlipyDevolucionPendienteConfirmacion,
@@ -153,6 +154,19 @@ describe("flipy partner contract", () => {
     assert.ok(parsed);
     assert.equal(parsed?.token, "act-token-xyz");
     assert.match(parsed?.activationUrl ?? "", /activar-cuenta/);
+  });
+
+  it("parses tienda profile with contactEmail", () => {
+    const parsed = readFlipyTiendaProfileResult({
+      tiendaId: "cmt7pgzcl0003bgtxm020y9nx",
+      contactEmail: "thabel221608@gmail.com",
+      nombre: "flipy",
+      activationReady: true,
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.contactEmail, "thabel221608@gmail.com");
+    assert.equal(parsed?.activationReady, true);
   });
 });
 
