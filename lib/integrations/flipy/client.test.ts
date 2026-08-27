@@ -26,6 +26,7 @@ import {
   readFlipyTransferGananciasSuccessResult,
   readFlipyActivateAccountInitResult,
   readFlipyTiendaProfileResult,
+  buildFlipyActivateAccountInitRequestBody,
 } from "@/lib/integrations/flipy/partner-contract";
 import {
   isFlipyDevolucionPendienteConfirmacion,
@@ -34,8 +35,8 @@ import {
 } from "@/lib/integrations/flipy/errors";
 
 describe("flipy partner contract", () => {
-  it("uses Partner API contract version 0.2.0", () => {
-    assert.equal(FLIPY_PARTNER_CONTRACT_VERSION, "0.2.0");
+  it("uses Partner API contract version 0.2.1", () => {
+    assert.equal(FLIPY_PARTNER_CONTRACT_VERSION, "0.2.1");
   });
 
   it("builds provision body for Flipy Partner API", () => {
@@ -143,30 +144,89 @@ describe("flipy partner contract", () => {
     assert.equal(parsed?.idempotent, false);
   });
 
-  it("parses activate-account init response", () => {
+  it("builds provision body with partner email trust v0.2.1", () => {
+    const body = buildFlipyProvisionRequestBody({
+      externalStoreId: "store-uuid",
+      nombre: "Mi Tienda",
+      contactEmail: "ops@tienda.pe",
+      originAddress: "Av. Larco 123, Miraflores",
+      originLat: -12.119,
+      originLng: -77.029,
+      emailVerifiedAt: "2026-08-27T12:00:00.000Z",
+      partnerEmailAssertion: "jwt.assertion.token",
+    });
+
+    assert.equal(body.emailVerifiedAt, "2026-08-27T12:00:00.000Z");
+    assert.equal(body.partnerEmailAssertion, "jwt.assertion.token");
+  });
+
+  it("builds activate-account init request body", () => {
+    const body = buildFlipyActivateAccountInitRequestBody({
+      contactEmail: "ops@tienda.pe",
+      externalStoreId: "store-uuid",
+      emailVerified: true,
+      partnerEmailAssertion: "jwt.assertion.token",
+    });
+
+    assert.equal(body.contactEmail, "ops@tienda.pe");
+    assert.equal(body.email, "ops@tienda.pe");
+    assert.equal(body.externalStoreId, "store-uuid");
+    assert.equal(body.emailVerified, true);
+    assert.equal(body.partnerEmailAssertion, "jwt.assertion.token");
+  });
+
+  it("parses activate-account init response with otpRequired false", () => {
     const parsed = readFlipyActivateAccountInitResult({
       success: true,
       token: "act-token-xyz",
-      activationUrl: "https://tienda.flipyexpress.com/activar-cuenta?token=act-token-xyz",
+      activationUrl:
+        "https://tienda.flipyexpress.com/activar-cuenta?email=ops@tienda.pe&token=act-token-xyz&source=codtracked&emailVerified=1",
       expiresAt: "2026-08-26T21:30:00.000Z",
+      otpRequired: false,
     });
 
     assert.ok(parsed);
     assert.equal(parsed?.token, "act-token-xyz");
+    assert.equal(parsed?.otpRequired, false);
     assert.match(parsed?.activationUrl ?? "", /activar-cuenta/);
   });
 
-  it("parses tienda profile with contactEmail", () => {
+  it("parses tienda profile v0.2.1 activation fields", () => {
     const parsed = readFlipyTiendaProfileResult({
       tiendaId: "cmt7pgzcl0003bgtxm020y9nx",
-      contactEmail: "thabel221608@gmail.com",
+      contactEmail: "ops@tienda.pe",
       nombre: "flipy",
+      externalStoreId: "store-uuid",
+      emailVerified: true,
+      emailVerifiedAt: "2026-08-27T12:00:00.000Z",
+      passwordSetAt: null,
       activationReady: true,
     });
 
     assert.ok(parsed);
-    assert.equal(parsed?.contactEmail, "thabel221608@gmail.com");
+    assert.equal(parsed?.contactEmail, "ops@tienda.pe");
+    assert.equal(parsed?.emailVerified, true);
+    assert.equal(parsed?.emailVerifiedAt, "2026-08-27T12:00:00.000Z");
+    assert.equal(parsed?.passwordSetAt, null);
     assert.equal(parsed?.activationReady, true);
+  });
+
+  it("parses PATCH contact-email response as tienda profile", () => {
+    const parsed = readFlipyTiendaProfileResult({
+      success: true,
+      contractVersion: "0.2.1",
+      tiendaId: "tienda-1",
+      contactEmail: "nuevo@tienda.pe",
+      emailVerified: true,
+      emailVerifiedAt: "2026-08-27T12:00:00.000Z",
+      passwordSetAt: "2026-08-20T10:00:00.000Z",
+      activationReady: false,
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.contactEmail, "nuevo@tienda.pe");
+    assert.equal(parsed?.passwordSetAt, "2026-08-20T10:00:00.000Z");
+    assert.equal(parsed?.activationReady, false);
   });
 });
 

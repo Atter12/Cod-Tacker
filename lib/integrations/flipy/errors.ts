@@ -33,6 +33,13 @@ export const FLIPY_ERROR_CODES = {
   CALIFICACION_NO_DISPONIBLE: "CALIFICACION_NO_DISPONIBLE",
   SALDO_GANANCIAS_INSUFICIENTE: "SALDO_GANANCIAS_INSUFICIENTE",
   IDEMPOTENCY_CONFLICT: "IDEMPOTENCY_CONFLICT",
+  ALREADY_ACTIVATED: "ALREADY_ACTIVATED",
+  PARTNER_FORBIDDEN: "PARTNER_FORBIDDEN",
+  EMAIL_IN_USE: "EMAIL_IN_USE",
+  ASSERTION_REQUIRED: "ASSERTION_REQUIRED",
+  ASSERTION_INVALID: "ASSERTION_INVALID",
+  ASSERTION_EXPIRED: "ASSERTION_EXPIRED",
+  VALIDATION_ERROR: "VALIDATION_ERROR",
 } as const;
 
 export type FlipyErrorCode = (typeof FLIPY_ERROR_CODES)[keyof typeof FLIPY_ERROR_CODES];
@@ -59,6 +66,10 @@ export function isFlipyInsufficientBalanceError(error: unknown): boolean {
 }
 
 export function flipyErrorUserHint(code: string | null): string | null {
+  if (code?.startsWith("ASSERTION_")) {
+    return "La certificación partner del correo no es válida. Verifica que PARTNER_EMAIL_ASSERTION_SECRET coincida en CT y Flipy.";
+  }
+
   switch (code) {
     case FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD:
       return "Recarga la billetera Operaciones en Flipy para crear el envío.";
@@ -86,6 +97,20 @@ export function flipyErrorUserHint(code: string | null): string | null {
       return "El monto supera tu saldo en Ganancias.";
     case FLIPY_ERROR_CODES.IDEMPOTENCY_CONFLICT:
       return "Conflicto de idempotencia. Intenta de nuevo con una nueva solicitud.";
+    case FLIPY_ERROR_CODES.ALREADY_ACTIVATED:
+      return "Esta tienda ya tiene contraseña Flipy. Usa «Entrar en Flipy».";
+    case FLIPY_ERROR_CODES.PARTNER_FORBIDDEN:
+      return "Flipy rechazó la solicitud partner. Verifica que la tienda esté vinculada y reconecta en Integraciones.";
+    case FLIPY_ERROR_CODES.EMAIL_IN_USE:
+      return "Este correo ya está en uso en otra cuenta Flipy. Usa otro correo operativo para esta tienda.";
+    case FLIPY_ERROR_CODES.ASSERTION_REQUIRED:
+      return "Falta certificación partner del correo. Verifica PARTNER_EMAIL_ASSERTION_SECRET en CT y Flipy.";
+    case FLIPY_ERROR_CODES.ASSERTION_INVALID:
+      return "La certificación partner del correo no es válida. Verifica PARTNER_EMAIL_ASSERTION_SECRET.";
+    case FLIPY_ERROR_CODES.ASSERTION_EXPIRED:
+      return "La certificación partner expiró. Intenta verificar el correo nuevamente.";
+    case FLIPY_ERROR_CODES.VALIDATION_ERROR:
+      return "El correo de contacto no es válido para Flipy.";
     default:
       return null;
   }

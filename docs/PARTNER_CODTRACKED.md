@@ -1,6 +1,6 @@
 # Partner API — Flipy × COD-tracked
 
-**Versión contrato:** 0.2.0 (freeze Fase C — coordinar Flipy A4)  
+**Versión contrato:** 0.2.1 (partner email trust + activación)  
 **Copia canónica:** `COD-tracked/docs/PARTNER_CODTRACKED.md`  
 **Espejo en Flipy:** `flipy/docs/PARTNER_CODTRACKED.md` (mantener sincronizado)
 
@@ -23,7 +23,58 @@ X-Idempotency-Key: codtracked:store:<storeId> | codtracked:order:<orderId>
 
 ## POST /api/partner/tiendas — Provision
 
-Sin cambios v0.1.1 — CT envía `contactEmail` + `originLocation`.
+CT envía `contactEmail` + `originLocation`. **v0.2.1:** opcional `emailVerifiedAt` + `partnerEmailAssertion` cuando CT ya verificó el inbox de la tienda.
+
+CT firma `partnerEmailAssertion` (HS256) con `PARTNER_EMAIL_ASSERTION_SECRET` (mismo valor en Flipy y CT).
+
+Claims JWT: `iss=codtracked`, `aud=flipy`, `sub=<externalStoreId>`, `email`, `partnerId`, `exp`, opcional `emailVerifiedAt`.
+
+**Limitación:** 1 `contactEmail` = 1 tienda Flipy (schema Flipy). CT debe usar email distinto por tienda para cuentas separadas.
+
+---
+
+## GET /api/partner/tiendas/:id — Perfil (v0.2.1)
+
+Devuelve entre otros: `contactEmail`, `externalStoreId`, `emailVerified`, `emailVerifiedAt`, `passwordSetAt`, `activationReady`.
+
+---
+
+## POST /api/partner/tiendas/:id/activate-account/init — Init S2S (v0.2.1)
+
+Body CT:
+
+```json
+{
+  "contactEmail": "ops@tienda.pe",
+  "emailVerified": true,
+  "partnerEmailAssertion": "<JWT>",
+  "externalStoreId": "<codtracked_store_uuid>"
+}
+```
+
+Response: `token`, `activationToken`, `activationUrl`, `expiresAt`, `otpRequired: false`.
+
+---
+
+## PATCH /api/partner/tiendas/:id/contact-email — Cambio email (v0.2.1)
+
+Body: `contactEmail`, `emailVerifiedAt`, `partnerEmailAssertion`. Flipy actualiza `User.email`; requiere assertion para marcar verificado.
+
+Tras PATCH con cuenta ya activada (`passwordSetAt` set): login solo con **nuevo** email, misma contraseña, **sin** re-activación E3.
+
+Errores CT: `409 EMAIL_IN_USE`, `422 ASSERTION_*`, `403 PARTNER_FORBIDDEN`.
+
+---
+
+## Activación app tienda (browser)
+
+Deep-link: `/activar-cuenta?email=...&tiendaId=...&source=codtracked&emailVerified=1&partnerAssertion=<JWT>`
+
+Flujo: init → set password. **Sin OTP** en activación partner (v0.2.1).
+
+Set password: `POST /api/auth/activate-account` con `{ "token": "...", "newPassword": "..." }`.
+
+Env CT: `PARTNER_EMAIL_ASSERTION_SECRET` (requerido en live cuando email tienda verificado).
 
 ---
 

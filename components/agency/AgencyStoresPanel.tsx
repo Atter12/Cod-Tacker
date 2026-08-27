@@ -82,6 +82,7 @@ export function AgencyStoresPanel({
     const result = await createStore(agencySlug, {
       name,
       slug,
+      contactEmail: String(data.get("contactEmail") ?? ""),
       countryCode: String(data.get("countryCode") ?? "PE"),
       currencyCode: String(data.get("currencyCode") ?? "PEN"),
       timezone: String(data.get("timezone") ?? "America/Lima"),
@@ -126,6 +127,20 @@ export function AgencyStoresPanel({
                   {fieldErrors.slug ? (
                     <p className="mt-1 text-[12px] text-danger">{fieldErrors.slug}</p>
                   ) : null}
+                </FormField>
+                <FormField
+                  label="Correo operativo"
+                  htmlFor="contactEmail"
+                  hint="Login Flipy de esta tienda. Se verifica con OTP al crear."
+                >
+                  <Input
+                    id="contactEmail"
+                    name="contactEmail"
+                    type="email"
+                    placeholder="ops@tienda.pe"
+                    required
+                    className="h-11"
+                  />
                 </FormField>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

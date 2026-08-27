@@ -33,6 +33,8 @@ import { buildEnviaWebhookUrls } from "@/lib/integrations/envia/webhook-urls";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
 import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
 import { readFlipyTiendaId } from "@/lib/integrations/flipy/credentials";
+import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
+import { resolveFlipyActivationUiState } from "@/lib/integrations/flipy/activation-status";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import {
   readFlipyAutoCreateEnabled,
@@ -47,6 +49,10 @@ import { readTikTokAdsCredentialsFromEnv } from "@/lib/integrations/tiktok/env";
 import { readWhatsAppCredentialsFromEnv } from "@/lib/integrations/whatsapp/env";
 import { isShopifyConfigured } from "@/lib/integrations/shopify/env";
 import { getIntegrationRuntimeMode, isDemoIntegrationMode } from "@/lib/integrations/registry";
+import {
+  isStoreContactEmailVerified,
+  readStoreContactEmail,
+} from "@/lib/settings/store-contact-email";
 import {
   parseShopifyWebhooksMetadata,
   summarizeShopifyWebhooks,
@@ -83,6 +89,14 @@ export default async function IntegrationDetailPage({
 
   const catalog = getCatalogEntry(p.provider);
   const client = await createClient();
+  const { data: storeRow } = await client
+    .from("stores")
+    .select("settings")
+    .eq("id", member.storeId)
+    .maybeSingle();
+  const storeContact = readStoreContactEmail(storeRow?.settings);
+  const storeContactEmailVerified = isStoreContactEmailVerified(storeRow?.settings);
+
   let integration = await getByProvider(client, member.agencyId, member.storeId, p.provider);
   const flipyProvider = p.provider === "flipy";
   const liveMode = getIntegrationRuntimeMode() === "live";
@@ -140,8 +154,41 @@ export default async function IntegrationDetailPage({
     : null;
   const flipyEnv = flipyProvider ? getFlipyEnv() : null;
   const flipyContactEmail =
-    flipyProvider && integration ? readFlipyContactEmail(integration.settings) : null;
+    flipyProvider && integration
+      ? readFlipyContactEmail(integration.settings)
+      : flipyProvider && storeContactEmailVerified
+        ? storeContact.contactEmail
+        : null;
   const flipyOrigin = flipyProvider ? readFlipyOriginFromSettings(integration?.settings) : null;
+
+  let flipyActivationReady = false;
+  let flipyAlreadyActivated = false;
+  let flipyEmailVerified = storeContactEmailVerified;
+  if (flipyProvider && flipyLive && connected && integration && member.storeId) {
+    const flipyTiendaId =
+      readFlipyTiendaId(integration.settings) ?? integration.external_account_id?.trim() ?? null;
+    const env = getFlipyEnv();
+    if (flipyTiendaId && env.partnerApiKey) {
+      try {
+        const flipyClient = createFlipyPartnerClient({
+          baseUrl: env.apiBaseUrl,
+          partnerKey: env.partnerApiKey,
+          partnerId: env.partnerId,
+          externalStoreId: member.storeId,
+        });
+        const profile = await flipyClient.getTiendaProfile(flipyTiendaId);
+        const uiState = resolveFlipyActivationUiState(profile, {
+          storeEmailVerified: storeContactEmailVerified,
+        });
+        flipyAlreadyActivated = uiState.alreadyActivated;
+        flipyActivationReady = uiState.activationReady;
+        flipyEmailVerified = uiState.emailVerified;
+      } catch {
+        // Profile optional — activation panel falls back to init preflight.
+      }
+    }
+  }
+
   const shopDomain =
     (integration?.settings as { shop_domain?: string } | null)?.shop_domain ||
     (integration?.metadata as { shop_domain?: string } | null)?.shop_domain ||
@@ -321,6 +368,9 @@ export default async function IntegrationDetailPage({
               storeSlug={p.storeSlug}
               appOrigin={flipyEnv.appOrigin}
               contactEmail={flipyContactEmail}
+              initialActivationReady={flipyActivationReady}
+              initialAlreadyActivated={flipyAlreadyActivated}
+              initialEmailVerified={flipyEmailVerified}
             />
           ) : null}
           <FlipyWalletRecargaPanel
@@ -329,11 +379,6 @@ export default async function IntegrationDetailPage({
             embedOrigin={flipyEnv?.embedOrigin ?? getFlipyEnv().embedOrigin}
             appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
             contactEmail={flipyContactEmail}
-            activationPath={flipyEnv?.appActivationPath}
-            externalStoreId={member.storeId}
-            flipyTiendaId={
-              readFlipyTiendaId(integration.settings) ?? integration.external_account_id
-            }
           />
           {canManage ? (
             <FlipyV02Settings
@@ -379,10 +424,16 @@ export default async function IntegrationDetailPage({
           connected={connected}
           flipyTiendaId={readFlipyTiendaId(integration?.settings) ?? integration?.external_account_id}
           defaultNombre={integration?.display_name}
-          defaultEmail={flipyContactEmail}
+          defaultEmail={
+            storeContactEmailVerified
+              ? storeContact.contactEmail
+              : flipyContactEmail ?? storeContact.contactEmail
+          }
           defaultOriginAddress={flipyOrigin?.address}
           defaultOriginLat={flipyOrigin?.lat}
           defaultOriginLng={flipyOrigin?.lng}
+          contactEmailVerified={storeContactEmailVerified}
+          settingsHref={routes.store.settings(p.agencySlug, p.storeSlug)}
         />
       ) : null}
 

@@ -272,6 +272,8 @@ export function buildFlipyAppActivationUrl(input: {
   externalStoreId?: string | null;
   flipyTiendaId?: string | null;
   token?: string | null;
+  partnerEmailAssertion?: string | null;
+  emailVerified?: boolean;
 }): string {
   const email = input.contactEmail.trim();
   if (!email) {
@@ -282,6 +284,13 @@ export function buildFlipyAppActivationUrl(input: {
   const url = new URL(`${base}/${path}`);
   url.searchParams.set("email", email);
   url.searchParams.set("source", FLIPY_APP_ACTIVATION_SOURCE);
+  if (input.emailVerified) {
+    url.searchParams.set("emailVerified", "1");
+  }
+  const partnerAssertion = input.partnerEmailAssertion?.trim();
+  if (partnerAssertion) {
+    url.searchParams.set("partnerAssertion", partnerAssertion);
+  }
   const token = input.token?.trim();
   if (token) {
     url.searchParams.set("token", token);

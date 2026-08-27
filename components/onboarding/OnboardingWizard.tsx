@@ -25,6 +25,7 @@ export function OnboardingWizard() {
   const [storeName, setStoreName] = useState("");
   const [storeSlug, setStoreSlug] = useState("");
   const [storeSlugTouched, setStoreSlugTouched] = useState(false);
+  const [contactEmail, setContactEmail] = useState("");
   const [countryCode, setCountryCode] = useState("PE");
   const [currencyCode, setCurrencyCode] = useState("PEN");
   const [timezone, setTimezone] = useState("America/Lima");
@@ -44,6 +45,10 @@ export function OnboardingWizard() {
       if (!storeName) setStoreName(agencyName.trim());
       return;
     }
+    if (!contactEmail.trim()) {
+      setError("Ingresa el correo operativo de la tienda.");
+      return;
+    }
 
     setPending(true);
     const result = await completeOnboarding({
@@ -51,6 +56,7 @@ export function OnboardingWizard() {
       agencySlug: previewAgencySlug,
       storeName,
       storeSlug: previewStoreSlug,
+      contactEmail,
       countryCode,
       currencyCode,
       timezone,
@@ -165,6 +171,21 @@ export function OnboardingWizard() {
               required
             />
           </FormField>
+          <FormField
+            label="Correo operativo de la tienda"
+            htmlFor="contactEmail"
+            hint="Será el login Flipy de esta tienda. Lo verificarás con un código OTP."
+          >
+            <Input
+              id="contactEmail"
+              name="contactEmail"
+              type="email"
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.target.value)}
+              placeholder="ops@tienda.pe"
+              required
+            />
+          </FormField>
         </>
       )}
 
@@ -175,7 +196,7 @@ export function OnboardingWizard() {
           </Button>
         ) : null}
         <Button type="submit" className="flex-1" disabled={pending}>
-          {pending ? "Creando…" : step === 1 ? "Continuar" : "Ir al dashboard"}
+          {pending ? "Creando…" : step === 1 ? "Continuar" : "Crear y verificar correo"}
         </Button>
       </div>
     </form>

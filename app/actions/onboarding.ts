@@ -9,12 +9,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { setActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
 import { getAccessState } from "@/lib/tenant/get-access-state";
 import { logger } from "@/lib/observability/logger";
+import type { Json } from "@/types/database";
+import {
+  buildStoreSettingsWithContactEmail,
+  validateStoreContactEmail,
+} from "@/lib/settings/store-contact-email";
 
 export type OnboardingInput = {
   agencyName: string;
   agencySlug: string;
   storeName: string;
   storeSlug: string;
+  contactEmail: string;
   countryCode?: string;
   currencyCode?: string;
   timezone?: string;
@@ -40,6 +46,7 @@ function validateOnboarding(input: OnboardingInput): {
   agencySlug: string;
   storeName: string;
   storeSlug: string;
+  contactEmail: string;
   countryCode: string;
   currencyCode: string;
   timezone: string;
@@ -48,6 +55,7 @@ function validateOnboarding(input: OnboardingInput): {
   const storeName = input.storeName.trim();
   const agencySlug = normalizeSlug(input.agencySlug || agencyName);
   const storeSlug = normalizeSlug(input.storeSlug || storeName);
+  const contactEmail = validateStoreContactEmail(input.contactEmail);
   if (!agencyName) throw new ValidationError("Ingresa el nombre de la agencia.");
   if (!storeName) throw new ValidationError("Ingresa el nombre de la tienda.");
   if (!slugPattern.test(agencySlug)) throw new ValidationError("El slug de agencia no es válido.");
@@ -57,6 +65,7 @@ function validateOnboarding(input: OnboardingInput): {
     agencySlug,
     storeName,
     storeSlug,
+    contactEmail,
     countryCode: (input.countryCode ?? "PE").trim().toUpperCase() || "PE",
     currencyCode: (input.currencyCode ?? "PEN").trim().toUpperCase() || "PEN",
     timezone: input.timezone?.trim() || "America/Lima",
@@ -130,7 +139,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
         currency_code: data.currencyCode,
         timezone: data.timezone,
         created_by: user.id,
-        settings: {},
+        settings: buildStoreSettingsWithContactEmail({}, data.contactEmail) as Json,
         is_active: true,
         attribution_window_days: 7,
       })
@@ -190,7 +199,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       actorId: user.id,
       agencyId: agency.id,
       storeId: store.id,
-      newData: { slug: store.slug },
+      newData: { slug: store.slug, contact_email: data.contactEmail },
       useAdmin: true,
     });
 
@@ -202,7 +211,7 @@ export async function completeOnboarding(input: OnboardingInput): Promise<Onboar
       duration_ms: Date.now() - started,
     });
 
-    redirect(routes.store.dashboard(agency.slug, store.slug));
+    redirect(`${routes.store.settings(agency.slug, store.slug)}?verifyContactEmail=1`);
   } catch (error) {
     unstable_rethrow(error);
     return { error: toUserMessage(error) };

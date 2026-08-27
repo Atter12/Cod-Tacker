@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storeContactEmailFieldsSchema } from "@/lib/settings/store-contact-email";
 
 /** Versioned store settings JSON (stores.settings). */
 export const STORE_SETTINGS_SCHEMA_VERSION = 1 as const;
@@ -57,6 +58,9 @@ export const storeSettingsSchema = z.object({
   }),
   demo: demoSchema.default({ enabled: false }),
   attribution: attributionSettingsSchema.default({ utmCampaignAliases: [] }),
+  contact_email: storeContactEmailFieldsSchema.shape.contact_email,
+  contact_email_verified_at: storeContactEmailFieldsSchema.shape.contact_email_verified_at,
+  contact_email_verified_by: storeContactEmailFieldsSchema.shape.contact_email_verified_by,
 });
 
 export type StoreSettings = z.infer<typeof storeSettingsSchema>;

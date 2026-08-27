@@ -3326,6 +3326,47 @@ export type Database = {
           },
         ]
       }
+      store_contact_email_otps: {
+        Row: {
+          id: string
+          store_id: string
+          email: string
+          code_hash: string
+          expires_at: string
+          created_by: string | null
+          consumed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          email: string
+          code_hash: string
+          expires_at: string
+          created_by?: string | null
+          consumed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          store_id?: string
+          email?: string
+          code_hash?: string
+          expires_at?: string
+          created_by?: string | null
+          consumed_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_contact_email_otps_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_members: {
         Row: {
           created_at: string

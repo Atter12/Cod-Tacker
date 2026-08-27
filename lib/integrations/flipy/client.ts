@@ -25,6 +25,7 @@ import {
   buildFlipyTransferGananciasRequestBody,
   readFlipyTransferGananciasSuccessResult,
   buildFlipyActivateAccountInitRequestBody,
+  buildFlipyPatchContactEmailRequestBody,
   readFlipyActivateAccountInitResult,
   readFlipyTiendaProfileResult,
   type FlipyCalificarEnvioInput,
@@ -93,6 +94,8 @@ export type FlipyProvisionInput = {
   originLat: number;
   originLng: number;
   webhookUrl?: string | null;
+  emailVerifiedAt?: string | null;
+  partnerEmailAssertion?: string | null;
 };
 
 export type FlipyProvisionResult = {
@@ -228,6 +231,8 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         originLat: input.originLat,
         originLng: input.originLng,
         webhookUrl: input.webhookUrl,
+        emailVerifiedAt: input.emailVerifiedAt,
+        partnerEmailAssertion: input.partnerEmailAssertion,
       });
 
       const raw = await request<unknown>("/api/partner/tiendas", {
@@ -249,22 +254,31 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
     },
 
     async getTiendaProfile(tiendaId: string): Promise<FlipyTiendaProfileResult | null> {
-      const paths = [
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`,
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/profile`,
-      ];
-      for (const path of paths) {
-        try {
-          const raw = await request<unknown>(path, { method: "GET" });
-          const parsed = readFlipyTiendaProfileResult(raw);
-          if (parsed) return parsed;
-        } catch (error) {
-          const status = error instanceof FlipyPartnerApiError ? error.status : null;
-          if (status === 404 || status === 405) continue;
-          throw error;
-        }
+      const path = `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`;
+      try {
+        const raw = await request<unknown>(path, { method: "GET" });
+        return readFlipyTiendaProfileResult(raw);
+      } catch (error) {
+        const status = error instanceof FlipyPartnerApiError ? error.status : null;
+        if (status === 404 || status === 405) return null;
+        throw error;
       }
-      return null;
+    },
+
+    async patchTiendaContactEmail(
+      tiendaId: string,
+      input: {
+        contactEmail: string;
+        emailVerifiedAt?: string | null;
+        partnerEmailAssertion?: string | null;
+      },
+    ): Promise<FlipyTiendaProfileResult | null> {
+      const path = `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contact-email`;
+      const raw = await request<unknown>(path, {
+        method: "PATCH",
+        body: buildFlipyPatchContactEmailRequestBody(input),
+      });
+      return readFlipyTiendaProfileResult(raw);
     },
 
     async updateTiendaProfile(
@@ -277,8 +291,27 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         originLng: number;
         telefono?: string | null;
         ruc?: string | null;
+        emailVerifiedAt?: string | null;
+        partnerEmailAssertion?: string | null;
       },
     ): Promise<void> {
+      try {
+        await request<unknown>(
+          `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contact-email`,
+          {
+            method: "PATCH",
+            body: buildFlipyPatchContactEmailRequestBody({
+              contactEmail: input.contactEmail,
+              emailVerifiedAt: input.emailVerifiedAt,
+              partnerEmailAssertion: input.partnerEmailAssertion,
+            }),
+          },
+        );
+      } catch (error) {
+        const status = error instanceof FlipyPartnerApiError ? error.status : null;
+        if (status !== 404 && status !== 405 && status !== 501) throw error;
+      }
+
       const body = buildFlipyProvisionRequestBody({
         externalStoreId: config.externalStoreId,
         nombre: input.nombre,
@@ -288,47 +321,20 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
         originAddress: input.originAddress,
         originLat: input.originLat,
         originLng: input.originLng,
+        emailVerifiedAt: input.emailVerifiedAt,
+        partnerEmailAssertion: input.partnerEmailAssertion,
       });
-      const paths = [
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contact-email`,
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/contactEmail`,
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`,
-        `/api/partner/tiendas/${encodeURIComponent(tiendaId)}/profile`,
-      ];
-      const emailBody = { contactEmail: input.contactEmail.trim() };
-      let lastError: unknown = null;
-      for (const path of paths.slice(0, 2)) {
-        for (const method of ["PATCH", "PUT"] as const) {
-          try {
-            await request<unknown>(path, { method, body: emailBody });
-            return;
-          } catch (error) {
-            lastError = error;
-            const status = error instanceof FlipyPartnerApiError ? error.status : null;
-            if (status === 404 || status === 405 || status === 501) continue;
-            throw error;
-          }
+      const path = `/api/partner/tiendas/${encodeURIComponent(tiendaId)}`;
+      for (const method of ["PATCH", "PUT"] as const) {
+        try {
+          await request<unknown>(path, { method, body });
+          return;
+        } catch (error) {
+          const status = error instanceof FlipyPartnerApiError ? error.status : null;
+          if (status === 404 || status === 405 || status === 501) continue;
+          throw error;
         }
       }
-      for (const path of paths.slice(2)) {
-        for (const method of ["PATCH", "PUT"] as const) {
-          try {
-            await request<unknown>(path, { method, body });
-            return;
-          } catch (error) {
-            lastError = error;
-            const status = error instanceof FlipyPartnerApiError ? error.status : null;
-            if (status === 404 || status === 405 || status === 501) continue;
-            throw error;
-          }
-        }
-      }
-      if (lastError instanceof FlipyPartnerApiError) throw lastError;
-      throw new FlipyPartnerApiError(
-        "Flipy no expone actualización de tienda partner en Partner API.",
-        501,
-        "TIENDA_UPDATE_NOT_AVAILABLE",
-      );
     },
 
     async registerWebhook(
@@ -374,59 +380,25 @@ export function createFlipyPartnerClient(config: FlipyPartnerClientConfig) {
     async initActivateAccount(
       input: FlipyActivateAccountInitInput,
     ): Promise<FlipyActivateAccountInitResult> {
-      const paths = [
-        "/api/partner/cuenta/activar-cuenta/init",
-        "/api/partner/cuenta/activacion/init",
-        "/api/partner/activate-account/init",
-      ];
       const flipyTiendaId = input.flipyTiendaId?.trim();
-      if (flipyTiendaId) {
-        paths.unshift(
-          `/api/partner/tiendas/${encodeURIComponent(flipyTiendaId)}/activar-cuenta/init`,
-          `/api/partner/tiendas/${encodeURIComponent(flipyTiendaId)}/activate-account/init`,
-        );
+      if (!flipyTiendaId) {
+        throw new FlipyPartnerApiError("tiendaId requerido para activación partner", 400);
       }
 
-      const body = buildFlipyActivateAccountInitRequestBody(input);
-      const attempts = await Promise.allSettled(
-        paths.map(async (path) => {
-          const raw = await request<unknown>(path, { method: "POST", body });
-          const parsed = readFlipyActivateAccountInitResult(raw);
-          if (!parsed) {
-            throw new FlipyPartnerApiError("Flipy no devolvió token de activación", 502);
-          }
-          const activationUrl = parsed.activationUrl?.trim();
-          if (activationUrl && !isFlipyAppActivationUrl(activationUrl)) {
-            throw new FlipyPartnerApiError("Flipy devolvió URL de activación inválida", 502);
-          }
-          return parsed;
-        }),
-      );
-
-      for (const attempt of attempts) {
-        if (attempt.status === "fulfilled") return attempt.value;
+      const path = `/api/partner/tiendas/${encodeURIComponent(flipyTiendaId)}/activate-account/init`;
+      const raw = await request<unknown>(path, {
+        method: "POST",
+        body: buildFlipyActivateAccountInitRequestBody(input),
+      });
+      const parsed = readFlipyActivateAccountInitResult(raw);
+      if (!parsed) {
+        throw new FlipyPartnerApiError("Flipy no devolvió token de activación", 502);
       }
-
-      let lastError: unknown = null;
-      for (const attempt of attempts) {
-        if (attempt.status !== "rejected") continue;
-        lastError = attempt.reason;
-        const message = attempt.reason instanceof Error ? attempt.reason.message : "";
-        const status =
-          attempt.reason instanceof FlipyPartnerApiError ? attempt.reason.status : null;
-        if (status !== 404 && !/ruta no encontrada/i.test(message)) {
-          throw attempt.reason;
-        }
+      const activationUrl = parsed.activationUrl?.trim();
+      if (activationUrl && !isFlipyAppActivationUrl(activationUrl)) {
+        throw new FlipyPartnerApiError("Flipy devolvió URL de activación inválida", 502);
       }
-
-      if (lastError instanceof FlipyPartnerApiError) {
-        throw lastError;
-      }
-      throw new FlipyPartnerApiError(
-        "Activación Flipy no disponible en Partner API.",
-        404,
-        "ACTIVATION_NOT_AVAILABLE",
-      );
+      return parsed;
     },
 
     async issueWidgetToken(input: FlipyWidgetTokenInput): Promise<FlipyWidgetTokenResult> {

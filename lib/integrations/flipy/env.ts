@@ -14,6 +14,7 @@ import {
  * FLIPY_EMBED_ORIGIN      — partner iframe host (web-app); default https://flipy-panel.vercel.app
  * FLIPY_APP_ORIGIN        — tienda app web / deep links; default https://tienda.flipyexpress.com
  * FLIPY_APP_ACTIVATION_PATH — set-password landing on Flipy app; default /activar-cuenta
+ * PARTNER_EMAIL_ASSERTION_SECRET — HS256 JWT shared with Flipy (v0.2.1 email trust)
  */
 
 function readTrimmed(name: string): string | null {

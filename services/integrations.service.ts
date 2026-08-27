@@ -53,6 +53,11 @@ import {
   readFlipyTiendaId,
 } from "@/lib/integrations/flipy/credentials";
 import { readFlipyContactEmail } from "@/lib/integrations/flipy/settings";
+import { buildStorePartnerEmailTrust } from "@/lib/integrations/flipy/partner-trust";
+import {
+  isStoreContactEmailVerified,
+  readStoreContactEmail,
+} from "@/lib/settings/store-contact-email";
 import { getFlipyEnv, isFlipyConfigured } from "@/lib/integrations/flipy/env";
 import { buildFlipyWebhookUrl } from "@/lib/integrations/flipy/webhook-urls";
 import { ensureFlipyAutomationRules } from "@/lib/integrations/flipy/ensure-automations";
@@ -1038,12 +1043,45 @@ export async function connectFlipyLive(
     );
   }
 
+  const { data: storeRow, error: storeError } = await client
+    .from("stores")
+    .select("settings")
+    .eq("id", scope.storeId)
+    .eq("agency_id", scope.agencyId)
+    .single();
+  if (storeError || !storeRow) {
+    throw new ValidationError("No se pudo cargar la configuración de la tienda.");
+  }
+
+  const storeContact = readStoreContactEmail(storeRow.settings);
+  const contactEmailVerified = isStoreContactEmailVerified(storeRow.settings);
+
+  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
+  const linkedTiendaId =
+    readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
+
+  if (!linkedTiendaId && !contactEmailVerified) {
+    throw new ValidationError(
+      "Verifica el correo operativo de la tienda en Configuración antes de conectar Flipy.",
+    );
+  }
+
   const nombre = input.nombre.trim();
   const originAddress = input.originAddress.trim();
-  const contactEmail = input.email?.trim() ?? "";
+  const contactEmail = contactEmailVerified
+    ? (storeContact.contactEmail ?? "")
+    : (input.email?.trim() ?? "");
   if (!nombre) throw new ValidationError("Nombre de tienda requerido.");
   if (!contactEmail) {
     throw new ValidationError("Email de contacto requerido (contactEmail en Partner API Flipy).");
+  }
+  if (contactEmailVerified && input.email?.trim()) {
+    const submitted = input.email.trim().toLowerCase();
+    if (submitted !== contactEmail.toLowerCase()) {
+      throw new ValidationError(
+        "El correo Flipy debe coincidir con el correo verificado de la tienda en Configuración.",
+      );
+    }
   }
   if (!originAddress) throw new ValidationError("Dirección de origen requerida.");
   if (!Number.isFinite(input.originLat) || !Number.isFinite(input.originLng)) {
@@ -1082,9 +1120,6 @@ export async function connectFlipyLive(
     externalStoreId: scope.storeId,
   });
 
-  const existing = await getByProvider(client, scope.agencyId, scope.storeId, "flipy");
-  const linkedTiendaId =
-    readFlipyTiendaId(existing?.settings) ?? existing?.external_account_id?.trim() ?? null;
   const profileInput = {
     nombre,
     contactEmail,
@@ -1093,6 +1128,33 @@ export async function connectFlipyLive(
     originAddress,
     originLat: input.originLat,
     originLng: input.originLng,
+  };
+
+  const partnerTrust = contactEmailVerified
+    ? buildStorePartnerEmailTrust({
+        externalStoreId: scope.storeId,
+        email: contactEmail,
+        emailVerifiedAt: storeContact.contactEmailVerifiedAt,
+      })
+    : null;
+
+  if (contactEmailVerified && !partnerTrust) {
+    throw new IntegrationError(
+      "PARTNER_EMAIL_ASSERTION_SECRET no configurada. Añádela en Vercel (debe coincidir con Flipy v0.2.1).",
+    );
+  }
+
+  const provisionInput = {
+    ...profileInput,
+    webhookUrl,
+    emailVerifiedAt: partnerTrust?.emailVerifiedAt ?? null,
+    partnerEmailAssertion: partnerTrust?.partnerEmailAssertion ?? null,
+  };
+
+  const profileUpdateInput = {
+    ...profileInput,
+    emailVerifiedAt: partnerTrust?.emailVerifiedAt ?? null,
+    partnerEmailAssertion: partnerTrust?.partnerEmailAssertion ?? null,
   };
 
   let tiendaId: string;
@@ -1111,14 +1173,14 @@ export async function connectFlipyLive(
 
     if (profileChanged) {
       try {
-        await flipyClient.updateTiendaProfile(linkedTiendaId, profileInput);
+        await flipyClient.updateTiendaProfile(linkedTiendaId, profileUpdateInput);
       } catch {
-        // Best-effort: persist locally even if Partner API has no update route yet.
+        // Best-effort: persist locally even if Partner API update fails.
       }
     }
   } else {
     const provisioned = await flipyClient.provisionTienda(
-      { ...profileInput, webhookUrl },
+      provisionInput,
       `codtracked:store:${scope.storeId}`,
     );
     tiendaId = provisioned.tiendaId;

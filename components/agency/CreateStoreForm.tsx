@@ -16,6 +16,7 @@ export function CreateStoreForm({ agencySlug }: { agencySlug: string }) {
     const result = await createStore(agencySlug, {
       name: String(data.get("name") ?? ""),
       slug: String(data.get("slug") ?? ""),
+      contactEmail: String(data.get("contactEmail") ?? ""),
       countryCode: String(data.get("countryCode") ?? "PE"),
       currencyCode: String(data.get("currencyCode") ?? "PEN"),
       timezone: String(data.get("timezone") ?? "America/Lima"),
@@ -37,6 +38,13 @@ export function CreateStoreForm({ agencySlug }: { agencySlug: string }) {
       </FormField>
       <FormField label="Slug" htmlFor="slug" hint="Solo minúsculas, números y guiones.">
         <Input id="slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
+      </FormField>
+      <FormField
+        label="Correo operativo de la tienda"
+        htmlFor="contactEmail"
+        hint="Será el login Flipy de esta tienda. Lo verificarás con un código OTP."
+      >
+        <Input id="contactEmail" name="contactEmail" type="email" required placeholder="ops@tienda.pe" />
       </FormField>
       <div className="grid gap-3 sm:grid-cols-3">
         <FormField label="País" htmlFor="countryCode">

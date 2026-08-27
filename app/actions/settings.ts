@@ -14,6 +14,7 @@ import {
   storeSettingsToJson,
   type StoreSettingsUpdateInput,
 } from "@/lib/settings/store-settings";
+import { preserveStoreContactEmailFields } from "@/lib/settings/store-contact-email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -54,7 +55,9 @@ export async function updateStoreSettings(
       .eq("id", membership.storeId)
       .single();
 
-    const settingsJson = storeSettingsToJson(input.settings) as Json;
+    const settingsJson = storeSettingsToJson(
+      preserveStoreContactEmailFields(input.settings, before?.settings),
+    ) as Json;
     const { error } = await client
       .from("stores")
       .update({

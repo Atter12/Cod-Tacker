@@ -6,7 +6,7 @@
 
 import type { FlipyEscenarioPago } from "@/lib/integrations/flipy/resolve-payment";
 
-export const FLIPY_PARTNER_CONTRACT_VERSION = "0.2.0";
+export const FLIPY_PARTNER_CONTRACT_VERSION = "0.2.1";
 
 export type FlipyOriginLocation = {
   address: string;
@@ -110,6 +110,8 @@ export type FlipyProvisionRequestBody = {
   contactPhone?: string;
   ruc?: string;
   webhookUrl?: string;
+  emailVerifiedAt?: string;
+  partnerEmailAssertion?: string;
 };
 
 export function buildFlipyProvisionRequestBody(input: {
@@ -122,6 +124,8 @@ export function buildFlipyProvisionRequestBody(input: {
   telefono?: string | null;
   ruc?: string | null;
   webhookUrl?: string | null;
+  emailVerifiedAt?: string | null;
+  partnerEmailAssertion?: string | null;
 }): FlipyProvisionRequestBody {
   const contactEmail = input.contactEmail.trim();
   if (!contactEmail) {
@@ -151,6 +155,12 @@ export function buildFlipyProvisionRequestBody(input: {
 
   const webhookUrl = input.webhookUrl?.trim();
   if (webhookUrl) body.webhookUrl = webhookUrl;
+
+  const emailVerifiedAt = input.emailVerifiedAt?.trim();
+  if (emailVerifiedAt) body.emailVerifiedAt = emailVerifiedAt;
+
+  const partnerEmailAssertion = input.partnerEmailAssertion?.trim();
+  if (partnerEmailAssertion) body.partnerEmailAssertion = partnerEmailAssertion;
 
   return body;
 }
@@ -498,12 +508,20 @@ export function readFlipyTransferGananciasSuccessResult(
 export type FlipyActivateAccountInitInput = {
   contactEmail: string;
   flipyTiendaId?: string | null;
+  externalStoreId?: string | null;
+  emailVerified?: boolean;
+  partnerEmailAssertion?: string | null;
 };
 
 export type FlipyTiendaProfileResult = {
   tiendaId: string;
   contactEmail: string | null;
   nombre: string | null;
+  externalStoreId: string | null;
+  emailVerified: boolean | null;
+  emailVerifiedAt: string | null;
+  passwordSetAt: string | null;
+  /** Flipy: true when password not set; CT UI also requires emailVerified. */
   activationReady: boolean | null;
 };
 
@@ -520,19 +538,46 @@ export function readFlipyTiendaProfileResult(raw: unknown): FlipyTiendaProfileRe
     readString(bag, "contactEmail", "contact_email", "email") ??
     (userBag ? readString(userBag, "email", "contactEmail", "contact_email") : null);
 
-  const activationReadyRaw =
-    bag.activationReady ?? bag.activation_ready ?? bag.passwordSetAt ?? bag.password_set_at;
+  const passwordSetAt =
+    readString(bag, "passwordSetAt", "password_set_at") ??
+    (userBag ? readString(userBag, "passwordSetAt", "password_set_at") : null);
+
+  const emailVerifiedAt =
+    readString(bag, "emailVerifiedAt", "email_verified_at") ??
+    (userBag ? readString(userBag, "emailVerifiedAt", "email_verified_at") : null);
+
+  const emailVerifiedRaw =
+    bag.emailVerified ??
+    bag.email_verified ??
+    (userBag ? (userBag.emailVerified ?? userBag.email_verified) : null);
+  let emailVerified: boolean | null = null;
+  if (typeof emailVerifiedRaw === "boolean") {
+    emailVerified = emailVerifiedRaw;
+  } else if (emailVerifiedAt) {
+    emailVerified = true;
+  }
+
+  const externalStoreId = readString(bag, "externalStoreId", "external_store_id");
+
+  const activationReadyRaw = bag.activationReady ?? bag.activation_ready;
   let activationReady: boolean | null = null;
   if (typeof activationReadyRaw === "boolean") {
     activationReady = activationReadyRaw;
-  } else if (activationReadyRaw === null) {
+  } else if (passwordSetAt) {
     activationReady = false;
+  } else if (tiendaId) {
+    // Flipy v0.2.1: activationReady = !passwordSetAt when field omitted.
+    activationReady = true;
   }
 
   return {
     tiendaId,
     contactEmail,
     nombre: readString(bag, "nombre", "name", "displayName", "display_name"),
+    externalStoreId,
+    emailVerified,
+    emailVerifiedAt,
+    passwordSetAt,
     activationReady,
   };
 }
@@ -541,12 +586,38 @@ export type FlipyActivateAccountInitResult = {
   token: string;
   activationUrl?: string | null;
   expiresAt?: string | null;
+  otpRequired?: boolean;
 };
 
 export function buildFlipyActivateAccountInitRequestBody(
   input: FlipyActivateAccountInitInput,
 ): Record<string, unknown> {
-  return { contactEmail: input.contactEmail.trim() };
+  const email = input.contactEmail.trim();
+  const body: Record<string, unknown> = {
+    contactEmail: email,
+    email,
+  };
+  const externalStoreId = input.externalStoreId?.trim();
+  if (externalStoreId) body.externalStoreId = externalStoreId;
+  if (input.emailVerified === true) body.emailVerified = true;
+  const assertion = input.partnerEmailAssertion?.trim();
+  if (assertion) body.partnerEmailAssertion = assertion;
+  return body;
+}
+
+export function buildFlipyPatchContactEmailRequestBody(input: {
+  contactEmail: string;
+  emailVerifiedAt?: string | null;
+  partnerEmailAssertion?: string | null;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    contactEmail: input.contactEmail.trim(),
+  };
+  const emailVerifiedAt = input.emailVerifiedAt?.trim();
+  if (emailVerifiedAt) body.emailVerifiedAt = emailVerifiedAt;
+  const assertion = input.partnerEmailAssertion?.trim();
+  if (assertion) body.partnerEmailAssertion = assertion;
+  return body;
 }
 
 /** POST /api/partner/activate-account/init — session token for tienda set-password flow. */
@@ -559,10 +630,14 @@ export function readFlipyActivateAccountInitResult(
   const token = readString(bag, "token", "activationToken", "activation_token");
   if (!token) return null;
 
+  const otpRequiredRaw = bag.otpRequired ?? bag.otp_required;
+  const otpRequired = typeof otpRequiredRaw === "boolean" ? otpRequiredRaw : false;
+
   return {
     token,
     activationUrl: readString(bag, "activationUrl", "activation_url", "url"),
     expiresAt: readString(bag, "expiresAt", "expires_at"),
+    otpRequired,
   };
 }
 

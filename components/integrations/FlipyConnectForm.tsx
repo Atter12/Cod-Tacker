@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { connectFlipyLiveAction } from "@/app/actions/integrations";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
+import { routes } from "@/config/routes";
 
 type Props = {
   agencySlug: string;
@@ -18,6 +20,8 @@ type Props = {
   defaultOriginAddress?: string | null;
   defaultOriginLat?: number | null;
   defaultOriginLng?: number | null;
+  contactEmailVerified?: boolean;
+  settingsHref?: string;
   disabled?: boolean;
 };
 
@@ -32,6 +36,8 @@ export function FlipyConnectForm({
   defaultOriginAddress = null,
   defaultOriginLat = null,
   defaultOriginLng = null,
+  contactEmailVerified = false,
+  settingsHref,
   disabled = false,
 }: Props) {
   const router = useRouter();
@@ -50,6 +56,10 @@ export function FlipyConnectForm({
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
+
+  const blockedNewConnect = !connected && !contactEmailVerified;
+  const emailReadonly = contactEmailVerified && Boolean(defaultEmail);
+  const formDisabled = disabled || pending || blockedNewConnect;
 
   function connect() {
     setError(null);
@@ -106,6 +116,9 @@ export function FlipyConnectForm({
     }
   }
 
+  const settingsLink =
+    settingsHref ?? routes.store.settings(agencySlug, storeSlug);
+
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
       <h2 className="text-sm font-semibold">
@@ -122,13 +135,23 @@ export function FlipyConnectForm({
         </p>
       ) : null}
 
+      {blockedNewConnect ? (
+        <Alert variant="warning" title="Correo de tienda sin verificar">
+          Verifica el correo operativo de esta tienda en{" "}
+          <Link href={settingsLink} className="font-medium underline">
+            Configuración
+          </Link>{" "}
+          antes de conectar Flipy.
+        </Alert>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label="Nombre tienda" htmlFor="flipy-nombre">
           <Input
             id="flipy-nombre"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled}
           />
         </FormField>
         <FormField label="RUC" htmlFor="flipy-ruc">
@@ -136,7 +159,7 @@ export function FlipyConnectForm({
             id="flipy-ruc"
             value={ruc}
             onChange={(e) => setRuc(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled}
           />
         </FormField>
         <FormField label="Email contacto" htmlFor="flipy-email">
@@ -146,10 +169,15 @@ export function FlipyConnectForm({
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled || emailReadonly}
+            readOnly={emailReadonly}
             placeholder="ops@tienda.pe"
           />
-          {connected ? (
+          {contactEmailVerified ? (
+            <p className="mt-1 text-[11px] text-text-secondary">
+              Correo verificado en CODTracked — identidad Flipy de esta tienda.
+            </p>
+          ) : connected ? (
             <p className="mt-1 text-[11px] text-text-secondary">
               Correo de la cuenta Flipy (login y activación). Al actualizar, CT guarda el cambio y
               sincroniza con Flipy cuando la Partner API lo expone.
@@ -161,7 +189,7 @@ export function FlipyConnectForm({
             id="flipy-telefono"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled}
           />
         </FormField>
       </div>
@@ -171,7 +199,7 @@ export function FlipyConnectForm({
           id="flipy-origin-address"
           value={originAddress}
           onChange={(e) => setOriginAddress(e.target.value)}
-          disabled={disabled || pending}
+          disabled={formDisabled}
           placeholder="Av. Ejemplo 123, Lima"
         />
       </FormField>
@@ -181,7 +209,7 @@ export function FlipyConnectForm({
             id="flipy-origin-lat"
             value={originLat}
             onChange={(e) => setOriginLat(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled}
             placeholder="-12.119"
           />
         </FormField>
@@ -190,7 +218,7 @@ export function FlipyConnectForm({
             id="flipy-origin-lng"
             value={originLng}
             onChange={(e) => setOriginLng(e.target.value)}
-            disabled={disabled || pending}
+            disabled={formDisabled}
             placeholder="-77.029"
           />
         </FormField>
@@ -203,7 +231,7 @@ export function FlipyConnectForm({
           size="sm"
           variant="outline"
           className="mt-2"
-          disabled={disabled || pending}
+          disabled={formDisabled}
           onClick={() => copyUrl()}
         >
           {copied ? "Copiado" : "Copiar URL"}
@@ -213,7 +241,7 @@ export function FlipyConnectForm({
       {error ? <Alert variant="danger" title="Error">{error}</Alert> : null}
       {success ? <Alert variant="success" title="Listo">{success}</Alert> : null}
 
-      <Button disabled={disabled || pending} onClick={connect}>
+      <Button disabled={formDisabled} onClick={connect}>
         {pending ? "Conectando…" : connected ? "Actualizar Flipy" : "Conectar Flipy"}
       </Button>
     </div>
