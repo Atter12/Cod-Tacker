@@ -25,6 +25,8 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `SHOPIFY_SCOPES` | Server only | Comma-separated OAuth scopes. Include `write_script_tags` to auto-install storefront UTM ScriptTag on connect. |
 | `SHOPIFY_APP_URL` webhook path | — | Live order webhooks POST to `{SHOPIFY_APP_URL}/api/integrations/shopify/webhooks`. |
 | `SHOPIFY_APP_URL` attribution script | — | ScriptTag src `{SHOPIFY_APP_URL}/shopify/codtracked-attribution.js` must be publicly reachable (no Vercel Deployment Protection login). |
+| `SHOPIFY_APP_REVIEW_MODE` | Server only | `true` hides Flipy Stripe wallet top-ups (App Store review). See [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLING_EXTERNAL.md). |
+| `SHOPIFY_APP_REVIEW_STORE_IDS` | Server only | Comma-separated store UUIDs that must not show Flipy `wallet_topup`. |
 | `ALLOW_JOB_WORKER` | Server / CLI only | Must be `true` to run `scripts/process-jobs.ts`. Cron endpoint uses secrets below instead. |
 | `SETTLEMENT_CSV_BUCKET` | Server only | Optional Supabase Storage bucket for CSV path metadata. If unset, Sprint 5 import processes rows server-side without storing the file body. |
 | `ALLOW_DEMO_SEED` | Seed CLI only | Must be `true` to run `npm run seed:demo`. |

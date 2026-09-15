@@ -54,8 +54,10 @@ export function shopifyAttributionScriptSrc(appUrl?: string): string {
  * Soft-idempotent: skips create when the same src already exists.
  *
  * Requires OAuth scope `write_script_tags`. Merchant must re-authorize after scope change.
- * Note: App Store apps should prefer Theme App Extensions long-term; ScriptTag works for
- * custom/dev installs and still injects on themes that include {{ content_for_header }}.
+ * Note: App Store apps should prefer Theme App Extensions (App Embed
+ * `codtracked-attribution`). ScriptTag remains a soft fallback for themes that
+ * include {{ content_for_header }}; merchant onboarding lives in
+ * ShopifyAttributionOnboarding (Integraciones → Shopify).
  */
 export async function registerShopifyAttributionScriptTag(
   shop: string,

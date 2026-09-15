@@ -22,6 +22,8 @@ type Props = {
   destinoRetiroConfigurado?: boolean | null;
   appOrigin?: string | null;
   embedOrigin: string;
+  /** When false, hide Stripe wallet top-up (App Store review). */
+  allowWalletTopup?: boolean;
 };
 
 export function FlipyTransferGananciasPanel({
@@ -35,6 +37,7 @@ export function FlipyTransferGananciasPanel({
   destinoRetiroConfigurado = false,
   appOrigin = null,
   embedOrigin,
+  allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
   const [operaciones, setOperaciones] = useState(initialOperaciones);
@@ -252,14 +255,21 @@ export function FlipyTransferGananciasPanel({
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button
-          size="md"
-          className="flex-1 sm:flex-none"
-          disabled={walletPending}
-          onClick={() => openWalletTopup()}
-        >
-          {walletPending ? "Cargando recarga…" : "+ Recargar operaciones"}
-        </Button>
+        {allowWalletTopup ? (
+          <Button
+            size="md"
+            className="flex-1 sm:flex-none"
+            disabled={walletPending}
+            onClick={() => openWalletTopup()}
+          >
+            {walletPending ? "Cargando recarga…" : "+ Recargar operaciones (Flipy)"}
+          </Button>
+        ) : (
+          <p className="text-[12px] text-text-secondary">
+            Recarga con tarjeta deshabilitada en esta cuenta demo. El saldo Flipy es de logística,
+            no el plan COD-tracked.
+          </p>
+        )}
         {canTransfer ? (
           <Button
             size="md"
@@ -273,13 +283,13 @@ export function FlipyTransferGananciasPanel({
         ) : null}
       </div>
 
-      {walletEmbedUrl ? (
+      {allowWalletTopup && walletEmbedUrl ? (
         <div className="space-y-3 rounded-[11px] border border-border bg-brand-softer/40 p-4 shadow-[var(--card-shadow)]">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-text-primary">Recargar operaciones</p>
+              <p className="text-sm font-semibold text-text-primary">Recargar operaciones Flipy</p>
               <p className="text-[12px] text-text-secondary">
-                Pago con tarjeta vía Flipy · mínimo S/ 10
+                Saldo courier · no es la suscripción de COD-tracked · mínimo S/ 10
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={() => closeWalletTopup()}>

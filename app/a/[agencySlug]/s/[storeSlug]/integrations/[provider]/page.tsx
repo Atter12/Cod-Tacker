@@ -209,7 +209,9 @@ export default async function IntegrationDetailPage({
 
       {q.shopify === "connected" ? (
         <Alert variant="success" title="Shopify conectado">
-          Autorización completa. El access token quedó cifrado para esta tienda.
+          Autorización completa. El access token quedó cifrado para esta tienda. Ya puedes
+          sincronizar pedidos. Para atribución UTM en la vitrina, activa el App Embed (pasos abajo).
+          El plan de la plataforma no se cobra en este paso.
         </Alert>
       ) : null}
       {q.shopify_error ? (
@@ -225,8 +227,9 @@ export default async function IntegrationDetailPage({
       ) : null}
 
       {shopifyLive ? (
-        <Alert variant="info" title="Shopify live">
-          Credenciales de app configuradas. Puedes autorizar una tienda real vía OAuth.
+        <Alert variant="info" title="Conector Shopify">
+          Credenciales de app configuradas. Autoriza la tienda vía OAuth (conector Free). El plan
+          COD-tracked de la agencia se gestiona en Facturación, fuera de este flujo.
         </Alert>
       ) : null}
 

@@ -59,7 +59,8 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
   {
     provider: "shopify",
     name: "Shopify",
-    description: "Fuente de pedidos, clientes, ítems y señal COD vs prepaid.",
+    description:
+      "Conector Free: sincroniza pedidos, clientes, ítems y señal COD vs prepaid. El plan de la plataforma se gestiona en Facturación de la agencia.",
     kind: "commerce",
   },
   {

@@ -22,7 +22,7 @@ export const agencyNavigation: NavigationItem[] = [
   { label: "Tiendas", href: "/stores", permission: "store.view" },
   { label: "Equipo", href: "/team", permission: "agency.team.view" },
   { label: "Marca", href: "/branding", permission: "branding.manage" },
-  { label: "Facturación", href: "/billing", permission: "billing.view" },
+  { label: "Facturación (agencia)", href: "/billing", permission: "billing.view" },
   { label: "Claves API", href: "/api-keys", permission: "api_keys.view" },
 ];
 

@@ -1,11 +1,12 @@
 {% comment %}
   CODTracked App Embed — capture UTM / click IDs into cart attributes.
-  Enable in Theme settings → App embeds (defaults to off after install).
+  Merchant onboarding: Theme editor → App embeds → enable this embed → Save.
+  Defaults to off after install (Shopify App Store theme extension requirement).
 {% endcomment %}
 
 {% schema %}
 {
-  "name": "Attribution capture",
+  "name": "t:name.attribution-embed.name",
   "target": "head",
   "javascript": "codtracked-attribution.js",
   "settings": []

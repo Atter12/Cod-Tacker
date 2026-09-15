@@ -1,4 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+#
+# App Store positioning (policy 1.2.1): list as Free connector (OAuth + order sync).
+# Agency SaaS plans are billed outside Shopify (Stripe on COD-tracked Facturación).
+# Partner Dashboard pricing must stay Free — see docs/APP_STORE_BILLING_EXTERNAL.md
 
 name = "CODTracked Prod"
 application_url = "https://app.codtracked.com/"

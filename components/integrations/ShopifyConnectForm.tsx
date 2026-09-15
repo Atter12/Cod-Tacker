@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ShopifyAttributionOnboarding } from "@/components/integrations/ShopifyAttributionOnboarding";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField, Input } from "@/components/ui";
@@ -69,12 +70,12 @@ export function ShopifyConnectForm({
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
       <h2 className="text-sm font-semibold">
-        {connected ? "Reautorizar Shopify (OAuth)" : "Conectar Shopify (OAuth)"}
+        {connected ? "Reautorizar conector Shopify" : "Conectar tienda Shopify"}
       </h2>
       <p className="text-[12.5px] text-text-secondary">
         {connected
-          ? "Vuelve a autorizar para renovar el token, webhooks y el ScriptTag de atribución UTM (automático)."
-          : "Autoriza CODTracked en tu tienda. Se guardará un access token cifrado y se instalará la captura de UTMs en la tienda online."}
+          ? "Vuelve a autorizar para renovar el token, webhooks y la captura de atribución en vitrina. No se cobra un plan de Shopify aquí."
+          : "Autoriza el conector Free de CODTracked en tu tienda (OAuth). Se guarda un access token cifrado. Después activa la extensión de tema para UTMs. El plan de la plataforma se gestiona en Facturación de la agencia, no como cargo de esta app."}
       </p>
       {error ? (
         <Alert variant="danger" title="Shopify">
@@ -97,48 +98,14 @@ export function ShopifyConnectForm({
       </FormField>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={disabled || pending} onClick={connect}>
-          {pending ? "Redirigiendo…" : connected ? "Reautorizar Shopify" : "Conectar Shopify"}
+          {pending ? "Redirigiendo…" : connected ? "Reautorizar Shopify" : "Conectar tienda"}
         </Button>
         <Button size="sm" variant="outline" disabled={disabled || pending} onClick={testLive}>
           {pending ? "Probando…" : "Probar GraphQL"}
         </Button>
       </div>
 
-      {connected ? (
-        <div className="space-y-2 border-t border-border pt-3">
-          <h3 className="text-sm font-semibold">Atribución UTM automática</h3>
-          <p className="text-[12.5px] text-text-secondary">
-            Al conectar/reautorizar, CODTracked registra un ScriptTag en Shopify que carga{" "}
-            <code className="text-text-primary">/shopify/codtracked-attribution.js</code> en la tienda
-            (vía <code className="text-text-primary">content_for_header</code>). No hace falta editar el
-            tema a mano.
-          </p>
-          <ol className="list-decimal space-y-1 pl-4 text-[12.5px] text-text-secondary">
-            <li>
-              En Vercel, asegúrate de que <code className="text-text-primary">SHOPIFY_SCOPES</code>{" "}
-              incluya <code className="text-text-primary">write_script_tags</code>
-            </li>
-            <li>
-              En Partner Dashboard de Shopify, agrega el mismo scope a la app
-            </li>
-            <li>
-              Pulsa <strong>Reautorizar Shopify</strong> (acepta el nuevo permiso)
-            </li>
-            <li>
-              El JS de atribución debe ser público (sin login de Vercel) en{" "}
-              <code className="text-text-primary">SHOPIFY_APP_URL</code>
-            </li>
-            <li>
-              Prueba: producto con UTMs → <code className="text-text-primary">/cart.js</code> debe
-              mostrar attributes → compra
-            </li>
-          </ol>
-          <p className="text-[11px] text-text-secondary">
-            Nota: puedes quitar el snippet manual de <code className="text-text-primary">theme.liquid</code>{" "}
-            si lo habías pegado; con ScriptTag basta.
-          </p>
-        </div>
-      ) : null}
+      <ShopifyAttributionOnboarding connected={connected} />
     </div>
   );
 }

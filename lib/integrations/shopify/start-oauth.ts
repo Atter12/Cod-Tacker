@@ -11,6 +11,11 @@ import { extractRequestOrigin } from "@/lib/integrations/shopify/oauth-return-or
 import { createShopifyOAuthState } from "@/lib/integrations/shopify/oauth-state";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 
+/**
+ * Starts Shopify OAuth for a store. Auth + integrations.manage only — no billing gates.
+ * On success redirects to Shopify authorize URL; errors return to integrations/shopify
+ * (never /billing). See docs/APP_STORE_BILLING_EXTERNAL.md.
+ */
 export async function startShopifyOAuth(input: {
   agencySlug: string;
   storeSlug: string;

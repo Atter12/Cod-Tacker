@@ -16,6 +16,7 @@ import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
+import { isFlipyWalletTopupDisabledForStore } from "@/lib/shopify/app-store-review";
 
 export type FlipyWidgetTokenResult = {
   token: string;
@@ -44,6 +45,11 @@ export async function issueFlipyWidgetTokenAction(input: {
     if (scope === "wallet_topup") {
       if (!can(membership.roles, "integrations.view")) {
         throw new ValidationError("No tienes permiso para recargar Flipy.");
+      }
+      if (isFlipyWalletTopupDisabledForStore(membership.storeId)) {
+        throw new ValidationError(
+          "La recarga con tarjeta de Flipy está deshabilitada en esta tienda (App Store review / cuenta demo). El saldo de logística no es la suscripción de COD-tracked.",
+        );
       }
     } else if (scope === "bids_panel") {
       if (!can(membership.roles, "orders.view") && !can(membership.roles, "orders.manage")) {

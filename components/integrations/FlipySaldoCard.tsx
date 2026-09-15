@@ -8,6 +8,7 @@ import {
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
+import { isFlipyWalletTopupDisabledForStore } from "@/lib/shopify/app-store-review";
 import type { IntegrationRow } from "@/types/database";
 
 type Props = {
@@ -65,9 +66,12 @@ export async function FlipySaldoCard({
         <header className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
-              Billetera Flipy
+              Billetera Flipy (logística)
             </p>
             <h2 className="text-base font-semibold text-text-primary">Panel de operaciones</h2>
+            <p className="mt-1 text-[12px] text-text-secondary">
+              Saldo del courier Flipy. No sustituye el plan de plataforma COD-tracked.
+            </p>
           </div>
           <StatusBadge
             status={saldo.warningBajo ? "degraded" : "healthy"}
@@ -91,6 +95,7 @@ export async function FlipySaldoCard({
             destinoRetiroConfigurado={saldo.destinoRetiroConfigurado}
             appOrigin={appOrigin}
             embedOrigin={resolvedEmbedOrigin}
+            allowWalletTopup={!isFlipyWalletTopupDisabledForStore(storeId)}
           />
         </div>
       </section>

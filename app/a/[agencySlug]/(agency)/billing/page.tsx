@@ -43,7 +43,7 @@ export default async function AgencyBillingPage({
     <section className="space-y-6">
       <SectionHeader
         title="Facturación"
-        description="Planes, límites de uso e historial de facturación de la agencia."
+        description="Plan de la plataforma COD-tracked para esta agencia (límites e historial). No es un cargo de la app de Shopify; el conector Shopify es Free."
       />
       <BillingPanel
         agencySlug={p.agencySlug}

@@ -48,6 +48,7 @@ import {
 } from "@/lib/integrations/flipy/order-shipment-context";
 import { readFlipyEmbedBidsEvalEnabled } from "@/lib/integrations/flipy/settings";
 import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
+import { isFlipyWalletTopupDisabledForStore } from "@/lib/shopify/app-store-review";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { can } from "@/lib/permissions/can";
@@ -269,6 +270,7 @@ export default async function OrderDetailPage({
               canCreate={flipyCanCreate}
               canManage={canManage}
               pickupOrder={flipyCtx.isPickup}
+              allowWalletTopup={!isFlipyWalletTopupDisabledForStore(member.storeId)}
             />
           ) : null}
           <OrderActionsPanel

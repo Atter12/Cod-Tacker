@@ -97,6 +97,8 @@ type Props = {
   customerEmail?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When false, hide Flipy Stripe wallet top-up CTAs (App Store review). */
+  allowWalletTopup?: boolean;
 };
 
 type Step = "payment" | "ruta" | "confirm" | "success" | "recarga";
@@ -199,7 +201,7 @@ function wizardHeadline(step: Step): string {
     case "confirm":
       return "Revisa y confirma el envío";
     case "recarga":
-      return "Recargar billetera Flipy";
+      return "Recargar saldo logística Flipy";
     case "success":
       return "Envío creado en Flipy";
   }
@@ -242,6 +244,7 @@ export function FlipyCreateShipmentModal({
   customerEmail = null,
   open,
   onOpenChange,
+  allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
   const shopifyDeliveryInput = useMemo(
@@ -881,6 +884,12 @@ export function FlipyCreateShipmentModal({
   }, [open, paymentResolution]);
 
   function loadWalletEmbed() {
+    if (!allowWalletTopup) {
+      setError(
+        "La recarga con tarjeta de Flipy no está disponible en esta cuenta demo. Usa transferir Ganancias → Operaciones o contacta soporte de logística.",
+      );
+      return;
+    }
     setError(null);
     setWalletTransferMessage(null);
     startTransition(async () => {
@@ -1032,12 +1041,16 @@ export function FlipyCreateShipmentModal({
   }
 
   const showRecargaCta =
-    errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
-    (error?.toLowerCase().includes("saldo") ?? false);
+    allowWalletTopup &&
+    (errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
+      (error?.toLowerCase().includes("saldo") ?? false));
   const canTransferGanancias =
     Boolean(walletSaldo?.transferGananciasDisponible) &&
     (walletSaldo?.billeteraGanancias ?? 0) > 0;
-  const needsWalletSaldo = showRecargaCta || step === "recarga";
+  const needsWalletSaldo =
+    showRecargaCta ||
+    step === "recarga" ||
+    (Boolean(error?.toLowerCase().includes("saldo")) && !allowWalletTopup);
 
   useEffect(() => {
     if (!open || !needsWalletSaldo) {
@@ -1205,7 +1218,8 @@ export function FlipyCreateShipmentModal({
                   {canTransferGanancias && walletSaldo ? (
                     <p className="text-xs text-text-secondary">
                       Tienes {formatCurrency(walletSaldo.billeteraGanancias, "PEN")} en Ganancias COD.
-                      Puedes pasarlas a Operaciones al instante o recargar con tarjeta.
+                      Puedes pasarlas a Operaciones al instante o recargar saldo de logística Flipy
+                      (no es el plan COD-tracked).
                     </p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
@@ -1221,9 +1235,30 @@ export function FlipyCreateShipmentModal({
                       </Button>
                     ) : null}
                     <Button size="sm" variant="outline" disabled={pending} onClick={() => loadWalletEmbed()}>
-                      Recargar en Flipy
+                      Recargar logística Flipy
                     </Button>
                   </div>
+                </div>
+              ) : error &&
+                !allowWalletTopup &&
+                (errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
+                  error.toLowerCase().includes("saldo")) ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-text-secondary">
+                    Saldo de logística Flipy insuficiente. La recarga con tarjeta está oculta en esta
+                    cuenta de revisión; puedes transferir Ganancias a Operaciones si hay saldo.
+                  </p>
+                  {canTransferGanancias && walletSaldo ? (
+                    <Button
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => transferGananciasForShipment()}
+                    >
+                      {pending
+                        ? "Transfiriendo…"
+                        : `Pasar ${formatCurrency(walletSaldo.billeteraGanancias, "PEN")} a Operaciones`}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

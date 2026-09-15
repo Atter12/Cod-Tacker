@@ -44,7 +44,7 @@ const itemMeta: Record<
   },
   "/billing": {
     icon: CreditCard,
-    description: "Planes y facturación",
+    description: "Plan de plataforma (agencia)",
     href: routes.agency.billing,
   },
   "/api-keys": {

@@ -38,7 +38,9 @@ export function CreateStoreCard({
             />
           </div>
           <p className="mt-1 text-[12px] leading-snug text-[#94A3B8] sm:text-[12.5px]">
-            {atLimit ? "Tu plan no permite más tiendas." : "Conecta una tienda adicional"}
+            {atLimit
+              ? "El plan de plataforma no permite más tiendas."
+              : "Conecta una tienda adicional"}
           </p>
         </div>
       </div>
@@ -54,7 +56,7 @@ export function CreateStoreCard({
           {atLimit ? "Límite alcanzado" : "Disponible"}
         </span>
         {atLimit && eligibility.billingHref ? (
-          <span className="text-[11px] text-[#22D3EE]">Ver planes</span>
+          <span className="text-[11px] text-[#22D3EE]">Ampliar plan de agencia</span>
         ) : null}
       </div>
     </>

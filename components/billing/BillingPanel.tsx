@@ -216,6 +216,18 @@ export function BillingPanel({
           suscripción live activa.
         </p>
       ) : null}
+      {!isDemo ? (
+        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-text-secondary">
+          Esta facturación corresponde al <strong className="text-text-primary">plan SaaS de la
+          agencia</strong> en COD-tracked. La app de Shopify en App Store es un conector Free; no
+          uses este checkout como cargo de la app Shopify.
+        </p>
+      ) : (
+        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-text-secondary">
+          Modo demo: cambios de plan locales. En producción el plan de plataforma se cobra fuera de
+          Shopify (Stripe). El conector Shopify permanece Free en App Store.
+        </p>
+      )}
       {access.code === "past_due_grace" || access.code === "past_due_blocked" ? (
         <div
           className={cn(
@@ -257,7 +269,7 @@ export function BillingPanel({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-[16px] font-semibold text-text-primary">
-                Plan actual · {planName}
+                Plan de plataforma · {planName}
               </h3>
               <AgencyStatusPill
                 label={isActive ? "Activo" : status}
@@ -321,8 +333,10 @@ export function BillingPanel({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes</h3>
-            <p className="text-[12px] text-text-secondary">Planes que crecen contigo</p>
+            <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes de agencia</h3>
+            <p className="text-[12px] text-text-secondary">
+              Límites de tiendas y pedidos en COD-tracked (no es pricing de la app Shopify)
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {savingsSample != null ? (

@@ -42,18 +42,21 @@ export function FlipyWalletEmbed({ embedUrl, embedOrigin, onToppedUp }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-text-secondary">
-        Elige el monto y paga con tarjeta. El saldo se acredita a{" "}
-        <span className="font-medium text-text-primary">Operaciones</span> al completar el pago.
+        Recarga el <span className="font-medium text-text-primary">saldo de logística Flipy</span>{" "}
+        (fletes / operaciones del courier). Elige el monto y paga con tarjeta.{" "}
+        <span className="font-medium text-text-primary">No es el plan ni la suscripción de
+        COD-tracked</span>
+        ; ese plan se gestiona en Facturación de la agencia.
       </p>
 
       <div className="mx-auto w-full max-w-md">
         <div className="overflow-hidden rounded-[11px] border border-border bg-surface-elevated shadow-[var(--card-shadow)] ring-1 ring-brand-primary/10">
           <div className="border-b border-border bg-brand-softer px-4 py-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-primary">
-              Recarga segura · Stripe
+              Billetera Flipy · logística
             </p>
             <p className="mt-0.5 text-[12px] text-text-secondary">
-              Mínimo S/ 10 · Acredita a Operaciones
+              Mínimo S/ 10 · Acredita a Operaciones (courier)
             </p>
           </div>
           <div className="bg-surface px-3 py-3 sm:px-4">

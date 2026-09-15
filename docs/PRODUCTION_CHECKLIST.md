@@ -29,7 +29,7 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 
 - [ ] UNIQUE constraints post-auditoría Shopify (`scripts/audit-shopify-sprints-a-d-migrations.sql`)
 - [ ] Hierarchy campaigns live (hoy puede existir seed mock para demos de Attribution/Campañas)
-- [ ] Theme App Extension en lugar de ScriptTag (preferencia App Store)
+- [ ] Theme App Extension (`codtracked-attribution` App Embed) con onboarding en Integraciones → Shopify; preferida frente a ScriptTag solo
 - [ ] Enviame / `custom_carrier` live (solo si el cliente no usa Envia)
 
 ---
@@ -63,6 +63,7 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 - [ ] Shopify GDPR webhooks: cumplir (no solo ack/log)
 - [ ] Privacy export real + wipe al aprobar borrado
 - [ ] App Store listing ES + privacy policy + onboarding &lt;10 min
+- [ ] **App Store 1.2.1:** listing **Free** (conector Shopify); cobro SaaS solo en Facturación agencia (Stripe). Checklist: [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLING_EXTERNAL.md)
 - [ ] Webhooks / ScriptTag alcanzables sin Deployment Protection login
 
 ---
@@ -115,4 +116,4 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 5. WhatsApp Embedded Signup (fase 2)  
 6. GDPR + Sentry + Redis + CI + docs  
 
-Ver también: [MOCK_INTEGRATIONS.md](./MOCK_INTEGRATIONS.md), [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md), [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md), [ROADMAP.md](./ROADMAP.md).
+Ver también: [MOCK_INTEGRATIONS.md](./MOCK_INTEGRATIONS.md), [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md), [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md), [ROADMAP.md](./ROADMAP.md), [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLING_EXTERNAL.md).

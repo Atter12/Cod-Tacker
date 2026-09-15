@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 /**
  * Shopify App URL / install entry.
  * Prefer ?agencySlug=&storeSlug=&shop= when known; otherwise uses active tenant cookie.
+ *
+ * App Store 1.2.1: must never redirect to /billing or Stripe Checkout.
+ * Flow: login (if needed) → OAuth authorize → integrations/shopify detail.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);

@@ -86,7 +86,7 @@ export function AgencyOverview({
     },
     {
       href: routes.agency.billing(agencySlug),
-      label: "Ver facturación",
+      label: "Plan de plataforma",
       icon: CreditCard,
       show: canViewBilling,
     },
@@ -201,7 +201,9 @@ export function AgencyOverview({
         <Card>
           <CardContent className="space-y-4 p-4 sm:p-5">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-text-primary">Uso del plan (agencia)</h2>
+              <h2 className="text-[15px] font-semibold text-text-primary">
+                Uso del plan de plataforma
+              </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[13px] font-medium text-text-primary">Plan {planName}</p>
@@ -232,7 +234,7 @@ export function AgencyOverview({
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 )}
               >
-                Ver detalles del plan
+                Gestionar plan de agencia
               </Link>
             ) : null}
           </CardContent>
