@@ -63,7 +63,8 @@ export function AgencyConsoleMenu({
   agencyName: string;
   roles?: readonly Role[];
 }) {
-  const items = filterNavigationByPermission(agencyNavigation, roles).filter((item) => itemMeta[item.href]);
+  const items = filterNavigationByPermission(agencyNavigation, roles)
+    .filter((item) => itemMeta[item.href]);
   if (items.length === 0) return null;
 
   return (

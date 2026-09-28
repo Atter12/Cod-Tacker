@@ -58,6 +58,13 @@ describe("shopify oauth return origin", () => {
       resolveAllowedShopifyOAuthReturnOrigin("http://localhost:3000", [prod]),
       "http://localhost:3000",
     );
+    assert.equal(
+      resolveAllowedShopifyOAuthReturnOrigin("https://cod.codtracked.com", [
+        prod,
+        "https://cod.codtracked.com",
+      ]),
+      "https://cod.codtracked.com",
+    );
   });
 
   it("rejects unrelated hosts", () => {

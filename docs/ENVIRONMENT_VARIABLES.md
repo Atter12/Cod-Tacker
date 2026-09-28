@@ -4,7 +4,8 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Yes | Public application URL. |
+| `NEXT_PUBLIC_APP_URL` | Yes | Public application URL. Fallback when `PRODUCT_APP_URL` or `SHOPIFY_APP_URL` is unset. |
+| `PRODUCT_APP_URL` | No | Paid product origin (`https://cod.codtracked.com`): login, invites, Stripe Checkout return. Defaults to `NEXT_PUBLIC_APP_URL`. Host split stays off while it shares a host with `SHOPIFY_APP_URL`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Browser/request Supabase key. |
 | `NEXT_PUBLIC_DEFAULT_LOCALE` | Yes | Default locale, normally `es-PE`. |
@@ -44,7 +45,7 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `STRIPE_TEST_MODE_ALLOWED_EMAILS` | Server only | Comma-separated emails that may toggle test mode. Default: `sandrowonmer@gmail.com`. |
 | `NEXT_PUBLIC_STRIPE_TEST_PUBLISHABLE_KEY` | Public | Optional test publishable key. |
 
-Webhook URL (Stripe Dashboard — register in **both** Live and Test): `{NEXT_PUBLIC_APP_URL}/api/billing/webhooks/stripe`.
+Webhook URL (Stripe Dashboard — register in **both** Live and Test): `{PRODUCT_APP_URL}/api/billing/webhooks/stripe` once the product host is live. Until then it stays on the host that already receives Stripe. The app host (`SHOPIFY_APP_URL`) redirects every path except the Shopify connector, so a webhook still pointed at `app.codtracked.com` will not be delivered after the split.
 
 `scripts/test-rls.mjs` uses separate `SUPABASE_URL` and `ANON_KEY` variables so its purpose is explicit. See [RLS_TESTING.md](./RLS_TESTING.md).
 

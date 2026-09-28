@@ -13,7 +13,7 @@ Checklist antes de reenviar revisión:
 - [ ] **Pricing de la app = Free** (sin planes Managed / App Pricing de pago en la listing).
 - [ ] Descripción ES: conectar tienda, sincronizar pedidos/clientes/fulfillments; **no** vender el plan COD-tracked como cargo de la app Shopify.
 - [ ] Notas para reviewers: conector Free; plan de plataforma en `https://app.codtracked.com` → Facturación de agencia; cuenta demo con trial activo.
-- [ ] URLs alineadas con [`shopify.app.toml`](../shopify.app.toml): `application_url`, OAuth callback, compliance webhooks, `embedded = false`.
+- [ ] URLs alineadas con [`shopify.app.toml`](../shopify.app.toml): `application_url` = `https://app.codtracked.com/embed`, OAuth callback, compliance webhooks, `embedded = true`.
 - [ ] Scopes Partner = toml + `SHOPIFY_SCOPES` (incl. `write_script_tags` si usan ScriptTag).
 
 Copy sugerido (listing):
@@ -28,11 +28,9 @@ Copy sugerido (listing):
 - [ ] Credenciales en notas de revisión (email / password o magic link).
 - [ ] Script mínimo para el reviewer:
 
-  1. Login en `https://app.codtracked.com`
-  2. Abrir la tienda demo → **Integraciones → Shopify**
-  3. Conectar / autorizar OAuth (o ver ya conectado)
-  4. Abrir **Pedidos** y confirmar sync
-  5. **No** se exige pagar un plan de Shopify ni Stripe Checkout en el install
+  1. Instalar la app y abrirla en el Admin (carga `/embed`, sin salir de Shopify)
+  2. Ver la tienda ya vinculada y pedidos sincronizados, sin una pantalla de pago
+  3. Opcional: en `https://app.codtracked.com` la misma tienda está en Integraciones → Shopify
 
 - [ ] En el deploy de review (o prod durante revisión):  
   `SHOPIFY_APP_REVIEW_MODE=true` **o**  
@@ -40,6 +38,27 @@ Copy sugerido (listing):
   → oculta recargas Stripe de billetera Flipy (logística ≠ suscripción app).
 
 OAuth **no** debe redirigir a `/billing` (garantizado en código).
+
+---
+
+## Puerta embebida (`/embed`)
+
+El Admin de Shopify carga `https://app.codtracked.com/embed` en un iframe (`embedded = true`).
+
+1. App Bridge (`cdn.shopify.com/shopifycloud/app-bridge.js` en el `<head>`) entrega un session token.
+2. `POST /api/integrations/shopify/embed/session` verifica la firma y, si la tienda es nueva, cambia ese token por el access token offline, crea la tienda y sincroniza pedidos. El merchant no sale del Admin y no pasa por Stripe.
+3. La pantalla muestra pedidos. No hay checkout ni enlace a Facturación.
+
+Esa puerta es el conector incluido: no consulta el plan de Stripe para sincronizar ni mostrar pedidos. La agencia queda marcada `shopify_connector: free`. Crear otra tienda en la consola es un extra y sí usa el límite del plan.
+
+**Antes de `shopify app deploy`:** publica primero el web en Vercel para que `/embed` exista. Si el App URL cambia y la ruta aún no está en producción, el Admin abre un 404.
+
+Checklist Partner (después del deploy del web y de `shopify app deploy`):
+
+- [ ] App URL = `https://app.codtracked.com/embed`
+- [ ] Embebida = sí
+- [ ] Pricing = Free (un plan, sin cargos)
+- [ ] Redirect URL de OAuth sin cambios: `https://app.codtracked.com/api/integrations/shopify/callback`
 
 ---
 

@@ -1,12 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 #
-# App Store positioning (policy 1.2.1): list as Free connector (OAuth + order sync).
-# Agency SaaS plans are billed outside Shopify (Stripe on COD-tracked Facturación).
+# App Store positioning (policy 1.2.1): embedded Free connector inside Shopify Admin.
+# App URL is /embed (App Bridge session token). No Billing API and no checkout on this surface.
 # Partner Dashboard pricing must stay Free — see docs/APP_STORE_BILLING_EXTERNAL.md
 
 name = "CODTracked Prod"
-application_url = "https://app.codtracked.com/"
-embedded = false
+application_url = "https://app.codtracked.com/embed"
+embedded = true
 client_id = "0db071e09f21f8daacb901189df7457b"
 
 [access_scopes]

@@ -75,7 +75,7 @@ export function ShopifyConnectForm({
       <p className="text-[12.5px] text-text-secondary">
         {connected
           ? "Vuelve a autorizar para renovar el token, webhooks y la captura de atribución en vitrina. No se cobra un plan de Shopify aquí."
-          : "Autoriza el conector Free de CODTracked en tu tienda (OAuth). Se guarda un access token cifrado. Después activa la extensión de tema para UTMs. El plan de la plataforma se gestiona en Facturación de la agencia, no como cargo de esta app."}
+          : "Autoriza el conector Free de CODTracked en tu tienda (OAuth). Se guarda un access token cifrado. Después activa la extensión de tema para UTMs. No hay cargo de suscripción de esta app de Shopify."}
       </p>
       {error ? (
         <Alert variant="danger" title="Shopify">

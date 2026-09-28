@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { requireUser } from "@/lib/auth/require-user";
-import { getPublicEnv } from "@/config/env";
+import { getProductAppUrl } from "@/config/env";
 import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
 import type { Role } from "@/config/permissions";
@@ -35,13 +35,11 @@ function assertBillingManage(roles: readonly Role[]) {
 }
 
 function billingSuccessUrl(agencySlug: string): string {
-  const base = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  return `${base}${routes.agency.billing(agencySlug)}?checkout=success`;
+  return `${getProductAppUrl()}${routes.agency.billing(agencySlug)}?checkout=success`;
 }
 
 function billingCancelUrl(agencySlug: string): string {
-  const base = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  return `${base}${routes.agency.billing(agencySlug)}?checkout=cancel`;
+  return `${getProductAppUrl()}${routes.agency.billing(agencySlug)}?checkout=cancel`;
 }
 
 /**

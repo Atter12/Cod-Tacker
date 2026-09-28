@@ -1,6 +1,10 @@
 import type { DatabaseClient } from "@/services/_shared";
 import { ValidationError } from "@/lib/errors";
 import { assertSubscriptionAllowsAccess as assertAccessPolicy } from "@/lib/billing/access-policy";
+import {
+  additionalStoreLimitMessage,
+  isFreeShopifyConnectorSettings,
+} from "@/lib/billing/connector-access";
 
 /**
  * Soft defaults when an agency has no subscription row yet.
@@ -107,8 +111,13 @@ export async function assertCanCreateStore(
 
   const storeLimit = limits?.storeLimit ?? STARTER_DEFAULT_STORE_LIMIT;
   if (storeLimit !== null && (count ?? 0) >= storeLimit) {
+    const agency = await client.from("agencies").select("settings").eq("id", agencyId).maybeSingle();
     throw new ValidationError(
-      `Has alcanzado el límite de ${storeLimit} tienda(s) de tu plan${limits ? ` (${limits.planName})` : ""}. Mejora el plan para crear más.`,
+      additionalStoreLimitMessage({
+        storeLimit,
+        planName: limits?.planName ?? null,
+        shopifyConnectorIncluded: isFreeShopifyConnectorSettings(agency.data?.settings),
+      }),
     );
   }
 }

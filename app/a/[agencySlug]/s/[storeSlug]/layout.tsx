@@ -85,7 +85,11 @@ export default async function StoreLayout({
       }}
       activeAlertCount={activeAlertCount}
       agencyConsole={
-        <AgencyConsoleMenu agencySlug={agencySlug} agencyName={agencyName} roles={membership.roles} />
+        <AgencyConsoleMenu
+          agencySlug={agencySlug}
+          agencyName={agencyName}
+          roles={membership.roles}
+        />
       }
       tenantSwitcher={
         <TenantSwitcher

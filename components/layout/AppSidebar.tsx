@@ -212,7 +212,8 @@ export function AppSidebar({
   }, []);
 
   const raw = scope === "agency" ? agencyNavigation : scope === "admin" ? adminNavigation : storeNavigation;
-  const items = scope === "agency" ? filterNavigationByPermission(raw, roles) : raw;
+  const permitted = scope === "agency" ? filterNavigationByPermission(raw, roles) : raw;
+  const items = permitted;
   const primaryItems =
     scope === "store" ? items.filter((item) => PRIMARY_STORE_LABELS.has(item.label)) : items;
   const secondaryItems =

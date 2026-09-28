@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
-import { getPublicEnv } from "@/config/env";
+import { getProductAppUrl } from "@/config/env";
 import { invitableAgencyRoles, type InvitableAgencyRole } from "@/config/permissions";
 import { routes } from "@/config/routes";
 import { type ActionResult } from "@/lib/actions/action-result";
@@ -98,7 +98,7 @@ export async function createAgencyInvitation(
     });
 
     revalidatePath(routes.agency.team(agencySlug));
-    const inviteUrl = `${getPublicEnv().NEXT_PUBLIC_APP_URL}/invites/accept?token=${encodeURIComponent(token)}`;
+    const inviteUrl = `${getProductAppUrl()}/invites/accept?token=${encodeURIComponent(token)}`;
     return { inviteUrl, invitationId: invitation.id };
   } catch (error) {
     return { error: toUserMessage(error) };

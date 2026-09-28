@@ -1,4 +1,4 @@
-import { getPublicEnv } from "@/config/env";
+import { getProductAppUrl, getPublicEnv } from "@/config/env";
 import { writeAuditLog } from "@/lib/audit/write-audit";
 import { assertShopifyShopDomain } from "@/lib/integrations/shopify/domain";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
@@ -16,7 +16,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const { appUrl } = getShopifyEnv();
   const publicApp = getPublicEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  const defaultReturnBase = (appUrl || publicApp).replace(/\/$/, "");
+  const productApp = getProductAppUrl();
+  const defaultReturnBase = (productApp || appUrl || publicApp).replace(/\/$/, "");
 
   const query: Record<string, string | undefined> = {};
   url.searchParams.forEach((value, key) => {
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
   const stateRaw = query.state;
 
   const resolveReturnBase = (returnOrigin: string | undefined) =>
-    resolveAllowedShopifyOAuthReturnOrigin(returnOrigin, [publicApp, appUrl]) ??
+    resolveAllowedShopifyOAuthReturnOrigin(returnOrigin, [publicApp, appUrl, productApp]) ??
     defaultReturnBase;
 
   const fail = (

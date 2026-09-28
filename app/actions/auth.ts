@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { authCallbackUrl, authPaths } from "@/config/auth";
-import { getPublicEnv } from "@/config/env";
+import { getProductAppUrl } from "@/config/env";
 import { routes } from "@/config/routes";
 import { type ActionResult } from "@/lib/actions/action-result";
 import { ValidationError } from "@/lib/errors";
@@ -62,7 +62,7 @@ export async function register(email: string, password: string, fullName: string
     validatePassword(password);
     if (!fullName.trim()) throw new ValidationError("Ingresa tu nombre completo.");
     const supabase = await createClient();
-    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const appUrl = getProductAppUrl();
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
@@ -100,7 +100,7 @@ export async function resendOtp(email: string): Promise<AuthActionResult> {
   try {
     const normalizedEmail = validateEmail(email);
     const supabase = await createClient();
-    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const appUrl = getProductAppUrl();
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: normalizedEmail,
@@ -117,7 +117,7 @@ export async function forgotPassword(email: string): Promise<AuthActionResult> {
   try {
     const normalizedEmail = validateEmail(email);
     const supabase = await createClient();
-    const appUrl = getPublicEnv().NEXT_PUBLIC_APP_URL;
+    const appUrl = getProductAppUrl();
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: authCallbackUrl(appUrl, authPaths.resetPassword),
     });

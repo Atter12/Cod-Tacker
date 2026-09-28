@@ -12,8 +12,16 @@ const optionalFlag = z
   .transform((value) => value || undefined)
   .optional();
 
+const optionalUrl = z.preprocess((value) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}, z.string().url().optional());
+
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  /** Product console (login, invites, Stripe return). Falls back to NEXT_PUBLIC_APP_URL. */
+  PRODUCT_APP_URL: optionalUrl,
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   NEXT_PUBLIC_DEFAULT_LOCALE: z.string().min(1).default("es-PE"),
@@ -47,6 +55,7 @@ export type IntegrationMode = "mock" | "live";
 export function getPublicEnv(): PublicEnv {
   return publicEnvSchema.parse({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    PRODUCT_APP_URL: process.env.PRODUCT_APP_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_DEFAULT_LOCALE: process.env.NEXT_PUBLIC_DEFAULT_LOCALE,
@@ -56,6 +65,12 @@ export function getPublicEnv(): PublicEnv {
 
 export function getServerEnv(): ServerEnv {
   return serverEnvSchema.parse({ ...process.env });
+}
+
+/** Absolute origin for the paid product (console, Stripe return, auth emails, invites). */
+export function getProductAppUrl(): string {
+  const env = getPublicEnv();
+  return (env.PRODUCT_APP_URL ?? env.NEXT_PUBLIC_APP_URL).replace(/\/$/, "");
 }
 
 /**
