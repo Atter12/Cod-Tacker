@@ -49,6 +49,7 @@ describe("host gate", () => {
       "/api/integrations/shopify/callback",
       "/api/integrations/shopify/webhooks",
       "/api/integrations/shopify/embed/session",
+      "/api/internal/shopify/billing-sync",
       "/shopify/codtracked-attribution.js",
     ]) {
       const decision = decideHostGate({

@@ -2,7 +2,11 @@ import { ShopifyEmbeddedApp } from "@/components/shopify/ShopifyEmbeddedApp";
 
 export const dynamic = "force-dynamic";
 
-export default function ShopifyEmbedPage() {
+export default async function ShopifyEmbedPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const apiKey = process.env.SHOPIFY_CLIENT_ID?.trim() ?? "";
   if (!apiKey) {
     return (
@@ -11,5 +15,13 @@ export default function ShopifyEmbedPage() {
       </main>
     );
   }
-  return <ShopifyEmbeddedApp apiKey={apiKey} />;
+
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") params.set(key, value);
+    else if (Array.isArray(value) && value[0]) params.set(key, value[0]);
+  }
+
+  return <ShopifyEmbeddedApp apiKey={apiKey} initialSearch={params.toString()} />;
 }

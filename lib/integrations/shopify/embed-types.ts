@@ -1,3 +1,5 @@
+import type { EmbedPlanState } from "@/lib/billing/embed-plan-state";
+
 export type ShopifyEmbedOrder = {
   id: string;
   orderNumber: string;
@@ -12,4 +14,6 @@ export type ShopifyEmbedHome = {
   storeName: string | null;
   lastSyncedAt: string | null;
   orders: ShopifyEmbedOrder[];
+  /** App Pricing surface for the embed (never Stripe / never product host). */
+  billing: EmbedPlanState;
 };

@@ -3,7 +3,10 @@ import "server-only";
 /**
  * Agency billing — server env.
  *
- *   BILLING_PROVIDER=demo|stripe   — default demo (mock plan changes)
+ *   BILLING_PROVIDER=demo|stripe|shopify  — default demo (mock plan changes)
+ *   Shopify App Pricing (Partner-hosted plans): see docs/SHOPIFY_APP_PRICING.md
+ *     SHOPIFY_APP_HANDLE, SHOPIFY_PLAN_HANDLE_STARTER|GROWTH|SCALE
+ *     SHOPIFY_PARTNER_ORG_ID, SHOPIFY_PARTNER_API_TOKEN, SHOPIFY_APP_GID
  *   STRIPE_SECRET_KEY              — sk_live_… (or sk_test_… if only testing)
  *   STRIPE_WEBHOOK_SECRET          — whsec_… (live endpoint)
  *   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY — pk_… (optional until Elements/UI needs it)
@@ -19,11 +22,11 @@ import "server-only";
  *   STRIPE_TEST_MODE_ALLOWED_EMAILS — comma list; default sandrowonmer@gmail.com
  *
  * Webhook URL (Stripe Dashboard → Developers → Webhooks):
- *   {NEXT_PUBLIC_APP_URL}/api/billing/webhooks/stripe
+ *   {PRODUCT_APP_URL}/api/billing/webhooks/stripe
  * Register the same URL in both Live and Test mode dashboards.
  */
 
-export type BillingProviderMode = "demo" | "stripe";
+export type BillingProviderMode = "demo" | "stripe" | "shopify";
 export type StripeKeyMode = "live" | "test";
 
 const DEFAULT_TEST_MODE_EMAILS = ["sandrowonmer@gmail.com"];
@@ -37,6 +40,7 @@ function readTrimmed(name: string): string | null {
 export function resolveBillingProviderMode(): BillingProviderMode {
   const raw = (readTrimmed("BILLING_PROVIDER") ?? "demo").toLowerCase();
   if (raw === "stripe") return "stripe";
+  if (raw === "shopify") return "shopify";
   return "demo";
 }
 

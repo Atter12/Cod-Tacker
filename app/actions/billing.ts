@@ -9,7 +9,11 @@ import { routes } from "@/config/routes";
 import { ValidationError } from "@/lib/errors";
 import type { Role } from "@/config/permissions";
 import { can } from "@/lib/permissions/can";
-import { getBillingProvider, isDemoBilling } from "@/lib/billing/provider";
+import {
+  getBillingProviderForAgency,
+  resolveAgencyBillingProviderId,
+} from "@/lib/billing/provider";
+import { syncShopifyAppPricingForAgency } from "@/lib/billing/shopify-subscription-sync";
 import {
   canShowStripeTestModeToggle,
   resolveStripeKeyModeForUser,
@@ -18,8 +22,11 @@ import {
 import {
   isStripeTestModeConfigured,
   isStripeTestModeEmailAllowed,
+  resolveBillingProviderMode,
+  type BillingProviderMode,
 } from "@/lib/billing/env";
 import type { BillingInterval } from "@/lib/integrations/contracts/billing";
+import { createClient } from "@/lib/supabase/server";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
 
 export type BillingActionResult = ActionResult<{
@@ -43,7 +50,8 @@ function billingCancelUrl(agencySlug: string): string {
 }
 
 /**
- * Start plan selection: demo applies locally; Stripe opens Checkout or swaps price.
+ * Start plan selection: demo applies locally; Stripe opens Checkout; Shopify
+ * redirects to the hosted App Pricing page.
  * @deprecated Prefer selectPlan — kept for BillingPanel compatibility.
  */
 export async function changePlanMock(
@@ -64,7 +72,7 @@ export async function selectPlan(
     assertBillingManage(membership.roles);
 
     const keyMode = await resolveStripeKeyModeForUser(user.email);
-    const provider = getBillingProvider(keyMode);
+    const provider = await getBillingProviderForAgency(membership.agencyId, keyMode);
     const result = await provider.createCheckoutSession({
       agencyId: membership.agencyId,
       agencySlug,
@@ -110,7 +118,7 @@ export async function openBillingPortal(agencySlug: string): Promise<BillingActi
     assertBillingManage(membership.roles);
 
     const keyMode = await resolveStripeKeyModeForUser(user.email);
-    const provider = getBillingProvider(keyMode);
+    const provider = await getBillingProviderForAgency(membership.agencyId, keyMode);
     const { url } = await provider.createPortalSession({
       agencyId: membership.agencyId,
       returnUrl: billingSuccessUrl(agencySlug),
@@ -138,7 +146,7 @@ export async function scheduleCancelAtPeriodEnd(agencySlug: string): Promise<Bil
     assertBillingManage(membership.roles);
 
     const keyMode = await resolveStripeKeyModeForUser(user.email);
-    const provider = getBillingProvider(keyMode);
+    const provider = await getBillingProviderForAgency(membership.agencyId, keyMode);
     await provider.cancelAtPeriodEnd({
       agencyId: membership.agencyId,
       actorUserId: user.id,
@@ -171,7 +179,7 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
     assertBillingManage(membership.roles);
 
     const keyMode = await resolveStripeKeyModeForUser(user.email);
-    const provider = getBillingProvider(keyMode);
+    const provider = await getBillingProviderForAgency(membership.agencyId, keyMode);
     await provider.reactivate({
       agencyId: membership.agencyId,
       actorUserId: user.id,
@@ -188,6 +196,82 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
 
     revalidatePath(routes.agency.billing(agencySlug));
     return actionOk();
+  } catch (error) {
+    return actionFail(error);
+  }
+}
+
+/**
+ * Pull latest Shopify App Pricing state into local subscriptions (console dual billing).
+ */
+export async function refreshShopifyBillingStatus(
+  agencySlug: string,
+): Promise<ActionResult<{ synced: boolean; detail: string }>> {
+  try {
+    const user = await requireUser();
+    const membership = await requireAgencyAccess(agencySlug);
+    assertBillingManage(membership.roles);
+
+    const providerId = await resolveAgencyBillingProviderId(membership.agencyId);
+    if (providerId === "stripe") {
+      throw new ValidationError(
+        "Esta agencia factura con Stripe. No se sincroniza App Pricing sobre una suscripción Stripe.",
+      );
+    }
+
+    const client = await createClient();
+    const { data: store } = await client
+      .from("stores")
+      .select("shopify_shop_domain")
+      .eq("agency_id", membership.agencyId)
+      .eq("is_active", true)
+      .not("shopify_shop_domain", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const shopDomain = store?.shopify_shop_domain?.trim();
+    if (!shopDomain) {
+      throw new ValidationError(
+        "Conecta una tienda Shopify antes de sincronizar el plan de App Pricing.",
+      );
+    }
+
+    const result = await syncShopifyAppPricingForAgency({
+      agencyId: membership.agencyId,
+      shopDomain,
+    });
+
+    await writeAuditLog({
+      action: "billing_plan_changed",
+      entityType: "subscription",
+      entityId: membership.agencyId,
+      actorId: user.id,
+      agencyId: membership.agencyId,
+      newData: { provider: "shopify", sync: result },
+    });
+
+    revalidatePath(routes.agency.billing(agencySlug));
+    revalidatePath(routes.agency.branding(agencySlug));
+
+    if (result.kind === "synced") {
+      return actionOk({
+        synced: true,
+        detail: `Plan sincronizado (${result.status}${result.planCode ? ` · ${result.planCode}` : ""}).`,
+      });
+    }
+    if (result.kind === "cleared") {
+      return actionOk({
+        synced: true,
+        detail: "Shopify ya no tiene contrato activo; la suscripción local quedó cancelada.",
+      });
+    }
+    return actionOk({
+      synced: false,
+      detail:
+        "reason" in result
+          ? `Sin cambios (${result.reason}).`
+          : "Sin cambios en el estado del plan.",
+    });
   } catch (error) {
     return actionFail(error);
   }
@@ -217,9 +301,11 @@ export async function setStripeTestMode(
 }
 
 /** Exposed for UI badges — not a secret. */
-export async function getBillingProviderModeAction(): Promise<
+export async function getBillingProviderModeAction(
+  agencySlug?: string,
+): Promise<
   ActionResult<{
-    mode: "demo" | "stripe";
+    mode: BillingProviderMode;
     stripeKeyMode: "live" | "test";
     canUseStripeTestMode: boolean;
   }>
@@ -227,10 +313,15 @@ export async function getBillingProviderModeAction(): Promise<
   try {
     const user = await requireUser();
     const stripeKeyMode = await resolveStripeKeyModeForUser(user.email);
+    let mode: BillingProviderMode = resolveBillingProviderMode();
+    if (agencySlug) {
+      const membership = await requireAgencyAccess(agencySlug);
+      mode = await resolveAgencyBillingProviderId(membership.agencyId);
+    }
     return actionOk({
-      mode: isDemoBilling() ? "demo" : "stripe",
+      mode,
       stripeKeyMode,
-      canUseStripeTestMode: canShowStripeTestModeToggle(user.email),
+      canUseStripeTestMode: mode === "stripe" && canShowStripeTestModeToggle(user.email),
     });
   } catch (error) {
     return actionFail(error);

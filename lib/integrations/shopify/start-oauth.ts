@@ -14,7 +14,7 @@ import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
 /**
  * Starts Shopify OAuth for a store. Auth + integrations.manage only — no billing gates.
  * On success redirects to Shopify authorize URL; errors return to integrations/shopify
- * (never /billing). See docs/APP_STORE_BILLING_EXTERNAL.md.
+ * (never /billing or Stripe). See docs/SHOPIFY_APP_PRICING.md.
  */
 export async function startShopifyOAuth(input: {
   agencySlug: string;
@@ -94,4 +94,11 @@ export function shopifyIntegrationsReturnUrl(
   if (!query || !Object.keys(query).length) return path;
   const params = new URLSearchParams(query);
   return `${path}?${params.toString()}`;
+}
+
+/** Guard for tests / callers: OAuth bounce paths must stay off Facturación. */
+export function assertShopifyOAuthReturnAvoidsBilling(path: string): void {
+  if (/\/billing(\/|$|\?)/i.test(path)) {
+    throw new Error("OAuth Shopify no puede redirigir a Facturación.");
+  }
 }

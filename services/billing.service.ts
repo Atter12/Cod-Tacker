@@ -1,9 +1,13 @@
 import { throwQueryError, type DatabaseClient } from "./_shared";
+import { parseBillingProviderId } from "@/lib/billing/provider-id";
+import { getShopifyAppHandle } from "@/lib/billing/shopify-billing-env";
+import { buildShopifyAppPricingPlansUrlFromShop } from "@/lib/billing/shopify-pricing-url";
 import {
   getAgencyPlanLimits,
   currentPeriodKey,
   type PlanLimits,
 } from "@/lib/billing/limits";
+import type { BillingProviderId } from "@/lib/integrations/contracts/billing";
 import type { InvoiceRecordRow, PlanRow } from "@/types/database";
 
 const PLAN_DISPLAY_ORDER = ["starter", "growth", "scale", "agency", "enterprise"] as const;
@@ -24,8 +28,14 @@ export type BillingPlanCard = Pick<
 export type BillingOverview = {
   limits: PlanLimits | null;
   subscriptionId: string | null;
+  /** Latest subscription.billing_provider when set. */
+  billingProvider: BillingProviderId | null;
   /** From subscription.metadata.billing_interval when present. */
   billingInterval: "month" | "year" | null;
+  /** First connected Shopify shop for App Pricing deep links. */
+  shopifyShopDomain: string | null;
+  /** Hosted Shopify App Pricing URL when handle + shop are known. */
+  shopifyPricingPlansUrl: string | null;
   storeCount: number;
   orderCountThisMonth: number;
   invoices: InvoiceRecordRow[];
@@ -49,32 +59,51 @@ export async function getBillingOverview(
 ): Promise<BillingOverview> {
   const limits = await getAgencyPlanLimits(client, agencyId);
 
-  const [{ count: storeCount }, { data: storeRows }, { data: invoices }, { data: plans }, sub] =
-    await Promise.all([
-      client.from("stores").select("*", { count: "exact", head: true }).eq("agency_id", agencyId).eq("is_active", true),
-      client.from("stores").select("id").eq("agency_id", agencyId),
-      client
-        .from("invoice_records")
-        .select("*")
-        .eq("agency_id", agencyId)
-        .order("issued_at", { ascending: false })
-        .limit(24),
-      client
-        .from("plans")
-        .select(
-          "id, code, name, monthly_price, annual_price, currency_code, store_limit, order_limit, features",
-        )
-        .eq("is_active", true)
-        .eq("is_public", true)
-        .order("monthly_price", { ascending: true }),
-      client
-        .from("subscriptions")
-        .select("id, metadata")
-        .eq("agency_id", agencyId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    { count: storeCount },
+    { data: storeRows },
+    { data: invoices },
+    { data: plans },
+    sub,
+    { data: shopifyStore },
+  ] = await Promise.all([
+    client
+      .from("stores")
+      .select("*", { count: "exact", head: true })
+      .eq("agency_id", agencyId)
+      .eq("is_active", true),
+    client.from("stores").select("id").eq("agency_id", agencyId),
+    client
+      .from("invoice_records")
+      .select("*")
+      .eq("agency_id", agencyId)
+      .order("issued_at", { ascending: false })
+      .limit(24),
+    client
+      .from("plans")
+      .select(
+        "id, code, name, monthly_price, annual_price, currency_code, store_limit, order_limit, features",
+      )
+      .eq("is_active", true)
+      .eq("is_public", true)
+      .order("monthly_price", { ascending: true }),
+    client
+      .from("subscriptions")
+      .select("id, metadata, billing_provider")
+      .eq("agency_id", agencyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    client
+      .from("stores")
+      .select("shopify_shop_domain")
+      .eq("agency_id", agencyId)
+      .eq("is_active", true)
+      .not("shopify_shop_domain", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const storeIds = (storeRows ?? []).map((s) => s.id);
   let orderCountThisMonth = 0;
@@ -111,10 +140,32 @@ export async function getBillingOverview(
       ? subMeta.billing_interval
       : null;
 
+  const billingProvider = parseBillingProviderId(sub.data?.billing_provider);
+  const metaShop =
+    typeof subMeta.shopify_shop_domain === "string" ? subMeta.shopify_shop_domain.trim() : "";
+  const shopifyShopDomain =
+    metaShop || shopifyStore?.shopify_shop_domain?.trim() || null;
+
+  let shopifyPricingPlansUrl: string | null = null;
+  const appHandle = getShopifyAppHandle();
+  if (appHandle && shopifyShopDomain) {
+    try {
+      shopifyPricingPlansUrl = buildShopifyAppPricingPlansUrlFromShop({
+        shopDomain: shopifyShopDomain,
+        appHandle,
+      });
+    } catch {
+      shopifyPricingPlansUrl = null;
+    }
+  }
+
   return {
     limits,
     subscriptionId: sub.data?.id ?? null,
+    billingProvider,
     billingInterval,
+    shopifyShopDomain,
+    shopifyPricingPlansUrl,
     storeCount: storeCount ?? 0,
     orderCountThisMonth,
     invoices: invoices ?? [],

@@ -75,6 +75,10 @@ export function isShopifyAppSurface(pathname: string): boolean {
   ) {
     return true;
   }
+  // Crons and workers must not bounce off the Shopify host (Vercel may hit app.*).
+  if (pathname === "/api/internal" || pathname.startsWith("/api/internal/")) {
+    return true;
+  }
   if (pathname === "/shopify/codtracked-attribution.js") return true;
   if (pathname.startsWith("/_next/")) return true;
   if (pathname === "/favicon.ico") return true;

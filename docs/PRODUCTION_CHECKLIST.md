@@ -63,7 +63,7 @@ Criterio: verificado en código + cierre explícito de integraciones por product
 - [ ] Shopify GDPR webhooks: cumplir (no solo ack/log)
 - [ ] Privacy export real + wipe al aprobar borrado
 - [ ] App Store listing ES + privacy policy + onboarding &lt;10 min
-- [ ] **App Store 1.2.1:** listing **Free** (conector Shopify); cobro SaaS solo en Facturación agencia (Stripe). Checklist: [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLING_EXTERNAL.md)
+- [ ] **App Store billing:** Shopify App Pricing para merchants del Store. Correr `npm run smoke:app-pricing` + checklist fase 5 en [SHOPIFY_APP_PRICING.md](./SHOPIFY_APP_PRICING.md) / [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLING_EXTERNAL.md). Stripe solo legado/off-platform.
 - [ ] Webhooks / ScriptTag alcanzables sin Deployment Protection login
 
 ---

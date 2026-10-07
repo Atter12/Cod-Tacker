@@ -5,12 +5,14 @@ import { useEffect, useState, useTransition } from "react";
 import {
   openBillingPortal,
   reactivateSubscription,
+  refreshShopifyBillingStatus,
   scheduleCancelAtPeriodEnd,
   selectPlan,
   setStripeTestMode,
 } from "@/app/actions/billing";
 import { requestDataDeletion, requestDataExport } from "@/app/actions/privacy";
 import { evaluateSubscriptionAccess } from "@/lib/billing/access-policy";
+import { resolveConsoleBillingChrome } from "@/lib/billing/console-billing-mode";
 import { AgencyStatusPill } from "@/components/agency/AgencyStatusPill";
 import { UsageBar } from "@/components/agency/UsageBar";
 import { Button, Card, CardContent, DemoModeBadge } from "@/components/ui";
@@ -84,8 +86,8 @@ export function BillingPanel({
   canManage: boolean;
   overview: BillingOverview;
   stores: Array<{ id: string; name: string }>;
-  /** From server: BILLING_PROVIDER */
-  billingMode?: "demo" | "stripe";
+  /** From server: agency subscription or BILLING_PROVIDER */
+  billingMode?: "demo" | "stripe" | "shopify";
   /** live | test Stripe API keys (allowlisted toggle) */
   stripeKeyMode?: "live" | "test";
   /** Show test-mode toggle (allowlisted email + test keys configured) */
@@ -130,7 +132,9 @@ export function BillingPanel({
           ? stripeKeyMode === "test"
             ? "Pago de prueba recibido. La suscripción se actualizará en unos segundos."
             : "Pago recibido. La suscripción se actualizará en unos segundos."
-          : "Plan actualizado.",
+          : billingMode === "shopify"
+            ? "Si aprobaste el plan en Shopify, la suscripción se sincronizará en breve."
+            : "Plan actualizado.",
       );
       router.replace(routes.agency.billing(agencySlug), { scroll: false });
     } else if (checkoutStatus === "cancel") {
@@ -139,7 +143,7 @@ export function BillingPanel({
     }
   }, [checkoutStatus, billingMode, stripeKeyMode, agencySlug, router]);
 
-  function run(fn: () => Promise<{ error?: string; url?: string }>) {
+  function run(fn: () => Promise<{ error?: string; url?: string; notice?: string }>) {
     setError(null);
     setNotice(null);
     start(async () => {
@@ -152,7 +156,7 @@ export function BillingPanel({
         window.location.href = r.url;
         return;
       }
-      setNotice("Cambios guardados.");
+      setNotice(r.notice ?? "Cambios guardados.");
       router.refresh();
     });
   }
@@ -160,25 +164,24 @@ export function BillingPanel({
   const storesOver = overview.storeCount > storeLimit;
   const orderRatio = orderLimit > 0 ? overview.orderCountThisMonth / orderLimit : 0;
   const isDemo = billingMode === "demo";
-  const isStripeTest = !isDemo && stripeKeyMode === "test";
+  const isShopifyBilling = billingMode === "shopify";
+  const isStripeTest = billingMode === "stripe" && stripeKeyMode === "test";
+  const chrome = resolveConsoleBillingChrome(billingMode);
   const access = evaluateSubscriptionAccess(limits);
   const savingsSample = overview.availablePlans
     .map(annualSavingsPercent)
     .find((n): n is number => n != null && n > 0);
+  const shopifyPlansUrl = overview.shopifyPricingPlansUrl;
 
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         {isDemo ? <DemoModeBadge /> : null}
         <AgencyStatusPill
-          label={
-            isDemo
-              ? "Facturación de demostración"
-              : isStripeTest
-                ? "Stripe test"
-                : "Stripe"
+          label={isStripeTest ? "Stripe test" : chrome.providerLabel}
+          tone={
+            isDemo ? "brand" : isShopifyBilling ? "brand" : isStripeTest ? "danger" : "success"
           }
-          tone={isDemo ? "brand" : isStripeTest ? "danger" : "success"}
         />
         {canUseStripeTestMode ? (
           <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
@@ -206,6 +209,14 @@ export function BillingPanel({
           </label>
         ) : null}
       </div>
+      {chrome.banner ? (
+        <p
+          className="rounded-md border border-border bg-surface-muted/40 px-3 py-2 text-sm text-text-secondary"
+          role="status"
+        >
+          {chrome.banner}
+        </p>
+      ) : null}
       {isStripeTest ? (
         <p
           className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-text-primary"
@@ -216,18 +227,9 @@ export function BillingPanel({
           suscripción live activa.
         </p>
       ) : null}
-      {!isDemo ? (
-        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-text-secondary">
-          Esta facturación corresponde al <strong className="text-text-primary">plan SaaS de la
-          agencia</strong> en COD-tracked. La app de Shopify en App Store es un conector Free; no
-          uses este checkout como cargo de la app Shopify.
-        </p>
-      ) : (
-        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-text-secondary">
-          Modo demo: cambios de plan locales. En producción el plan de plataforma se cobra fuera de
-          Shopify (Stripe). El conector Shopify permanece Free en App Store.
-        </p>
-      )}
+      <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-text-secondary">
+        {chrome.platformNote}
+      </p>
       {access.code === "past_due_grace" || access.code === "past_due_blocked" ? (
         <div
           className={cn(
@@ -238,7 +240,11 @@ export function BillingPanel({
           )}
           role="status"
         >
-          <p>{access.message}</p>
+          <p>
+            {isShopifyBilling
+              ? "Hay un problema con el cobro en Shopify. Administra el plan en el Admin del merchant."
+              : access.message}
+          </p>
           {canManage && !isDemo ? (
             <Button
               className="mt-2"
@@ -247,7 +253,7 @@ export function BillingPanel({
               disabled={pending}
               onClick={() => run(() => openBillingPortal(agencySlug))}
             >
-              Actualizar método de pago
+              {isShopifyBilling ? chrome.manageLabel : "Actualizar método de pago"}
             </Button>
           ) : null}
         </div>
@@ -298,32 +304,60 @@ export function BillingPanel({
                 {!isDemo ? (
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={isShopifyBilling ? "primary" : "outline"}
                     disabled={pending}
                     onClick={() => run(() => openBillingPortal(agencySlug))}
                   >
-                    Portal de facturación
+                    {chrome.manageLabel}
                   </Button>
                 ) : null}
-                {!limits?.cancelAtPeriodEnd ? (
+                {isShopifyBilling ? (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={pending}
-                    onClick={() => run(() => scheduleCancelAtPeriodEnd(agencySlug))}
+                    onClick={() =>
+                      run(async () => {
+                        const r = await refreshShopifyBillingStatus(agencySlug);
+                        if (r.error) return { error: r.error };
+                        return { notice: r.detail ?? "Estado actualizado." };
+                      })
+                    }
                   >
-                    Programar cancelación
+                    Sincronizar estado
                   </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={() => run(() => reactivateSubscription(agencySlug))}
+                ) : null}
+                {!chrome.hideLocalCancelControls ? (
+                  !limits?.cancelAtPeriodEnd ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => run(() => scheduleCancelAtPeriodEnd(agencySlug))}
+                    >
+                      Programar cancelación
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => run(() => reactivateSubscription(agencySlug))}
+                    >
+                      Reactivar suscripción
+                    </Button>
+                  )
+                ) : null}
+                {isShopifyBilling && shopifyPlansUrl ? (
+                  <a
+                    href={shopifyPlansUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium text-text-primary hover:bg-muted"
                   >
-                    Reactivar suscripción
-                  </Button>
-                )}
+                    Abrir Admin
+                  </a>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -334,44 +368,48 @@ export function BillingPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes de agencia</h3>
-            <p className="text-[12px] text-text-secondary">
-              Límites de tiendas y pedidos en COD-tracked (no es pricing de la app Shopify)
-            </p>
+            <p className="text-[12px] text-text-secondary">{chrome.comparePlansHint}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {savingsSample != null ? (
+            {savingsSample != null && !isShopifyBilling ? (
               <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-primary">
                 Ahorra {savingsSample}%
               </span>
             ) : null}
-            <div
-              className="inline-flex rounded-md border border-border bg-surface p-0.5"
-              role="tablist"
-              aria-label="Periodicidad de facturación"
-            >
-              {(
-                [
-                  { value: "month", label: "Mensual" },
-                  { value: "year", label: "Anual" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="tab"
-                  aria-selected={interval === opt.value}
-                  className={cn(
-                    "rounded px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    interval === opt.value
-                      ? "bg-surface-elevated text-brand-primary shadow-sm"
-                      : "text-text-secondary hover:text-text-primary",
-                  )}
-                  onClick={() => setInterval(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            {!isShopifyBilling ? (
+              <div
+                className="inline-flex rounded-md border border-border bg-surface p-0.5"
+                role="tablist"
+                aria-label="Periodicidad de facturación"
+              >
+                {(
+                  [
+                    { value: "month", label: "Mensual" },
+                    { value: "year", label: "Anual" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={interval === opt.value}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      interval === opt.value
+                        ? "bg-surface-elevated text-brand-primary shadow-sm"
+                        : "text-text-secondary hover:text-text-primary",
+                    )}
+                    onClick={() => setInterval(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[11px] text-text-secondary">
+                Mensual / anual se elige en Shopify
+              </span>
+            )}
           </div>
         </div>
 
@@ -390,13 +428,7 @@ export function BillingPanel({
                   `${plan.order_limit ?? "∞"} pedidos/mes`,
                 ];
 
-            const ctaLabel = current
-              ? "Plan actual"
-              : !selfServe
-                ? "Hablar con ventas"
-                : isDemo
-                  ? "Seleccionar"
-                  : "Comenzar ahora";
+            const ctaLabel = chrome.planCtaLabel({ current, selfServe });
 
             return (
               <Card
@@ -413,7 +445,7 @@ export function BillingPanel({
                         {plan.name}
                         {current ? " (Actual)" : ""}
                       </p>
-                      {interval === "year" && savePct != null ? (
+                      {!isShopifyBilling && interval === "year" && savePct != null ? (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
                           −{savePct}%
                         </span>
@@ -441,7 +473,11 @@ export function BillingPanel({
                       variant={current ? "primary" : "outline"}
                       disabled={pending || current || !selfServe}
                       onClick={() =>
-                        run(() => selectPlan(agencySlug, plan.code, interval))
+                        run(() =>
+                          chrome.planCtaOpensShopify
+                            ? openBillingPortal(agencySlug)
+                            : selectPlan(agencySlug, plan.code, interval),
+                        )
                       }
                     >
                       {ctaLabel}
@@ -452,13 +488,7 @@ export function BillingPanel({
             );
           })}
         </div>
-        <p className="text-xs text-text-secondary">
-          No se almacenan datos de tarjeta
-          {isDemo
-            ? ". Modo demo aplica el plan al instante."
-            : ". Stripe Checkout / Portal gestionan el cobro."}{" "}
-          Los límites se aplican al crear tiendas e importar CSV.
-        </p>
+        <p className="text-xs text-text-secondary">{chrome.footerNote}</p>
       </div>
 
       <Card>
@@ -483,7 +513,7 @@ export function BillingPanel({
           <h3 className="text-[15px] font-semibold text-text-primary">Historial de facturación</h3>
         </div>
         {overview.invoices.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-text-secondary">Sin facturas aún.</p>
+          <p className="px-5 py-8 text-sm text-text-secondary">{chrome.invoicesEmpty}</p>
         ) : (
           <div className="w-full min-w-0 overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">

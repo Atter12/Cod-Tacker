@@ -11,6 +11,7 @@ import { exchangeShopifyAccessToken } from "@/lib/integrations/shopify/oauth";
 import type { ShopifyOAuthStatePayload } from "@/lib/integrations/shopify/oauth-state";
 import { registerShopifyAttributionScriptTag } from "@/lib/integrations/shopify/script-tags";
 import { registerShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
+import { syncShopifyAppPricingForAgencySafe } from "@/lib/billing/shopify-subscription-sync";
 import { throwQueryError, type DatabaseClient } from "@/services/_shared";
 import type { Enums, Json } from "@/types/database.generated";
 import type { IntegrationRow } from "@/types/database";
@@ -199,6 +200,12 @@ export async function completeShopifyOAuth(
       .single();
     if (!patched.error && patched.data) row = patched.data;
   }
+
+  await syncShopifyAppPricingForAgencySafe({
+    agencyId: input.state.agencyId,
+    shopDomain: shop,
+    shopGid: shopInfo.id,
+  });
 
   return row;
 }

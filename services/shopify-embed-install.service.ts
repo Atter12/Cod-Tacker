@@ -11,6 +11,7 @@ import { registerShopifyAttributionScriptTag } from "@/lib/integrations/shopify/
 import { registerShopifyOrderWebhooks } from "@/lib/integrations/shopify/webhooks-register";
 import { verifyShopifySessionToken } from "@/lib/integrations/shopify/session-token";
 import { getShopifyEnv } from "@/lib/integrations/shopify/env";
+import { syncShopifyAppPricingForAgencySafe } from "@/lib/billing/shopify-subscription-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduledShopifySync } from "@/services/integrations.service";
 import type { Json } from "@/types/database.generated";
@@ -47,6 +48,17 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
     .maybeSingle();
   if (existing.error) throw new Error("No se pudo leer la tienda vinculada.");
   if (existing.data) {
+    const { data: storeRow } = await admin
+      .from("stores")
+      .select("agency_id")
+      .eq("id", existing.data.id)
+      .maybeSingle();
+    if (storeRow?.agency_id) {
+      await syncShopifyAppPricingForAgencySafe({
+        agencyId: storeRow.agency_id,
+        shopDomain: shop,
+      });
+    }
     return { shop, ...(await loadShopifyEmbedHome(shop)) };
   }
 
@@ -167,6 +179,12 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
   } catch {
     // The embed still opens; the next scheduled sync can fill orders.
   }
+
+  await syncShopifyAppPricingForAgencySafe({
+    agencyId: agency.data.id,
+    shopDomain: shop,
+    shopGid: shopInfo.id,
+  });
 
   return { shop, ...(await loadShopifyEmbedHome(shop)) };
 }

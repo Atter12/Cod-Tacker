@@ -1,4 +1,3 @@
-import { authPaths } from "@/config/auth";
 import { startShopifyOAuth } from "@/lib/integrations/shopify/start-oauth";
 import { getUser } from "@/lib/auth/get-session";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
@@ -7,11 +6,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Shopify App URL / install entry.
- * Prefer ?agencySlug=&storeSlug=&shop= when known; otherwise uses active tenant cookie.
+ * Legacy install entry (console connect or old App URL bookmarks).
  *
- * App Store 1.2.1: must never redirect to /billing or Stripe Checkout.
- * Flow: login (if needed) → OAuth authorize → integrations/shopify detail.
+ * App Store product gates:
+ * - Never redirect to /billing or Stripe Checkout.
+ * - Unknown tenant / App Store style hit → `/embed` (session token install).
+ * - Known tenant + session → OAuth authorize → integrations/shopify.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -30,17 +30,22 @@ export async function GET(request: Request) {
   }
 
   const user = await getUser();
-  if (!user || !agencySlug || !storeSlug) {
-    const login = new URL(authPaths.login, request.url);
-    login.searchParams.set("next", request.url);
-    if (agencySlug) login.searchParams.set("agency", agencySlug);
-    return Response.redirect(login, 302);
+  if (user && agencySlug && storeSlug) {
+    return startShopifyOAuth({
+      agencySlug,
+      storeSlug,
+      shopRaw: shop,
+      requestUrl: request.url,
+    });
   }
 
-  return startShopifyOAuth({
-    agencySlug,
-    storeSlug,
-    shopRaw: shop,
-    requestUrl: request.url,
-  });
+  const embed = new URL("/embed", request.url);
+  for (const key of ["shop", "host", "hmac", "timestamp", "session", "id_token", "locale"]) {
+    const value = url.searchParams.get(key);
+    if (value) embed.searchParams.set(key, value);
+  }
+  if (!embed.searchParams.has("shop")) {
+    embed.searchParams.set("shop", shop);
+  }
+  return Response.redirect(embed, 302);
 }

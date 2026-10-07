@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { embedWelcomePlanHandle } from "@/lib/billing/embed-plan-state";
 import type { ShopifyEmbedHome, ShopifyEmbedOrder } from "@/lib/integrations/shopify/embed-types";
 
 type EmbedResponse = ShopifyEmbedHome & { ok: true; shop: string };
@@ -53,6 +54,28 @@ function ensureAppBridge(apiKey: string) {
   }
 }
 
+/**
+ * Leave the embed iframe for Shopify Admin (App Pricing page).
+ * Must run after App Bridge is ready and preferably from a user gesture.
+ */
+async function openShopifyAdminUrl(url: string): Promise<boolean> {
+  await waitForAppBridge(4000);
+  try {
+    window.open(url, "_top");
+    return true;
+  } catch {
+    try {
+      if (window.top) {
+        window.top.location.href = url;
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function formatMoney(amount: number, currency: string) {
   try {
     return new Intl.NumberFormat("es-PE", { style: "currency", currency }).format(amount);
@@ -84,11 +107,26 @@ function OrderRow({ order }: { order: ShopifyEmbedOrder }) {
   );
 }
 
-export function ShopifyEmbeddedApp({ apiKey }: { apiKey: string }) {
+export function ShopifyEmbeddedApp({
+  apiKey,
+  initialSearch = "",
+}: {
+  apiKey: string;
+  /** Server-passed query string for welcome `plan_handle` after App Pricing. */
+  initialSearch?: string;
+}) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [notice, setNotice] = useState<string | null>(null);
+  const [redirectError, setRedirectError] = useState<string | null>(null);
+
+  const welcomeHandle = useMemo(
+    () => embedWelcomePlanHandle(initialSearch),
+    [initialSearch],
+  );
 
   const openShop = useCallback(async () => {
     setPhase({ kind: "loading" });
+    setRedirectError(null);
     ensureAppBridge(apiKey);
     const bridge = await waitForAppBridge();
     if (!bridge?.idToken) {
@@ -110,16 +148,34 @@ export function ShopifyEmbeddedApp({ apiKey }: { apiKey: string }) {
         return;
       }
       setPhase({ kind: "ready", data: body });
+      if (welcomeHandle) {
+        setNotice(
+          `Plan «${welcomeHandle}» recibido desde Shopify. Si acabas de aprobarlo, la suscripción se sincroniza en unos segundos.`,
+        );
+      }
     } catch {
       setPhase({ kind: "error", message: "No se pudo abrir la app." });
     }
-  }, [apiKey]);
+  }, [apiKey, welcomeHandle]);
 
   useEffect(() => {
     void openShop();
   }, [openShop]);
 
   const ready = phase.kind === "ready" ? phase.data : null;
+  const billing = ready?.billing;
+
+  async function goToShopifyPlans() {
+    const url = billing?.pricingPlansUrl;
+    if (!url) return;
+    setRedirectError(null);
+    const ok = await openShopifyAdminUrl(url);
+    if (!ok) {
+      setRedirectError(
+        "No se pudo abrir la página de planes. Usa el enlace directo o recarga la app desde el Admin.",
+      );
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-6">
@@ -130,7 +186,8 @@ export function ShopifyEmbeddedApp({ apiKey }: { apiKey: string }) {
           </p>
           <h1 className="mt-1 text-lg font-semibold text-text-primary">Pedidos de la tienda</h1>
           <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">
-            Sincroniza los pedidos de esta tienda dentro del Admin. La conexión está incluida.
+            Sincroniza los pedidos de esta tienda dentro del Admin. La conexión está incluida; los
+            planes de plataforma se cobran en tu factura de Shopify.
           </p>
         </div>
         {ready ? (
@@ -143,6 +200,15 @@ export function ShopifyEmbeddedApp({ apiKey }: { apiKey: string }) {
           </button>
         ) : null}
       </div>
+
+      {notice ? (
+        <p
+          className="mt-4 rounded-md border border-border bg-brand-softer/40 px-3 py-2 text-[13px] text-text-primary"
+          role="status"
+        >
+          {notice}
+        </p>
+      ) : null}
 
       {phase.kind === "loading" ? (
         <p className="mt-6 text-sm text-text-secondary">Abriendo la tienda…</p>
@@ -177,8 +243,61 @@ export function ShopifyEmbeddedApp({ apiKey }: { apiKey: string }) {
         </div>
       ) : null}
 
+      {ready && ready.linked && billing ? (
+        <section
+          className="mt-6 rounded-lg border border-border bg-surface-elevated p-4"
+          aria-label="Plan de la app"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
+                Plan
+              </p>
+              <p className="mt-1 text-sm font-medium text-text-primary">{billing.statusLabel}</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+                {billing.billingNote}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-stretch gap-2">
+              {billing.showPlanCta ? (
+                <button
+                  type="button"
+                  className="rounded-md bg-brand-primary px-3 py-2 text-[12px] font-semibold text-white hover:opacity-90"
+                  onClick={() => void goToShopifyPlans()}
+                >
+                  {billing.planCtaLabel}
+                </button>
+              ) : null}
+              {billing.showManagePlan ? (
+                <button
+                  type="button"
+                  className="rounded-md border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-text-primary hover:bg-muted"
+                  onClick={() => void goToShopifyPlans()}
+                >
+                  {billing.managePlanLabel}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {billing.pricingPlansUrl && (billing.showPlanCta || billing.showManagePlan) ? (
+            <p className="mt-3 text-[11px] text-text-secondary">
+              Se abre en el Admin de Shopify (fuera de este panel).{" "}
+              <a
+                href={billing.pricingPlansUrl}
+                target="_top"
+                rel="noreferrer"
+                className="font-medium text-brand-primary underline-offset-2 hover:underline"
+              >
+                Abrir página de planes
+              </a>
+            </p>
+          ) : null}
+          {redirectError ? <p className="mt-2 text-[12px] text-danger">{redirectError}</p> : null}
+        </section>
+      ) : null}
+
       {ready && ready.linked ? (
-        <section className="mt-6 rounded-lg border border-border bg-surface-elevated p-4">
+        <section className="mt-4 rounded-lg border border-border bg-surface-elevated p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium text-text-primary">{ready.storeName}</p>

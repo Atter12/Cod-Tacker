@@ -6,6 +6,7 @@
 export type BillingProviderId =
   | "demo"
   | "stripe"
+  | "shopify"
   | "paddle"
   | "culqi"
   | "mercadopago";
