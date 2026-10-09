@@ -2,11 +2,11 @@
  * App Store review helpers.
  *
  * App charges for Store merchants: Shopify App Pricing (see docs/SHOPIFY_APP_PRICING.md).
- * Flipy wallet top-ups use Stripe for logistics and must stay hidden during app review
- * so reviewers do not confuse them with the app subscription.
+ * Logistics top-up opens Flipy's own recarga page (partner token, top window). The card
+ * form is not inside the embedded app, so review mode does not hide that handoff.
  *
- * SHOPIFY_APP_REVIEW_MODE=true — hide Flipy card top-ups globally.
- * SHOPIFY_APP_REVIEW_STORE_IDS — comma-separated store UUIDs that never see wallet_topup.
+ * SHOPIFY_APP_REVIEW_STORE_IDS — comma-separated store UUIDs that never open wallet_topup
+ * (demo accounts). SHOPIFY_APP_REVIEW_MODE does not hide the Flipy handoff.
  *
  * Server-only usage: call from server actions / RSC; do not expose secrets (flags only).
  */
@@ -33,9 +33,8 @@ export function parseShopifyAppReviewStoreIds(
   );
 }
 
-/** True when Flipy Stripe wallet top-up must be hidden for this store. */
+/** True when this demo store must not open the Flipy logistics top-up. */
 export function isFlipyWalletTopupDisabledForStore(storeId: string | null | undefined): boolean {
-  if (!storeId) return isShopifyAppReviewMode();
-  if (isShopifyAppReviewMode()) return true;
+  if (!storeId) return false;
   return parseShopifyAppReviewStoreIds().has(storeId);
 }

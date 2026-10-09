@@ -32,8 +32,8 @@ Copy listing (ajuste):
   3. Volver al embed; ver plan sincronizado.
   4. Opcional: consola `cod.codtracked.com` → Facturación → **Administrar en Shopify**.
 
-- [ ] `SHOPIFY_APP_REVIEW_MODE=true` **o** `SHOPIFY_APP_REVIEW_STORE_IDS=<uuid>`  
-  → oculta recargas Stripe de billetera Flipy (logística ≠ suscripción app).
+- [ ] La recarga de logística abre `flipy-panel` `/partner/recarga` a pantalla completa (token de partner, `returnUrl`). El formulario de tarjeta no va dentro del iframe.
+- [ ] `SHOPIFY_APP_REVIEW_STORE_IDS=<uuid>` oculta esa recarga solo en tiendas demo.
 
 OAuth / install **no** redirigen a `/billing` (gates en código + `npm run smoke:app-pricing`).
 

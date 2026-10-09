@@ -358,7 +358,6 @@ export default async function IntegrationDetailPage({
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
             appOrigin={flipyEnv?.appOrigin ?? getFlipyEnv().appOrigin}
-            embedOrigin={flipyEnv?.embedOrigin ?? getFlipyEnv().embedOrigin}
             canManage={canManage}
           />
           {flipyContactEmail && flipyEnv ? (
@@ -433,7 +432,6 @@ export default async function IntegrationDetailPage({
           agencySlug={p.agencySlug}
           storeSlug={p.storeSlug}
           appOrigin={getFlipyEnv().appOrigin}
-          embedOrigin={getFlipyEnv().embedOrigin}
           canManage={canManage}
         />
       ) : null}

@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { transferFlipyGananciasToOperaciones } from "@/app/actions/flipy-wallet";
 import { issueFlipyWidgetTokenAction } from "@/app/actions/flipy-widgets";
-import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
-import { buildFlipyAppFinanzasUrl } from "@/lib/integrations/flipy/embed-urls";
+import { FlipyWalletReturnNotice } from "@/components/flipy/FlipyWalletReturnNotice";
+import { buildFlipyAppFinanzasUrl, navigateFlipyWalletTopLevel } from "@/lib/integrations/flipy/embed-urls";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -21,8 +21,7 @@ type Props = {
   transferGananciasDisponible?: boolean | null;
   destinoRetiroConfigurado?: boolean | null;
   appOrigin?: string | null;
-  embedOrigin: string;
-  /** When false, hide Stripe wallet top-up (App Store review). */
+  /** When false, this demo store does not open the Flipy logistics top-up. */
   allowWalletTopup?: boolean;
 };
 
@@ -36,7 +35,6 @@ export function FlipyTransferGananciasPanel({
   transferGananciasDisponible = false,
   destinoRetiroConfigurado = false,
   appOrigin = null,
-  embedOrigin,
   allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
@@ -48,7 +46,6 @@ export function FlipyTransferGananciasPanel({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
-  const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [walletPending, startWallet] = useTransition();
   const [refreshPending, startRefresh] = useTransition();
@@ -145,28 +142,13 @@ export function FlipyTransferGananciasPanel({
         agencySlug,
         storeSlug,
         scope: "wallet_topup",
+        returnUrl: window.location.href,
       });
       if (tokenResult.error || !tokenResult.embedUrl) {
-        setWalletError(tokenResult.error ?? "No se pudo cargar la recarga embed.");
+        setWalletError(tokenResult.error ?? "No se pudo abrir la recarga en Flipy.");
         return;
       }
-      setWalletEmbedUrl(tokenResult.embedUrl);
-    });
-  }
-
-  function closeWalletTopup() {
-    setWalletEmbedUrl(null);
-    setWalletError(null);
-    startRefresh(() => {
-      router.refresh();
-    });
-  }
-
-  function handleWalletToppedUp(newBalance: number) {
-    setOperaciones(newBalance);
-    setWalletError(null);
-    startRefresh(() => {
-      router.refresh();
+      navigateFlipyWalletTopLevel(tokenResult.embedUrl);
     });
   }
 
@@ -183,6 +165,7 @@ export function FlipyTransferGananciasPanel({
 
   return (
     <div className="mt-4 space-y-4">
+      <FlipyWalletReturnNotice />
       <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -262,7 +245,7 @@ export function FlipyTransferGananciasPanel({
             disabled={walletPending}
             onClick={() => openWalletTopup()}
           >
-            {walletPending ? "Cargando recarga…" : "+ Recargar operaciones (Flipy)"}
+            {walletPending ? "Abriendo recarga…" : "Recargar en Flipy"}
           </Button>
         ) : (
           <p className="text-[12px] text-text-secondary">
@@ -283,25 +266,11 @@ export function FlipyTransferGananciasPanel({
         ) : null}
       </div>
 
-      {allowWalletTopup && walletEmbedUrl ? (
-        <div className="space-y-3 rounded-[11px] border border-border bg-brand-softer/40 p-4 shadow-[var(--card-shadow)]">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Recargar operaciones Flipy</p>
-              <p className="text-[12px] text-text-secondary">
-                Saldo courier · no es la suscripción de COD-tracked · mínimo S/ 10
-              </p>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => closeWalletTopup()}>
-              Cerrar
-            </Button>
-          </div>
-          <FlipyWalletEmbed
-            embedUrl={walletEmbedUrl}
-            embedOrigin={embedOrigin}
-            onToppedUp={handleWalletToppedUp}
-          />
-        </div>
+      {allowWalletTopup ? (
+        <p className="text-[12px] text-text-secondary">
+          La recarga abre la página de Flipy. El pago con tarjeta es saldo de logística, no el plan
+          de CODTracked.
+        </p>
       ) : null}
 
       {canTransfer ? (

@@ -11,6 +11,7 @@ import {
   FlipyCreateShipmentModal,
   type FlipyStoreOriginDefaults,
 } from "@/components/flipy/FlipyCreateShipmentModal";
+import { FlipyWalletReturnNotice } from "@/components/flipy/FlipyWalletReturnNotice";
 import { FlipyEscenarioLabel } from "@/components/flipy/FlipyEscenarioLabel";
 import { FlipyMotorizadoRatingPanel } from "@/components/flipy/FlipyMotorizadoRatingPanel";
 import { buildFlipyOperationWebUrl } from "@/lib/integrations/flipy/embed-urls";
@@ -260,6 +261,7 @@ export function FlipyShipmentPanel({
 
     return (
       <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
+        <FlipyWalletReturnNotice />
         <h2 className="text-sm font-semibold">Flipy</h2>
         <p className="text-xs text-text-secondary">
           Modalidad:{" "}
@@ -381,6 +383,7 @@ export function FlipyShipmentPanel({
   return (
     <>
       <div className="space-y-3 rounded-lg border border-border bg-surface-elevated p-4">
+        <FlipyWalletReturnNotice />
         <h2 className="text-sm font-semibold">Flipy</h2>
         <p className="text-[12.5px] text-text-secondary">
           Crea un envío: paso 1 ruta (recojo + entrega + paquete + flete), confirmar y listo.

@@ -37,6 +37,8 @@ Cuatro escenarios, además del test de cada grupo:
 
 Eso son once escenarios estratégicos: siete de grupo y cuatro de cruce.
 
+La recarga de logística Flipy no es uno de esos once. Vive en `lib/strategic/flipy-recarga.test.ts`: el pago sale al dominio de Flipy y el retorno vuelve a la misma pantalla de CODTracked.
+
 ---
 
 ## Qué cubre cada grupo

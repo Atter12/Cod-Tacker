@@ -24,7 +24,7 @@ import {
   resolveMapPrefill,
   type FlipyMapEmbedPrefetch,
 } from "@/components/flipy/FlipyRouteAddressModal";
-import { FlipyWalletEmbed } from "@/components/flipy/FlipyWalletEmbed";
+import { navigateFlipyWalletTopLevel } from "@/lib/integrations/flipy/embed-urls";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -97,11 +97,11 @@ type Props = {
   customerEmail?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When false, hide Flipy Stripe wallet top-up CTAs (App Store review). */
+  /** When false, this demo store does not open the Flipy logistics top-up. */
   allowWalletTopup?: boolean;
 };
 
-type Step = "payment" | "ruta" | "confirm" | "success" | "recarga";
+type Step = "payment" | "ruta" | "confirm" | "success";
 
 type WalletSaldoSnapshot = {
   billeteraOperaciones: number;
@@ -200,8 +200,6 @@ function wizardHeadline(step: Step): string {
       return "Ruta y detalles del paquete";
     case "confirm":
       return "Revisa y confirma el envío";
-    case "recarga":
-      return "Recargar saldo logística Flipy";
     case "success":
       return "Envío creado en Flipy";
   }
@@ -302,12 +300,10 @@ export function FlipyCreateShipmentModal({
   const [step, setStep] = useState<Step>("payment");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [walletEmbedUrl, setWalletEmbedUrl] = useState<string | null>(null);
   const [walletSaldo, setWalletSaldo] = useState<WalletSaldoSnapshot | null>(null);
   const [walletSaldoLoading, setWalletSaldoLoading] = useState(false);
   const [walletTransferMessage, setWalletTransferMessage] = useState<string | null>(null);
   const transferIdempotencyRef = useRef<string | null>(null);
-  const [resolvedEmbedOrigin, setResolvedEmbedOrigin] = useState(embedOrigin);
   const [escenario, setEscenario] = useState<FlipyEscenarioPago>(() =>
     initialFlipyEscenarioForUi(paymentResolution),
   );
@@ -738,7 +734,6 @@ export function FlipyCreateShipmentModal({
     setStep("payment");
     setError(null);
     setErrorCode(null);
-    setWalletEmbedUrl(null);
     setWalletSaldo(null);
     setWalletSaldoLoading(false);
     setWalletTransferMessage(null);
@@ -752,7 +747,6 @@ export function FlipyCreateShipmentModal({
     setRouteModal(null);
     setPickupCardError(null);
     setDeliveryCardError(null);
-    setResolvedEmbedOrigin(embedOrigin);
     setResult(null);
     setNotes("");
     setTermsAccepted(false);
@@ -883,10 +877,10 @@ export function FlipyCreateShipmentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot skip on open
   }, [open, paymentResolution]);
 
-  function loadWalletEmbed() {
+  function openWalletTopup() {
     if (!allowWalletTopup) {
       setError(
-        "La recarga con tarjeta de Flipy no está disponible en esta cuenta demo. Usa transferir Ganancias → Operaciones o contacta soporte de logística.",
+        "La recarga de logística Flipy no está disponible en esta cuenta demo. Usa transferir Ganancias → Operaciones o contacta soporte de logística.",
       );
       return;
     }
@@ -898,14 +892,13 @@ export function FlipyCreateShipmentModal({
         storeSlug,
         orderId,
         scope: "wallet_topup",
+        returnUrl: window.location.href,
       });
       if (tokenResult.error || !tokenResult.embedUrl) {
-        setError(tokenResult.error ?? "No se pudo cargar la recarga Flipy.");
+        setError(tokenResult.error ?? "No se pudo abrir la recarga en Flipy.");
         return;
       }
-      setWalletEmbedUrl(tokenResult.embedUrl);
-      setResolvedEmbedOrigin(tokenResult.embedOrigin ?? embedOrigin);
-      setStep("recarga");
+      navigateFlipyWalletTopLevel(tokenResult.embedUrl);
     });
   }
 
@@ -943,9 +936,6 @@ export function FlipyCreateShipmentModal({
         result.message ??
           `Transferiste ${formatCurrency(monto, "PEN")} a Operaciones. Reintenta crear el envío.`,
       );
-      if (step === "recarga") {
-        setStep("confirm");
-      }
     });
   }
 
@@ -1049,7 +1039,6 @@ export function FlipyCreateShipmentModal({
     (walletSaldo?.billeteraGanancias ?? 0) > 0;
   const needsWalletSaldo =
     showRecargaCta ||
-    step === "recarga" ||
     (Boolean(error?.toLowerCase().includes("saldo")) && !allowWalletTopup);
 
   useEffect(() => {
@@ -1089,7 +1078,7 @@ export function FlipyCreateShipmentModal({
 
   const showModalidadStep = !shouldSkipFlipyCodPaymentStep(paymentResolution);
   const wizardStep = mapFlipyWizardStep(step);
-  const wizardEyebrow = step !== "success" && step !== "recarga" ? "CREAR ENVÍO · FLIPY" : undefined;
+  const wizardEyebrow = step !== "success" ? "CREAR ENVÍO · FLIPY" : undefined;
   const orderLabel = formatOrderLabel(orderNumber);
 
   const wizardFooter =
@@ -1234,8 +1223,8 @@ export function FlipyCreateShipmentModal({
                           : `Pasar ${formatCurrency(walletSaldo.billeteraGanancias, "PEN")} a Operaciones`}
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="outline" disabled={pending} onClick={() => loadWalletEmbed()}>
-                      Recargar logística Flipy
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => openWalletTopup()}>
+                      Recargar en Flipy
                     </Button>
                   </div>
                 </div>
@@ -1245,8 +1234,8 @@ export function FlipyCreateShipmentModal({
                   error.toLowerCase().includes("saldo")) ? (
                 <div className="space-y-2">
                   <p className="text-xs text-text-secondary">
-                    Saldo de logística Flipy insuficiente. La recarga con tarjeta está oculta en esta
-                    cuenta de revisión; puedes transferir Ganancias a Operaciones si hay saldo.
+                    Saldo de logística Flipy insuficiente. Esta cuenta demo no abre la recarga; puedes
+                    transferir Ganancias a Operaciones si hay saldo.
                   </p>
                   {canTransferGanancias && walletSaldo ? (
                     <Button
@@ -1347,44 +1336,6 @@ export function FlipyCreateShipmentModal({
             currencyCode={currencyCode}
           />
           </>
-        ) : null}
-
-        {step === "recarga" && walletEmbedUrl ? (
-          <div className="space-y-3">
-            {canTransferGanancias && walletSaldo ? (
-              <Alert variant="info" title="Alternativa sin tarjeta">
-                También puedes transferir{" "}
-                {formatCurrency(walletSaldo.billeteraGanancias, "PEN")} de Ganancias a Operaciones.
-                <div className="mt-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => transferGananciasForShipment()}
-                  >
-                    Pasar Ganancias a Operaciones
-                  </Button>
-                </div>
-              </Alert>
-            ) : null}
-            <FlipyWalletEmbed
-              embedUrl={walletEmbedUrl}
-              embedOrigin={resolvedEmbedOrigin}
-              onToppedUp={() => {
-                setError(null);
-                setErrorCode(null);
-                setStep("confirm");
-              }}
-            />
-            <div className="flex justify-between gap-2">
-              <Button variant="outline" disabled={pending} onClick={() => setStep("confirm")}>
-                Volver
-              </Button>
-              <Button disabled={pending} onClick={() => submitCreate()}>
-                Reintentar crear envío
-              </Button>
-            </div>
-          </div>
         ) : null}
 
         {step === "success" && result ? (

@@ -25,14 +25,14 @@ describe("app-store-review", () => {
     assert.equal(parseShopifyAppReviewStoreIds(undefined).size, 0);
   });
 
-  it("hides wallet top-up in review mode or listed stores", () => {
+  it("keeps the Flipy handoff in review mode and hides it only for listed demo stores", () => {
     delete process.env.SHOPIFY_APP_REVIEW_MODE;
     delete process.env.SHOPIFY_APP_REVIEW_STORE_IDS;
     assert.equal(isShopifyAppReviewMode(), false);
     assert.equal(isFlipyWalletTopupDisabledForStore("store-1"), false);
 
     process.env.SHOPIFY_APP_REVIEW_MODE = "true";
-    assert.equal(isFlipyWalletTopupDisabledForStore("store-1"), true);
+    assert.equal(isFlipyWalletTopupDisabledForStore("store-1"), false);
 
     process.env.SHOPIFY_APP_REVIEW_MODE = "false";
     process.env.SHOPIFY_APP_REVIEW_STORE_IDS = "store-review";

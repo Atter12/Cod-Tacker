@@ -3,6 +3,11 @@ import { describe, it } from "node:test";
 import {
   buildFlipyLocationEmbedUrl,
   buildFlipyWalletEmbedUrl,
+  isSafeFlipyWalletReturnUrl,
+  markFlipyWalletReturnUrl,
+  prepareFlipyWalletTopLevelUrl,
+  isFlipyWalletReturnPending,
+  stripFlipyWalletReturnParam,
   buildFlipyOperationWebUrl,
   buildFlipyBidsEmbedUrl,
   buildFlipyAppActivationUrl,
@@ -48,6 +53,31 @@ describe("flipy embed-urls", () => {
     assert.match(url, /theme=light/);
     assert.match(url, /appearance=light/);
     assert.match(url, /partner=codtracked/);
+  });
+
+  it("opens recarga on Flipy with a same-origin return", () => {
+    const embedUrl = buildFlipyWalletEmbedUrl({
+      embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
+      token: "jwt-token",
+    });
+    const appOrigin = "https://app.codtracked.com";
+    const returnUrl = markFlipyWalletReturnUrl(
+      `${appOrigin}/a/acme/s/tienda/orders/order-1`,
+    );
+    assert.equal(isSafeFlipyWalletReturnUrl(returnUrl, appOrigin), true);
+    assert.equal(isSafeFlipyWalletReturnUrl("https://checkout.stripe.com/c/pay/cs", appOrigin), false);
+    const topLevel = prepareFlipyWalletTopLevelUrl({ embedUrl, returnUrl });
+    const parsed = new URL(topLevel);
+    assert.equal(parsed.origin, FLIPY_DEFAULT_EMBED_ORIGIN);
+    assert.equal(parsed.pathname, "/partner/recarga");
+    assert.equal(parsed.searchParams.get("embedMode"), "standalone");
+    assert.equal(parsed.searchParams.get("token"), "jwt-token");
+    assert.equal(parsed.searchParams.get("returnUrl"), returnUrl);
+    assert.equal(isFlipyWalletReturnPending(new URL(returnUrl).search), true);
+    assert.equal(
+      stripFlipyWalletReturnParam(returnUrl),
+      "/a/acme/s/tienda/orders/order-1",
+    );
   });
 
   it("builds tienda operation web URL for envío", () => {

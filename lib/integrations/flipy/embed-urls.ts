@@ -196,6 +196,93 @@ export function buildFlipyWalletEmbedUrl(input: FlipyWalletEmbedParams): string 
   return url.toString();
 }
 
+/** Query flag CODTracked adds so the return page refreshes the logistics balance. */
+export const FLIPY_WALLET_RETURN_PARAM = "flipy_wallet";
+
+/** Same-origin return only. Flipy redirects the merchant back after the card form. */
+export function isSafeFlipyWalletReturnUrl(returnUrl: string, appOrigin: string): boolean {
+  try {
+    const target = new URL(returnUrl);
+    const app = new URL(appOrigin);
+    if (target.origin !== app.origin) return false;
+    if (target.username || target.password) return false;
+    if (target.protocol !== "https:" && target.protocol !== "http:") return false;
+    return target.href.length <= 2000;
+  } catch {
+    return false;
+  }
+}
+
+export function markFlipyWalletReturnUrl(returnUrl: string): string {
+  const url = new URL(returnUrl);
+  url.searchParams.set(FLIPY_WALLET_RETURN_PARAM, "return");
+  return url.toString();
+}
+
+/**
+ * Full-page recarga on Flipy's host. The partner token is the session.
+ * embedMode=standalone tells Flipy this is not an iframe inside CODTracked.
+ */
+export function prepareFlipyWalletTopLevelUrl(input: {
+  embedUrl: string;
+  returnUrl: string;
+}): string {
+  const url = new URL(input.embedUrl);
+  if (!url.pathname.includes("/partner/recarga")) {
+    throw new Error("URL de recarga Flipy inválida.");
+  }
+  url.searchParams.set("embedMode", "standalone");
+  url.searchParams.set("returnUrl", input.returnUrl);
+  return url.toString();
+}
+
+export function isFlipyWalletReturnPending(search: string): boolean {
+  const raw = search.startsWith("?") ? search.slice(1) : search;
+  return new URLSearchParams(raw).get(FLIPY_WALLET_RETURN_PARAM) === "return";
+}
+
+export function stripFlipyWalletReturnParam(href: string): string {
+  const url = new URL(href);
+  url.searchParams.delete(FLIPY_WALLET_RETURN_PARAM);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** Leave the embedded app and open Flipy's recarga page in the top window. */
+export function navigateFlipyWalletTopLevel(url: string): void {
+  window.open(url, "_top");
+}
+
+export type FlipyWalletTopLevelDecision =
+  | { open: true; url: string }
+  | { open: false; reason: "missing_return" | "unsafe_return" | "not_recarga" };
+
+/**
+ * Product rule for the logistics top-up: open Flipy's recarga page at the top
+ * window, or refuse. The card form never stays on the CODTracked origin.
+ */
+export function decideFlipyWalletTopLevelOpen(input: {
+  embedUrl: string;
+  returnUrl: string | null | undefined;
+  appOrigin: string;
+}): FlipyWalletTopLevelDecision {
+  const returnUrl = input.returnUrl?.trim();
+  if (!returnUrl) return { open: false, reason: "missing_return" };
+  if (!isSafeFlipyWalletReturnUrl(returnUrl, input.appOrigin)) {
+    return { open: false, reason: "unsafe_return" };
+  }
+  try {
+    return {
+      open: true,
+      url: prepareFlipyWalletTopLevelUrl({
+        embedUrl: input.embedUrl,
+        returnUrl: markFlipyWalletReturnUrl(returnUrl),
+      }),
+    };
+  } catch {
+    return { open: false, reason: "not_recarga" };
+  }
+}
+
 /** Prefer light theme on any wallet embed URL (API or fallback). */
 export function withFlipyWalletLightTheme(embedUrl: string): string {
   try {

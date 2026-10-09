@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { actionFail, actionOk, type ActionResult } from "@/lib/actions/action-result";
 import { IntegrationError, ValidationError } from "@/lib/errors";
 import { createFlipyPartnerClient } from "@/lib/integrations/flipy/client";
@@ -7,7 +8,7 @@ import {
   readFlipyTiendaId,
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
-import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl, withFlipyBidsLightTheme, withFlipyWalletLightTheme } from "@/lib/integrations/flipy/embed-urls";
+import { buildFlipyLocationEmbedUrl, buildFlipyWalletEmbedUrl, buildFlipyBidsEmbedUrl, decideFlipyWalletTopLevelOpen, ensureFlipyMapWheelZoomParams, resolveFlipyScopedEmbedUrl, withFlipyBidsLightTheme, withFlipyWalletLightTheme } from "@/lib/integrations/flipy/embed-urls";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
 import { resolveFlipyIntegrationForStore } from "@/lib/integrations/flipy/webhook-ingress";
 import { getIntegrationRuntimeMode } from "@/lib/integrations/registry";
@@ -33,6 +34,8 @@ export async function issueFlipyWidgetTokenAction(input: {
   prefillLat?: number | null;
   prefillLng?: number | null;
   scope?: "location_picker" | "wallet_topup" | "bids_panel";
+  /** Current CODTracked page. Wallet top-up requires it so Flipy can send the merchant back. */
+  returnUrl?: string | null;
 }): Promise<ActionResult<FlipyWidgetTokenResult>> {
   try {
     if (getIntegrationRuntimeMode() !== "live") {
@@ -48,7 +51,7 @@ export async function issueFlipyWidgetTokenAction(input: {
       }
       if (isFlipyWalletTopupDisabledForStore(membership.storeId)) {
         throw new ValidationError(
-          "La recarga con tarjeta de Flipy está deshabilitada en esta tienda (App Store review / cuenta demo). El saldo de logística no es la suscripción de COD-tracked.",
+          "La recarga de logística Flipy está deshabilitada en esta tienda demo. El saldo de logística no es la suscripción de COD-tracked.",
         );
       }
     } else if (scope === "bids_panel") {
@@ -194,6 +197,20 @@ export async function issueFlipyWidgetTokenAction(input: {
       // keep env default
     }
 
+    if (scope === "wallet_topup") {
+      const decision = decideFlipyWalletTopLevelOpen({
+        embedUrl,
+        returnUrl: input.returnUrl,
+        appOrigin: await requestOrigin(),
+      });
+      if (!decision.open) {
+        throw new ValidationError(
+          "No se pudo abrir la recarga Flipy desde esta pantalla.",
+        );
+      }
+      embedUrl = decision.url;
+    }
+
     // Ensure bids iframe always carries envioId (API URL may omit it).
     if (scope === "bids_panel" && flipyEnvioId) {
       try {
@@ -215,6 +232,16 @@ export async function issueFlipyWidgetTokenAction(input: {
   } catch (error) {
     return actionFail(error);
   }
+}
+
+async function requestOrigin(): Promise<string> {
+  const h = await headers();
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0]?.trim();
+  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0]?.trim() || "https";
+  if (!host) {
+    throw new ValidationError("No se pudo validar el retorno de la recarga.");
+  }
+  return `${proto}://${host}`;
 }
 
 export async function reverseGeocodeFlipyLocationAction(input: {

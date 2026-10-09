@@ -98,10 +98,10 @@ export function FlipyWizardStepper({
 }
 
 export function mapFlipyWizardStep(
-  step: "payment" | "ruta" | "confirm" | "recarga" | "success",
+  step: "payment" | "ruta" | "confirm" | "success",
 ): FlipyWizardStepId | null {
   if (step === "payment") return "modalidad";
   if (step === "ruta") return "ruta";
-  if (step === "confirm" || step === "recarga") return "confirmacion";
+  if (step === "confirm") return "confirmacion";
   return null;
 }

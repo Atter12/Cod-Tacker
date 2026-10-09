@@ -92,7 +92,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 
 | # | Criterio | Código CT | Código Flipy | E2E |
 | --- | --- | --- | --- | --- |
-| 1 | Embed recarga `/partner/recarga` + `flipy-wallet-topped-up` | ✅ `FlipyWalletEmbed` + widget `wallet_topup` | ✅ `/partner/recarga` + embed API | ⏳ |
+| 1 | Recarga `/partner/recarga` a pantalla completa (`embedMode=standalone`, `returnUrl`) | ✅ token `wallet_topup` + `window.open(_, "_top")` | Página de recarga acepta token fuera del iframe y redirige a `returnUrl` | ⏳ |
 | 2 | Error `SALDO_INSUFICIENTE_HOLD` → CTA recarga | ✅ modal + wallet embed en saldos | ✅ Partner API 400 + code | ⏳ |
 | 3 | Deep link operación post-create (pujas / envío) | ✅ `FLIPY_APP_ORIGIN` + `appWebUrl` API | ✅ `appDeepLink` / `appWebUrl` en create | ⏳ |
 | 4 | Settings reglas recojo por tienda | ✅ `FlipyPickupSettings` | — | ⏳ |
@@ -114,7 +114,7 @@ Criterios de salida por fase. No avanzar a Fase 2 UI hasta **F1 gate ✅** en am
 
 **Probar E2E F3** (tienda `holistic-ecommerce/flipy`):
 
-1. Saldo bajo → crear envío → CTA recarga → iframe Stripe test → postMessage saldo → reintentar create **200**.
+1. Saldo bajo → crear envío → Recargar en Flipy abre `/partner/recarga` en el dominio de Flipy → al volver, el saldo se refresca → reintentar create **200**.
 2. Post-create → “Abrir en Flipy (pujas)” abre `{FLIPY_APP_ORIGIN}/envios/{envioId}` (no link rastreo cliente).
 3. Pedido con `note_attributes` `flipy_escenario=1A` → escenario 1A en modal y en Partner API.
 
