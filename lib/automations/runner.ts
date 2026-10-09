@@ -103,10 +103,11 @@ export async function runAutomationsForTrigger(input: RunAutomationInput): Promi
         .eq("rule_id", rule.id)
         .eq("idempotency_key", key)
         .maybeSingle();
-      if (shouldSkipAutomationRun(existing.data?.id)) {
+      const existingRunId = existing.data?.id;
+      if (existingRunId && shouldSkipAutomationRun(existingRunId)) {
         out.push({
           ruleId: rule.id,
-          runId: existing.data.id,
+          runId: existingRunId,
           status: "idempotent_skip",
           results: [],
         });

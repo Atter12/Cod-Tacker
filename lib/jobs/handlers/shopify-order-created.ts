@@ -4,6 +4,7 @@ import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-or
 import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
+import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
 import { buildShopifyCreatedOrderInsert } from "@/lib/integrations/shopify/created-order-row";
 import { decideWhatsappCodConfirmationEnqueue } from "@/lib/integrations/whatsapp/confirmation-gate";
 import { runAutomationsForTrigger } from "@/lib/automations/runner";
@@ -274,7 +275,7 @@ export const handleShopifyOrderCreated: JobHandler = async ({
       storeId: job.store_id,
       orderId: insert.data.id,
       customerId,
-      attributedValue: total,
+      attributedValue: data.total_amount,
       attribution: data.attribution,
     });
   }

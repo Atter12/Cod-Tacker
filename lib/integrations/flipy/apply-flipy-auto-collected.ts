@@ -56,7 +56,7 @@ export async function applyFlipyAutoCollectedForBatch(input: {
       orderId: item.order_id,
       paymentStatus: null,
     });
-    if (beforeOrder !== "apply") {
+    if (beforeOrder !== "apply" || !item.order_id) {
       skipped += 1;
       continue;
     }
