@@ -1,10 +1,12 @@
 import "server-only";
 
+import { shouldRecordPurchaseAfterSettlement } from "@/lib/conversions/delivered-purchase-policy";
 import { recordPurchaseConversionEvent } from "@/lib/conversions/record-purchase-conversion";
 import { mergeFlipyFletePaymentIntoMetadata } from "@/lib/integrations/flipy/flete-payment-status";
 import { logger } from "@/lib/observability/logger";
 import { applyCollectedPatch } from "@/lib/reconciliation/effects";
 import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
+import { decideSettlementCollectedAction } from "@/lib/reconciliation/settlement-apply-gate";
 import type { JobsAdminClient } from "@/lib/jobs/types";
 import type { Enums, Json } from "@/types/database.generated";
 
@@ -48,11 +50,13 @@ export async function applyFlipyAutoCollectedForBatch(input: {
   let skipped = 0;
 
   for (const item of (itemsRes.data ?? []) as MatchedItemRef[]) {
-    if (item.collected_applied_at) {
-      skipped += 1;
-      continue;
-    }
-    if (item.match_status !== "matched" || !item.order_id) {
+    const beforeOrder = decideSettlementCollectedAction({
+      collectedAppliedAt: item.collected_applied_at,
+      matchStatus: item.match_status,
+      orderId: item.order_id,
+      paymentStatus: null,
+    });
+    if (beforeOrder !== "apply") {
       skipped += 1;
       continue;
     }
@@ -73,9 +77,12 @@ export async function applyFlipyAutoCollectedForBatch(input: {
 
     const order = orderRes.data;
     if (
-      order.payment_status === "cash_collected" ||
-      order.payment_status === "settlement_pending" ||
-      order.payment_status === "settled"
+      decideSettlementCollectedAction({
+        collectedAppliedAt: null,
+        matchStatus: "matched",
+        orderId: order.id,
+        paymentStatus: order.payment_status,
+      }) === "skip_already_collected"
     ) {
       const fleteMeta = mergeFlipyFletePaymentIntoMetadata(order.metadata as Json, {
         status: "collected",
@@ -147,7 +154,7 @@ export async function applyFlipyAutoCollectedForBatch(input: {
       .eq("id", item.id)
       .eq("store_id", input.storeId);
 
-    if (gate.mode === "full") {
+    if (shouldRecordPurchaseAfterSettlement(gate.mode)) {
       try {
         await recordPurchaseConversionEvent({
           admin: input.admin,

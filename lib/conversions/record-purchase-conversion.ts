@@ -1,6 +1,7 @@
 import "server-only";
 
 import { purchaseConversionEventId } from "@/lib/conversions/purchase-event-id";
+import { decidePurchaseResend } from "@/lib/conversions/purchase-send-gate";
 import {
   resolveMetaCapiCredentials,
   sendMetaCapiPurchase,
@@ -399,7 +400,16 @@ export async function recordPurchaseConversionEvent(
     .eq("event_id", eventId)
     .maybeSingle();
 
-  if (existing.data?.id && existing.data.sent_at) {
+  const resend = decidePurchaseResend(
+    existing.data
+      ? {
+          id: existing.data.id,
+          sentAt: existing.data.sent_at,
+          releaseStatus: existing.data.release_status,
+        }
+      : null,
+  );
+  if (resend.send === false && resend.reason === "already_sent" && existing.data) {
     return {
       created: false,
       eventId,
@@ -411,7 +421,7 @@ export async function recordPurchaseConversionEvent(
     };
   }
 
-  if (existing.data?.release_status === "rejected") {
+  if (resend.send === false && resend.reason === "rejected" && existing.data) {
     logger.info("conversion.purchase.skip_rejected", {
       event_id: eventId,
       order_id: input.orderId,

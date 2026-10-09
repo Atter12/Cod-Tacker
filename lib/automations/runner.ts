@@ -2,7 +2,10 @@
  * Automation run orchestrator: match rules, cooldown, idempotency, execute.
  */
 
-import { createHash } from "node:crypto";
+import {
+  automationIdempotencyKey,
+  shouldSkipAutomationRun,
+} from "@/lib/automations/idempotency";
 import {
   evaluateConditions,
   isLoopTrigger,
@@ -48,10 +51,6 @@ export type RunAutomationInput = {
   actorId?: string | null;
 };
 
-function idempotencyKey(ruleId: string, trigger: string, entityId: string): string {
-  return createHash("sha256").update(`${ruleId}:${trigger}:${entityId}`).digest("hex").slice(0, 40);
-}
-
 export async function runAutomationsForTrigger(input: RunAutomationInput): Promise<{
   runs: Array<{ ruleId: string; runId?: string; status: string; results: ActionResultEntry[] }>;
 }> {
@@ -95,7 +94,7 @@ export async function runAutomationsForTrigger(input: RunAutomationInput): Promi
       }
     }
 
-    const key = idempotencyKey(rule.id, input.trigger, input.entityId);
+    const key = automationIdempotencyKey(rule.id, input.trigger, input.entityId);
     if (!input.dryRun) {
       const existing = await input.admin
         .from("automation_runs")
@@ -104,7 +103,7 @@ export async function runAutomationsForTrigger(input: RunAutomationInput): Promi
         .eq("rule_id", rule.id)
         .eq("idempotency_key", key)
         .maybeSingle();
-      if (existing.data) {
+      if (shouldSkipAutomationRun(existing.data?.id)) {
         out.push({
           ruleId: rule.id,
           runId: existing.data.id,

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:unit": "tsx --test \"lib/**/*.test.ts\"",
+    "test:unit": "node ./scripts/run-unit-tests.mjs",
     "test:rls": "node scripts/test-rls.mjs",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "clear:demo": "tsx scripts/clear-demo.ts",

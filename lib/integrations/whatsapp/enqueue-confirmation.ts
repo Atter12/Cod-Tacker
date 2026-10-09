@@ -1,5 +1,6 @@
 import "server-only";
 
+import { decideWhatsappCodConfirmationEnqueue } from "@/lib/integrations/whatsapp/confirmation-gate";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { kickJobProcessing } from "@/lib/jobs/kick";
 import type { JobsAdminClient } from "@/lib/jobs/types";
@@ -39,20 +40,13 @@ export async function enqueueWhatsappCodConfirmationRequest(input: {
     .maybeSingle();
 
   if (!order.data) return null;
-  if (order.data.payment_status !== "cash_expected") {
-    return { jobId: "", created: false, skipped: "not_cash_expected" };
-  }
-  if (
-    order.data.confirmation_status === "confirmed" ||
-    order.data.confirmation_status === "rejected"
-  ) {
-    return { jobId: "", created: false, skipped: "confirmation_terminal" };
-  }
-  if (
-    order.data.confirmation_status === "pending" &&
-    !input.allowPendingResend
-  ) {
-    return { jobId: "", created: false, skipped: "already_pending" };
+  const decision = decideWhatsappCodConfirmationEnqueue({
+    paymentStatus: order.data.payment_status,
+    confirmationStatus: order.data.confirmation_status,
+    allowPendingResend: input.allowPendingResend,
+  });
+  if (!decision.enqueue) {
+    return { jobId: "", created: false, skipped: decision.skipped };
   }
 
   let integrationId = input.integrationId ?? null;

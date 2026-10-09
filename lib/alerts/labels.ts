@@ -22,6 +22,19 @@ export function labelAlertStatus(s: string) {
   return ALERT_STATUS_LABELS[s] ?? s;
 }
 
+/** Ack, silence, and resolve stop a new notification for the same alert. */
+export function shouldNotifyAlert(row: {
+  status?: string | null;
+  resolved_at?: string | null;
+  acknowledged_at?: string | null;
+  silenced_until?: string | null;
+}, now = Date.now()): boolean {
+  if (row.resolved_at || row.acknowledged_at) return false;
+  if (row.silenced_until && Date.parse(row.silenced_until) > now) return false;
+  const status = row.status ?? "open";
+  return status === "open" || status === "reopened";
+}
+
 export function deriveAlertStatus(row: {
   status?: string | null;
   resolved_at?: string | null;

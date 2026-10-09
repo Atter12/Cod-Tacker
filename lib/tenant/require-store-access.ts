@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { getAccessibleStores, accessibleStoreToMembership } from "@/lib/tenant/get-accessible-stores";
+import { matchAccessibleStore } from "@/lib/tenant/match-accessible-store";
 import type { TenantMembership } from "@/lib/tenant/tenant-context";
 
 /**
@@ -9,7 +10,7 @@ import type { TenantMembership } from "@/lib/tenant/tenant-context";
  */
 export async function requireStoreAccess(agencySlug: string, storeSlug: string): Promise<TenantMembership> {
   const stores = await getAccessibleStores();
-  const match = stores.find((store) => store.agencySlug === agencySlug && store.storeSlug === storeSlug);
+  const match = matchAccessibleStore(stores, agencySlug, storeSlug);
   if (!match) redirect("/unauthorized");
   return accessibleStoreToMembership(match);
 }

@@ -113,7 +113,7 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
   const orderRes = await admin
     .from("orders")
     .select(
-      "id, store_id, payment_status, subtotal_amount, shipping_amount, total_amount, expected_cod_amount, metadata, tags, shipping_district, shipping_city, shipping_region, shipping_country_code, shipping_postal_code, shipping_latitude, shipping_longitude, currency_code",
+      "id, store_id, payment_status, confirmation_status, subtotal_amount, shipping_amount, total_amount, expected_cod_amount, metadata, tags, shipping_district, shipping_city, shipping_region, shipping_country_code, shipping_postal_code, shipping_latitude, shipping_longitude, currency_code",
     )
     .eq("id", parsed.data.order_id)
     .eq("store_id", job.store_id)
@@ -163,6 +163,7 @@ export const handleFlipyAutoCreateShipment: JobHandler = async ({ admin, job, pa
     payment: ctx.payment,
     destinationCoords,
     destinationAddress,
+    confirmationStatus: order.confirmation_status,
   });
 
   if (!evaluation.eligible || !evaluation.escenarioPago) {

@@ -1,3 +1,4 @@
+import { decideShopifyInstallEntry } from "@/lib/integrations/shopify/install-entry";
 import { startShopifyOAuth } from "@/lib/integrations/shopify/start-oauth";
 import { getUser } from "@/lib/auth/get-session";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
   }
 
   const user = await getUser();
-  if (user && agencySlug && storeSlug) {
+  if (decideShopifyInstallEntry({ hasSession: Boolean(user), agencySlug, storeSlug }) === "oauth") {
     return startShopifyOAuth({
       agencySlug,
       storeSlug,

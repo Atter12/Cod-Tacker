@@ -15,6 +15,11 @@ export function shouldMarkCashCollectedOnDelivered(_paymentStatus: PaymentStatus
   return false;
 }
 
+/** A partial remesa waits. Only a full collection releases one Purchase. */
+export function shouldRecordPurchaseAfterSettlement(mode: "full" | "partial"): boolean {
+  return mode === "full";
+}
+
 /** True when this apply result newly reached delivered (not RTO, not skipped). */
 export function isNewlyDeliveredTerminal(input: {
   skippedDuplicate: boolean;

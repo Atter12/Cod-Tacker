@@ -7,6 +7,7 @@ import {
   isShopifyPartnerApiConfigured,
 } from "@/lib/billing/shopify-partner-env";
 import { mapShopifyActiveSubscription } from "@/lib/billing/shopify-subscription-map";
+import { decideShopifySubscriptionSync } from "@/lib/billing/shopify-subscription-guard";
 import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
 import { ensureShopifyAccessToken } from "@/lib/integrations/shopify/credentials";
 import { fetchShopifyActiveSubscription } from "@/lib/integrations/shopify/partner-api";
@@ -119,15 +120,9 @@ export async function syncShopifyAppPricingForAgency(input: {
 
   const admin = input.admin ?? createAdminClient();
   const existing = await loadAgencySubscription(admin, input.agencyId);
-  if (
-    existing?.billing_provider &&
-    existing.billing_provider !== "shopify" &&
-    existing.billing_provider !== "demo"
-  ) {
-    return {
-      kind: "skipped",
-      reason: `agency_uses_${existing.billing_provider}`,
-    };
+  const syncDecision = decideShopifySubscriptionSync(existing?.billing_provider);
+  if (!syncDecision.sync) {
+    return { kind: "skipped", reason: syncDecision.reason };
   }
 
   const shopGid = await resolveShopGid(admin, input);

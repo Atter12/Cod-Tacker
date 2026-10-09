@@ -16,6 +16,10 @@ import {
   acknowledgeShopifyPrivacyWebhook,
   isShopifyPrivacyTopic,
 } from "@/lib/integrations/shopify/privacy-webhooks";
+import {
+  shopifyOrderWebhookIdempotencyKey,
+  shopifyOrderWebhookJobType,
+} from "@/lib/integrations/shopify/webhook-job";
 import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
@@ -69,7 +73,8 @@ export async function handleShopifyWebhookIngress(input: {
     return { status: 400, body: { error: "Shop inválido" } };
   }
 
-  if (topic !== "orders/create" && topic !== "orders/updated") {
+  const orderJobType = shopifyOrderWebhookJobType(topic);
+  if (!orderJobType) {
     return { status: 200, body: { ok: true, skipped: true, reason: "topic_ignored" } };
   }
 
@@ -118,7 +123,7 @@ export async function handleShopifyWebhookIngress(input: {
 
   const integration = integrationLookup.data;
 
-  const isCreate = topic === "orders/create";
+  const isCreate = orderJobType === "shopify.order.created";
   let payload = isCreate ? mapRestOrderToCreatedPayload(order) : mapRestOrderToUpdatedPayload(order);
   if (!payload.external_order_id) {
     return { status: 400, body: { error: "Pedido sin id" } };
@@ -171,12 +176,15 @@ export async function handleShopifyWebhookIngress(input: {
     ...attributionDebug,
   });
 
-  const jobType = isCreate ? "shopify.order.created" : "shopify.order.updated";
+  const jobType = orderJobType;
   const webhookId = input.webhookIdHeader?.trim() || "";
-  const idempotencyKey =
-    webhookId.length > 0
-      ? `shopify:wh:${shop}:${webhookId}`
-      : `shopify:wh:${shop}:${topic}:${payload.external_order_id}:${order.updated_at ?? order.created_at ?? "na"}`;
+  const idempotencyKey = shopifyOrderWebhookIdempotencyKey({
+    shop,
+    topic,
+    webhookId: input.webhookIdHeader,
+    externalOrderId: payload.external_order_id,
+    occurredAt: order.updated_at ?? order.created_at ?? null,
+  });
 
   const enqueued = await enqueueRawEventAndJob(admin, {
     agencyId: store.agency_id,

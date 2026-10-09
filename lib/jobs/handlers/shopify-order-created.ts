@@ -4,7 +4,8 @@ import { shopifyOrderCreatedPayloadSchema } from "@/lib/jobs/handlers/shopify-or
 import { syncShopifyOrderItems } from "@/lib/jobs/handlers/shopify-sync-order-items";
 import { upsertShopifyCustomer } from "@/lib/jobs/handlers/shopify-upsert-customer";
 import { upsertShopifyOrderAttribution } from "@/lib/jobs/handlers/shopify-upsert-attribution";
-import { orderContactMetadataPatch } from "@/lib/conversions/resolve-order-contact";
+import { buildShopifyCreatedOrderInsert } from "@/lib/integrations/shopify/created-order-row";
+import { decideWhatsappCodConfirmationEnqueue } from "@/lib/integrations/whatsapp/confirmation-gate";
 import { runAutomationsForTrigger } from "@/lib/automations/runner";
 import type { Json } from "@/types/database.generated";
 
@@ -121,7 +122,12 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     // Same proven path as the order-detail "Solicitar confirmación WhatsApp" button.
     const paymentForWa =
       data.payment_status ?? existing.data.payment_status ?? "cash_expected";
-    if (paymentForWa === "cash_expected") {
+    if (
+      decideWhatsappCodConfirmationEnqueue({
+        paymentStatus: paymentForWa,
+        confirmationStatus: existing.data.confirmation_status,
+      }).enqueue
+    ) {
       await enqueueWhatsappCodConfirmationRequest({
         admin,
         agencyId: job.agency_id,
@@ -171,55 +177,21 @@ export const handleShopifyOrderCreated: JobHandler = async ({
     : null;
 
   const now = new Date().toISOString();
-  const total = data.total_amount;
   const live = data.mode === "live" || job.job_type === "shopify.order.created";
-  const shipping = data.shipping;
   const paymentStatus = data.payment_status ?? "cash_expected";
-  const expectedCodAmount =
-    data.expected_cod_amount !== undefined
-      ? data.expected_cod_amount
-      : paymentStatus === "cash_expected"
-        ? total
-        : null;
   const insert = await admin
     .from("orders")
-    .insert({
-      agency_id: job.agency_id,
-      store_id: job.store_id,
-      customer_id: customerId,
-      external_order_id: data.external_order_id,
-      order_number: data.order_number ?? data.external_order_id,
-      created_at_source: now,
-      currency_code: data.currency_code,
-      subtotal_amount: data.subtotal_amount ?? Math.max(0, total - (data.shipping_amount ?? 0)),
-      total_amount: total,
-      shipping_amount: data.shipping_amount ?? 0,
-      tax_amount: 0,
-      discount_amount: 0,
-      order_status: data.order_status ?? "created",
-      confirmation_status: "not_requested",
-      payment_status: paymentStatus,
-      expected_cod_amount: expectedCodAmount,
-      source_name: live ? "shopify" : "shopify.mock",
-      ...(shipping?.country_code ? { shipping_country_code: shipping.country_code } : {}),
-      ...(shipping?.region ? { shipping_region: shipping.region } : {}),
-      ...(shipping?.city ? { shipping_city: shipping.city } : {}),
-      ...(shipping?.district ? { shipping_district: shipping.district } : {}),
-      ...(shipping?.postal_code ? { shipping_postal_code: shipping.postal_code } : {}),
-      metadata: {
-        demo: !live,
-        demo_seed: data.demo_seed ?? null,
-        job_id: job.id,
-        event: live ? "shopify.order.created" : "shopify.order.created.mock",
-        mode: live ? "live" : "mock",
-        ...(data.payment_kind ? { shopify_payment_kind: data.payment_kind } : {}),
-        ...(data.shipping_lines?.length ? { shopify_shipping_lines: data.shipping_lines } : {}),
-        ...(data.note_attributes?.length ? { shopify_note_attributes: data.note_attributes } : {}),
-        ...(shipping?.address1 ? { shopify_shipping_address1: shipping.address1 } : {}),
-        ...orderContactMetadataPatch(data.customer),
-      } as Json,
-      tags: live ? ["jobs", "shopify", "live"] : ["jobs", "shopify", "mock"],
-    })
+    .insert(
+      buildShopifyCreatedOrderInsert({
+        agencyId: job.agency_id,
+        storeId: job.store_id,
+        jobId: job.id,
+        customerId,
+        now,
+        live,
+        data,
+      }),
+    )
     .select("id")
     .single();
 
@@ -236,7 +208,12 @@ export const handleShopifyOrderCreated: JobHandler = async ({
         // duplicate_external_order_id path (previously skipped send entirely).
         const paymentForWa =
           data.payment_status ?? again.data.payment_status ?? "cash_expected";
-        if (paymentForWa === "cash_expected") {
+        if (
+          decideWhatsappCodConfirmationEnqueue({
+            paymentStatus: paymentForWa,
+            confirmationStatus: again.data.confirmation_status,
+          }).enqueue
+        ) {
           await enqueueWhatsappCodConfirmationRequest({
             admin,
             agencyId: job.agency_id,
@@ -262,7 +239,12 @@ export const handleShopifyOrderCreated: JobHandler = async ({
   }
 
   // Same proven path as the order-detail retry button (fresh key + kick).
-  if (paymentStatus === "cash_expected") {
+  if (
+    decideWhatsappCodConfirmationEnqueue({
+      paymentStatus,
+      confirmationStatus: "not_requested",
+    }).enqueue
+  ) {
     await enqueueWhatsappCodConfirmationRequest({
       admin,
       agencyId: job.agency_id,

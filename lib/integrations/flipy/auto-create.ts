@@ -7,6 +7,7 @@ import type {
 
 export type FlipyAutoCreateSkipReason =
   | "disabled"
+  | "confirmation_rejected"
   | "pickup"
   | "existing_envio"
   | "low_confidence"
@@ -65,8 +66,19 @@ export function evaluateFlipyAutoCreate(input: {
   payment: FlipyPaymentResolution;
   destinationCoords: { lat: number; lng: number } | null;
   destinationAddress: string;
+  /** WhatsApp / ops confirmation. Rejected orders never become a shipment. */
+  confirmationStatus?: string | null;
 }): FlipyAutoCreateEvaluation {
   const reasons: string[] = [];
+
+  if (input.confirmationStatus === "rejected") {
+    return {
+      eligible: false,
+      escenarioPago: null,
+      skipReason: "confirmation_rejected",
+      reasons: ["Confirmación rechazada"],
+    };
+  }
 
   if (!input.enabled) {
     return { eligible: false, escenarioPago: null, skipReason: "disabled", reasons: ["Auto-create desactivado"] };
@@ -140,4 +152,4 @@ export function evaluateFlipyAutoCreate(input: {
     reasons,
   };
 }
-
+

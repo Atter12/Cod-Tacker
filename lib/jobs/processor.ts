@@ -1,4 +1,5 @@
 import { computeRetryAt } from "@/lib/jobs/backoff";
+import { decideJobFailureOutcome } from "@/lib/jobs/failure-outcome";
 import {
   isPermanentJobError,
   PermanentJobError,
@@ -112,8 +113,12 @@ async function failJob(
   const finishedAt = new Date().toISOString();
   const { code, message } = errorMeta(error);
   const permanent = isPermanentJobError(error);
-  const exhausted = job.attempts >= job.max_attempts;
-  const shouldDeadLetter = permanent || exhausted;
+  const shouldDeadLetter =
+    decideJobFailureOutcome({
+      permanent,
+      attempts: job.attempts,
+      maxAttempts: job.max_attempts,
+    }) === "dead_letter";
 
   logger.error("jobs.handler.failed", {
     jobId: job.id,

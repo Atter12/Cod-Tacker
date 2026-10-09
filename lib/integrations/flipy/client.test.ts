@@ -35,8 +35,8 @@ import {
 } from "@/lib/integrations/flipy/errors";
 
 describe("flipy partner contract", () => {
-  it("uses Partner API contract version 0.2.1", () => {
-    assert.equal(FLIPY_PARTNER_CONTRACT_VERSION, "0.2.1");
+  it("uses Partner API contract version 0.2.3", () => {
+    assert.equal(FLIPY_PARTNER_CONTRACT_VERSION, "0.2.3");
   });
 
   it("builds provision body for Flipy Partner API", () => {
