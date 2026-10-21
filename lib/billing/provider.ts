@@ -5,7 +5,8 @@ import {
   type BillingProviderMode,
   type StripeKeyMode,
 } from "@/lib/billing/env";
-import { parseBillingProviderId } from "@/lib/billing/provider-id";
+import { isFreeShopifyConnectorSettings } from "@/lib/billing/connector-access";
+import { decideAgencyBillingProvider } from "@/lib/billing/provider-id";
 import { isShopifyAppPricingConfigured } from "@/lib/billing/shopify-billing-env";
 import type { BillingProvider, BillingProviderId } from "@/lib/integrations/contracts/billing";
 import { createDemoBillingProvider } from "@/lib/integrations/mock/billing.mock";
@@ -41,29 +42,39 @@ export function isShopifyBillingMode(mode: BillingProviderMode = resolveBillingP
 }
 
 /**
- * Agency-aware provider: latest subscription.billing_provider wins;
- * otherwise falls back to BILLING_PROVIDER. Shopify only when configured.
+ * Agency-aware provider: a stored Stripe subscription wins; agencies that came
+ * from Shopify always use App Pricing; otherwise BILLING_PROVIDER.
+ * See `decideAgencyBillingProvider`.
  */
 export async function resolveAgencyBillingProviderId(
   agencyId: string,
 ): Promise<BillingProviderMode> {
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("subscriptions")
-    .select("billing_provider")
-    .eq("agency_id", agencyId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [subscription, agency, shopifyStore] = await Promise.all([
+    admin
+      .from("subscriptions")
+      .select("billing_provider")
+      .eq("agency_id", agencyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin.from("agencies").select("settings").eq("id", agencyId).maybeSingle(),
+    admin
+      .from("stores")
+      .select("id")
+      .eq("agency_id", agencyId)
+      .not("shopify_shop_domain", "is", null)
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  const fromRow = parseBillingProviderId(data?.billing_provider);
-  if (fromRow === "shopify" && !isShopifyAppPricingConfigured()) {
-    return resolveBillingProviderMode();
-  }
-  if (fromRow === "demo" || fromRow === "stripe" || fromRow === "shopify") {
-    return fromRow;
-  }
-  return resolveBillingProviderMode();
+  return decideAgencyBillingProvider({
+    storedProvider: subscription.data?.billing_provider,
+    envProvider: resolveBillingProviderMode(),
+    shopifyAppPricingConfigured: isShopifyAppPricingConfigured(),
+    cameFromShopify:
+      isFreeShopifyConnectorSettings(agency.data?.settings) || Boolean(shopifyStore.data),
+  });
 }
 
 export async function getBillingProviderForAgency(

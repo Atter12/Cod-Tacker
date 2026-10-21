@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseBillingProviderId } from "@/lib/billing/provider-id";
+import { decideAgencyBillingProvider, parseBillingProviderId } from "@/lib/billing/provider-id";
 import {
   buildShopifyAppPricingPlansUrlFromShop,
   shopifyStoreHandleFromDomain,
@@ -13,6 +13,53 @@ describe("billing provider id parse", () => {
     assert.equal(parseBillingProviderId("SHOPIFY"), "shopify");
     assert.equal(parseBillingProviderId("paddle"), null);
     assert.equal(parseBillingProviderId(""), null);
+  });
+});
+
+describe("agency billing provider (App Store 1.2.1)", () => {
+  const base = {
+    storedProvider: null,
+    envProvider: "stripe" as const,
+    shopifyAppPricingConfigured: true,
+    cameFromShopify: false,
+  };
+
+  it("never sends a Shopify-origin agency without a subscription to Stripe", () => {
+    assert.equal(decideAgencyBillingProvider({ ...base, cameFromShopify: true }), "shopify");
+    assert.equal(
+      decideAgencyBillingProvider({ ...base, storedProvider: "demo", cameFromShopify: true }),
+      "shopify",
+    );
+  });
+
+  it("fails closed to Shopify when App Pricing is not configured", () => {
+    assert.equal(
+      decideAgencyBillingProvider({
+        ...base,
+        cameFromShopify: true,
+        shopifyAppPricingConfigured: false,
+      }),
+      "shopify",
+    );
+  });
+
+  it("keeps a stored Stripe subscription (legacy agency)", () => {
+    assert.equal(
+      decideAgencyBillingProvider({ ...base, storedProvider: "stripe", cameFromShopify: true }),
+      "stripe",
+    );
+  });
+
+  it("uses BILLING_PROVIDER for console-only agencies", () => {
+    assert.equal(decideAgencyBillingProvider(base), "stripe");
+    assert.equal(
+      decideAgencyBillingProvider({
+        ...base,
+        storedProvider: "shopify",
+        shopifyAppPricingConfigured: false,
+      }),
+      "stripe",
+    );
   });
 });
 
