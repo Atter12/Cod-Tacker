@@ -14,6 +14,7 @@ export function MobileNavigation({
   roles = [],
   returnToStore,
   activeAlertCount = 0,
+  lockedNavHrefs = [],
   brand,
 }: {
   agencySlug: string;
@@ -22,6 +23,7 @@ export function MobileNavigation({
   roles?: readonly Role[];
   returnToStore?: { href: string; storeName: string } | null;
   activeAlertCount?: number;
+  lockedNavHrefs?: readonly string[];
   brand?: AgencyBrandTheme | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -48,6 +50,7 @@ export function MobileNavigation({
             roles={roles}
             returnToStore={returnToStore}
             activeAlertCount={activeAlertCount}
+            lockedNavHrefs={lockedNavHrefs}
             brand={brand}
             mobile
             onNavigate={() => setOpen(false)}

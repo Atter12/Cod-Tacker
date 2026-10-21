@@ -74,6 +74,7 @@ describe("plan access policy", () => {
     currentPeriodEnd: null,
     gracePeriodEndsAt: null,
     pastDueSince: null,
+    billingProvider: null,
   };
 
   it("blocks cancelled without grace", () => {

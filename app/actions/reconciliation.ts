@@ -41,6 +41,7 @@ import { rollupBatchStatus } from "@/lib/reconciliation/matching";
 import { assertCanImportCsvRows } from "@/lib/billing/limits";
 import { ECART_GATEWAY } from "@/lib/integrations/ecart-pay/sync";
 import type { EcartSyncOutcome } from "@/lib/integrations/ecart-pay/sync-outcome";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type ReconciliationActionResult = ActionResult<{
   jobId?: string;
@@ -112,6 +113,7 @@ export async function previewSettlementCsv(
   try {
     await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
 
     const file = formData.get("file");
@@ -193,6 +195,7 @@ export async function confirmSettlementCsvImport(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -319,6 +322,7 @@ export async function connectEcartPay(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -428,6 +432,7 @@ export async function syncEcartPaySettlements(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -472,6 +477,7 @@ export async function confirmCollectedMatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -584,6 +590,7 @@ export async function approveSettlementBatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -766,6 +773,7 @@ export async function reopenSettlementBatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -841,6 +849,7 @@ export async function manualMatchSettlementItem(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -919,6 +928,7 @@ export async function resolveSettlementDiscrepancy(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -981,6 +991,7 @@ export async function exportBatchResultsCsv(
   try {
     await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertReconciliationView(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 

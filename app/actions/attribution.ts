@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import type { Json } from "@/types/database.generated";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type AttributionActionResult = ActionResult<{ jobId?: string; rawEventId?: string }>;
 
@@ -33,6 +34,7 @@ export async function seedMockAdsAttribution(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAttributionManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");

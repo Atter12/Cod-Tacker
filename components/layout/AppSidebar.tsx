@@ -14,6 +14,7 @@ import {
   FileText,
   KeyRound,
   LayoutDashboard,
+  Lock,
   MessageCircle,
   Palette,
   Route,
@@ -194,6 +195,7 @@ export function AppSidebar({
   activeAlertCount = 0,
   brand,
   onNavigate,
+  lockedNavHrefs = [],
 }: {
   agencySlug: string;
   storeSlug?: string;
@@ -204,6 +206,8 @@ export function AppSidebar({
   activeAlertCount?: number;
   brand?: AgencyBrandTheme | null;
   onNavigate?: () => void;
+  /** Store nav hrefs the agency plan does not unlock (still linkable, shows the upgrade notice). */
+  lockedNavHrefs?: readonly string[];
 }) {
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeSidebar, getSidebarCollapsed, () => false);
@@ -237,7 +241,8 @@ export function AppSidebar({
           ? agencyIcons[item.href] ?? Store
           : Store;
     const active = isActivePath(pathname, href);
-    const showAlertBadge = item.label === "Alertas" && activeAlertCount > 0;
+    const locked = scope === "store" && lockedNavHrefs.includes(item.href);
+    const showAlertBadge = !locked && item.label === "Alertas" && activeAlertCount > 0;
     const link = (
       <Link
         href={href}
@@ -258,6 +263,9 @@ export function AppSidebar({
         ) : null}
         <Icon className={cn("size-[16px] shrink-0", active && "text-brand-primary")} aria-hidden />
         {!compact ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
+        {!compact && locked ? (
+          <Lock className="size-3 shrink-0 text-text-secondary" aria-label="Plan de pago" />
+        ) : null}
         {!compact && showAlertBadge ? (
           <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">
             {activeAlertCount > 99 ? "99+" : activeAlertCount}

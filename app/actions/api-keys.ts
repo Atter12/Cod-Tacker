@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-keys/crypto";
 import { createClient } from "@/lib/supabase/server";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type ApiKeyActionResult = ActionResult<{
   plaintext?: string;
@@ -58,6 +59,7 @@ export async function createApiKey(
 
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
+    await assertPlanSection(membership.agencyId, "api");
     assertApiKeysManage(membership.roles);
 
     const generated = generateApiKey();
@@ -111,6 +113,7 @@ export async function rotateApiKey(
     if (!confirm) throw new ValidationError("Confirma la rotación de la clave.");
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
+    await assertPlanSection(membership.agencyId, "api");
     assertApiKeysManage(membership.roles);
 
     const client = await createClient();
@@ -165,6 +168,7 @@ export async function revokeApiKey(
     if (!confirm) throw new ValidationError("Confirma la revocación de la clave.");
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
+    await assertPlanSection(membership.agencyId, "api");
     assertApiKeysManage(membership.roles);
 
     const client = await createClient();

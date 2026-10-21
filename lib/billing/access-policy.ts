@@ -15,7 +15,32 @@ export type SubscriptionAccessInput = {
   gracePeriodEndsAt: string | null;
   currentPeriodEnd: string | null;
   pastDueSince: string | null;
+  /** `subscriptions.billing_provider`; Shopify plans are paid in the Shopify admin. */
+  billingProvider?: string | null;
 };
+
+const PAYMENT_MESSAGES = {
+  stripe: {
+    pastDueGrace:
+      "Hay un problema con el pago. Actualiza el método de pago para evitar la suspensión.",
+    pastDueBlocked:
+      "La suscripción está vencida por falta de pago. Actualiza el método de pago en Facturación o contacta a soporte.",
+    blocked:
+      "La suscripción de la agencia está suspendida o cancelada. Contacta a facturación o al administrador.",
+  },
+  shopify: {
+    pastDueGrace:
+      "Shopify no pudo cobrar el plan. Actualiza el pago en el Admin de Shopify (Configuración → Facturación) para evitar la suspensión.",
+    pastDueBlocked:
+      "El plan está vencido por falta de pago en Shopify. Actualiza el pago en el Admin de Shopify o elige un plan de nuevo.",
+    blocked:
+      "El plan de Shopify está cancelado o pausado. Elige un plan en Shopify para recuperar las funciones de pago.",
+  },
+};
+
+function paymentMessages(provider: string | null | undefined) {
+  return provider === "shopify" ? PAYMENT_MESSAGES.shopify : PAYMENT_MESSAGES.stripe;
+}
 
 export type SubscriptionAccessCode =
   | "ok"
@@ -56,6 +81,7 @@ export function evaluateSubscriptionAccess(
 
   const nowMs = now.getTime();
   const status = limits.subscriptionStatus;
+  const messages = paymentMessages(limits.billingProvider);
 
   if (status === "active" || status === "trialing") {
     return { allowed: true, code: "ok", message: null };
@@ -72,15 +98,13 @@ export function evaluateSubscriptionAccess(
       return {
         allowed: true,
         code: "past_due_grace",
-        message:
-          "Hay un problema con el pago. Actualiza el método de pago para evitar la suspensión.",
+        message: messages.pastDueGrace,
       };
     }
     return {
       allowed: false,
       code: "past_due_blocked",
-      message:
-        "La suscripción está vencida por falta de pago. Actualiza el método de pago en Facturación o contacta a soporte.",
+      message: messages.pastDueBlocked,
     };
   }
 
@@ -96,8 +120,7 @@ export function evaluateSubscriptionAccess(
     return {
       allowed: false,
       code: "subscription_blocked",
-      message:
-        "La suscripción de la agencia está suspendida o cancelada. Contacta a facturación o al administrador.",
+      message: messages.blocked,
     };
   }
 

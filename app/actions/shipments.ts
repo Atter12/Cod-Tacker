@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getShipmentById } from "@/services/shipments.service";
 import type { Json } from "@/types/database.generated";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type ShipmentActionResult = ActionResult<{
   jobId?: string;
@@ -49,6 +50,7 @@ export async function simulateShipmentMockEvent(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertShipmentsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -142,6 +144,7 @@ export async function createShipmentAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertShipmentsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -198,6 +201,7 @@ export async function markShipmentForReview(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertShipmentsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");

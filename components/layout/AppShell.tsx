@@ -24,6 +24,8 @@ export function AppShell({
   returnToStore,
   activeAlertCount = 0,
   brand,
+  lockedNavHrefs = [],
+  notice,
 }: {
   children: ReactNode;
   agencySlug: string;
@@ -38,6 +40,9 @@ export function AppShell({
   returnToStore?: { href: string; storeName: string } | null;
   activeAlertCount?: number;
   brand?: AgencyBrandTheme | null;
+  lockedNavHrefs?: readonly string[];
+  /** Shown above every page of this shell (plan usage warnings). */
+  notice?: ReactNode;
 }) {
   const scope = storeSlug ? "store" : "agency";
   const productName = brand?.productName?.trim() || "CODTracked";
@@ -56,6 +61,7 @@ export function AppShell({
           returnToStore={returnToStore}
           activeAlertCount={activeAlertCount}
           brand={brand}
+          lockedNavHrefs={lockedNavHrefs}
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 border-b border-border bg-surface-elevated">
@@ -80,12 +86,16 @@ export function AppShell({
                   returnToStore={returnToStore}
                   activeAlertCount={activeAlertCount}
                   brand={brand}
+                  lockedNavHrefs={lockedNavHrefs}
                 />
               }
             />
           </header>
           <main className="min-w-0 flex-1">
-            <PageContainer>{children}</PageContainer>
+            <PageContainer>
+              {notice}
+              {children}
+            </PageContainer>
           </main>
           {brand && !brand.hideCodtrackedBranding ? (
             <footer className="border-t border-border px-4 py-2 text-center text-[10.5px] text-text-secondary sm:px-6">

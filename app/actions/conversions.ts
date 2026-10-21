@@ -11,6 +11,7 @@ import { toUserMessage } from "@/lib/errors/to-user-message";
 import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type ConversionActionResult = ActionResult<{
   deliveryStatus?: string;
@@ -23,6 +24,7 @@ async function loadManagedConversion(
 ) {
   const user = await requireUser();
   const membership = await requireStoreAccess(agencySlug, storeSlug);
+  await assertPlanSection(membership.agencyId, "console");
   if (!can(membership.roles, "orders.manage")) {
     throw new ValidationError("No tienes permiso para gestionar conversiones.");
   }

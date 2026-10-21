@@ -1,6 +1,10 @@
 import type { DatabaseClient } from "@/services/_shared";
 import { ValidationError } from "@/lib/errors";
-import { assertSubscriptionAllowsAccess as assertAccessPolicy } from "@/lib/billing/access-policy";
+import {
+  assertSubscriptionAllowsAccess as assertAccessPolicy,
+  evaluateSubscriptionAccess,
+} from "@/lib/billing/access-policy";
+import { resolvePlanEntitlements, type PlanEntitlements } from "@/lib/billing/entitlements";
 import {
   additionalStoreLimitMessage,
   isFreeShopifyConnectorSettings,
@@ -27,6 +31,7 @@ export type PlanLimits = {
   gracePeriodEndsAt: string | null;
   /** ISO when Stripe first reported past_due (metadata.past_due_since). */
   pastDueSince: string | null;
+  billingProvider: string | null;
 };
 
 function asFeatures(raw: unknown): Record<string, unknown> {
@@ -47,7 +52,7 @@ export async function getAgencyPlanLimits(
   const { data: sub, error } = await client
     .from("subscriptions")
     .select(
-      "id, status, cancel_at_period_end, trial_ends_at, current_period_end, metadata, plan_id",
+      "id, status, cancel_at_period_end, trial_ends_at, current_period_end, metadata, plan_id, billing_provider",
     )
     .eq("agency_id", agencyId)
     .order("created_at", { ascending: false })
@@ -87,7 +92,27 @@ export async function getAgencyPlanLimits(
     currentPeriodEnd: sub.current_period_end,
     gracePeriodEndsAt: grace,
     pastDueSince,
+    billingProvider: sub.billing_provider ?? null,
   };
+}
+
+/** Plan entitlements for an agency (any client; jobs pass the admin client). */
+export async function loadAgencyEntitlements(
+  client: DatabaseClient,
+  agencyId: string,
+): Promise<{ entitlements: PlanEntitlements; limits: PlanLimits | null }> {
+  const limits = await getAgencyPlanLimits(client, agencyId);
+  const entitlements = resolvePlanEntitlements(
+    limits
+      ? {
+          planCode: limits.planCode,
+          planName: limits.planName,
+          features: limits.features,
+          accessAllowed: evaluateSubscriptionAccess(limits).allowed,
+        }
+      : null,
+  );
+  return { entitlements, limits };
 }
 
 /** @see evaluateSubscriptionAccess in access-policy.ts */

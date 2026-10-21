@@ -11,6 +11,7 @@ import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getAlertById } from "@/services/alerts.service";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type AlertActionResult = ActionResult<{ alertId?: string }>;
 
@@ -33,6 +34,7 @@ export async function acknowledgeAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -77,6 +79,7 @@ export async function assignAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -112,6 +115,7 @@ export async function resolveAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -152,6 +156,7 @@ export async function reopenAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -192,6 +197,7 @@ export async function silenceAlert(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -233,6 +239,7 @@ export async function addAlertNote(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
     const trimmed = body.trim();
@@ -274,6 +281,7 @@ export async function bulkResolveAlerts(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertAlertsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
     const ids = alertIds.filter(Boolean).slice(0, 50);

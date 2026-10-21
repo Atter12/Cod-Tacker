@@ -23,6 +23,11 @@ import {
 } from "@/lib/automations/schema";
 import type { Json } from "@/types/database.generated";
 import type { JobsAdminClient } from "@/lib/jobs/types";
+import { loadAgencyEntitlements } from "@/lib/billing/limits";
+import { FLIPY_STALE_BID_RULE_NAME } from "@/lib/integrations/flipy/automation-templates";
+
+/** Rules CODTracked creates for free integrations (Flipy); they run on every plan. */
+const SYSTEM_RULE_NAMES = new Set([FLIPY_STALE_BID_RULE_NAME]);
 
 export type RuleRow = {
   id: string;
@@ -67,7 +72,11 @@ export async function runAutomationsForTrigger(input: RunAutomationInput): Promi
     .eq("is_active", true)
     .order("priority", { ascending: true });
 
-  const rules = (rulesRes.data ?? []) as RuleRow[];
+  const activeRules = (rulesRes.data ?? []) as RuleRow[];
+  const { entitlements } = await loadAgencyEntitlements(input.admin, input.agencyId);
+  const rules = entitlements.sections.automations
+    ? activeRules
+    : activeRules.filter((rule) => SYSTEM_RULE_NAMES.has(rule.name));
   const out: Array<{ ruleId: string; runId?: string; status: string; results: ActionResultEntry[] }> =
     [];
 

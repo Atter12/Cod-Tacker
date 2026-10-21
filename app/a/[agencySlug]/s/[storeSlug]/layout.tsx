@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import { AgencyConsoleMenu } from "@/components/layout/AgencyConsoleMenu";
 import { AppShell } from "@/components/layout/AppShell";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
+import { Alert } from "@/components/ui";
+import { storeNavigation } from "@/config/navigation";
 import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
+import { lockedStoreNavHrefs } from "@/lib/billing/entitlements";
+import { getAgencyEntitlements, getMonthlyOrderUsage } from "@/lib/billing/plan-gate";
 import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessibleStores } from "@/lib/tenant/get-accessible-stores";
@@ -62,10 +66,14 @@ export default async function StoreLayout({
     storeSlug: store.storeSlug,
   }));
 
-  const activeAlertCount = await getStoreActiveAlertCount(
-    client,
-    membership.agencyId,
-    membership.storeId!,
+  const [activeAlertCount, { entitlements, limits }] = await Promise.all([
+    getStoreActiveAlertCount(client, membership.agencyId, membership.storeId!),
+    getAgencyEntitlements(membership.agencyId),
+  ]);
+  const orderUsage = await getMonthlyOrderUsage(membership.agencyId, entitlements, limits);
+  const lockedNavHrefs = lockedStoreNavHrefs(
+    entitlements,
+    storeNavigation.map((item) => item.href),
   );
 
   return (
@@ -84,6 +92,17 @@ export default async function StoreLayout({
         email: user.email ?? profile?.email ?? undefined,
       }}
       activeAlertCount={activeAlertCount}
+      lockedNavHrefs={lockedNavHrefs}
+      notice={
+        orderUsage.overLimit ? (
+          <div className="mb-4">
+            <Alert variant="warning" title="Límite de pedidos del plan superado">
+              Este mes van {orderUsage.used} pedidos y el plan {entitlements.planName} incluye{" "}
+              {orderUsage.limit}. Los pedidos siguen sincronizando; mejora el plan en Facturación.
+            </Alert>
+          </div>
+        ) : null
+      }
       agencyConsole={
         <AgencyConsoleMenu
           agencySlug={agencySlug}

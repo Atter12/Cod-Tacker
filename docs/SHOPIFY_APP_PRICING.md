@@ -18,6 +18,23 @@ Cobro de la app por **Shopify App Pricing** (cargo en la factura Shopify del mer
 - Consola: si `subscriptions.billing_provider = shopify`, “Elegir plan” / portal redirigen a App Pricing.
 - Sync nunca sobrescribe una suscripción `stripe` activa.
 
+## Qué desbloquea cada plan
+
+Handles en Partner Dashboard: `conector` (Free), `starter`, `growth`, `scale`. Código: [`lib/billing/entitlements.ts`](../lib/billing/entitlements.ts).
+
+| Plan | Incluye |
+| --- | --- |
+| Free (`conector`, o sin plan / plan bloqueado) | Embed, pedidos, resumen, integraciones, Flipy, operaciones, configuración. 1 tienda. |
+| Starter | + Atribución, campañas, RTO, conciliación, logística, alertas. 1 tienda, 300 pedidos/mes. |
+| Growth | + WhatsApp y automatizaciones (`plans.features`). 3 tiendas, 1,000 pedidos/mes. |
+| Scale | + Claves API. 5 tiendas, 5,000 pedidos/mes. |
+
+- Secciones de pago: `PlanGate` en el `layout.tsx` de cada sección muestra “Ver planes”; el menú las marca con candado.
+- Server actions de esas secciones llaman `assertPlanSection`.
+- Jobs: sin `automations` solo corren reglas de sistema (Flipy sin puja 24h); sin `whatsapp` no se encola la confirmación COD.
+- Límite de pedidos: cuenta también los pedidos de Shopify del mes; al superarlo se muestra un aviso, la sincronización no se corta.
+- Mensajes de pago vencido / cancelado apuntan al Admin de Shopify cuando `billing_provider = shopify`.
+
 ---
 
 ## Fases (código)

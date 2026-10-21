@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadAgencyEntitlements } from "@/lib/billing/limits";
 import { decideWhatsappCodConfirmationEnqueue } from "@/lib/integrations/whatsapp/confirmation-gate";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { kickJobProcessing } from "@/lib/jobs/kick";
@@ -32,6 +33,11 @@ export async function enqueueWhatsappCodConfirmationRequest(input: {
   /** Kick the worker so the template sends without waiting for cron. */
   kick?: boolean;
 }): Promise<{ jobId: string; created: boolean; skipped?: string } | null> {
+  const { entitlements } = await loadAgencyEntitlements(input.admin, input.agencyId);
+  if (!entitlements.sections.whatsapp) {
+    return { jobId: "", created: false, skipped: "plan_without_whatsapp" };
+  }
+
   const order = await input.admin
     .from("orders")
     .select("id, payment_status, confirmation_status")

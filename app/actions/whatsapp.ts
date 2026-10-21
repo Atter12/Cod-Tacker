@@ -27,6 +27,7 @@ import {
   getTemplateById,
 } from "@/services/whatsapp.service";
 import type { Json } from "@/types/database.generated";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type WhatsappActionResult = ActionResult<{
   jobId?: string;
@@ -75,6 +76,7 @@ export async function sendWhatsappMessage(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -294,6 +296,7 @@ export async function simulateWhatsappReply(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -382,6 +385,7 @@ export async function setWhatsappConfirmation(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -432,6 +436,7 @@ export async function closeWhatsappConversation(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -466,6 +471,7 @@ export async function createWhatsappTemplate(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -521,6 +527,7 @@ export async function updateWhatsappTemplate(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -576,6 +583,7 @@ export async function duplicateWhatsappTemplate(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -634,6 +642,7 @@ export async function requestWhatsappCodConfirmation(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "whatsapp");
     assertWhatsappOrOrdersManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");

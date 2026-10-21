@@ -110,6 +110,7 @@ describe("plan white-label gate", () => {
       currentPeriodEnd: null,
       gracePeriodEndsAt: null,
       pastDueSince: null,
+      billingProvider: null,
     };
     assert.equal(planAllowsWhiteLabel(starter), false);
     assert.equal(

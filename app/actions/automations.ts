@@ -28,6 +28,7 @@ import {
   getAutomationRunById,
 } from "@/services/automations.service";
 import type { Json } from "@/types/database.generated";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type AutomationActionResult = ActionResult<{
   ruleId?: string;
@@ -58,6 +59,7 @@ export async function createAutomationRule(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -114,6 +116,7 @@ export async function updateAutomationRule(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -167,6 +170,7 @@ export async function setAutomationRuleActive(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -203,6 +207,7 @@ export async function simulateAutomationRule(
   try {
     await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -242,6 +247,7 @@ export async function approveAutomationRun(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
@@ -329,6 +335,7 @@ export async function fireAutomationTrigger(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
+    await assertPlanSection(membership.agencyId, "automations");
     assertAutomationsManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) throw new ValidationError("Tienda inválida.");
 
