@@ -97,8 +97,6 @@ type Props = {
   customerEmail?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When false, this demo store does not open the Flipy logistics top-up. */
-  allowWalletTopup?: boolean;
 };
 
 type Step = "payment" | "ruta" | "confirm" | "success";
@@ -242,7 +240,6 @@ export function FlipyCreateShipmentModal({
   customerEmail = null,
   open,
   onOpenChange,
-  allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
   const shopifyDeliveryInput = useMemo(
@@ -878,12 +875,6 @@ export function FlipyCreateShipmentModal({
   }, [open, paymentResolution]);
 
   function openWalletTopup() {
-    if (!allowWalletTopup) {
-      setError(
-        "La recarga de logística Flipy no está disponible en esta cuenta demo. Usa transferir Ganancias → Operaciones o contacta soporte de logística.",
-      );
-      return;
-    }
     setError(null);
     setWalletTransferMessage(null);
     startTransition(async () => {
@@ -1031,15 +1022,12 @@ export function FlipyCreateShipmentModal({
   }
 
   const showRecargaCta =
-    allowWalletTopup &&
-    (errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
-      (error?.toLowerCase().includes("saldo") ?? false));
+    errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
+    (error?.toLowerCase().includes("saldo") ?? false);
   const canTransferGanancias =
     Boolean(walletSaldo?.transferGananciasDisponible) &&
     (walletSaldo?.billeteraGanancias ?? 0) > 0;
-  const needsWalletSaldo =
-    showRecargaCta ||
-    (Boolean(error?.toLowerCase().includes("saldo")) && !allowWalletTopup);
+  const needsWalletSaldo = showRecargaCta;
 
   useEffect(() => {
     if (!open || !needsWalletSaldo) {
@@ -1227,27 +1215,6 @@ export function FlipyCreateShipmentModal({
                       Recargar en Flipy
                     </Button>
                   </div>
-                </div>
-              ) : error &&
-                !allowWalletTopup &&
-                (errorCode === FLIPY_ERROR_CODES.SALDO_INSUFICIENTE_HOLD ||
-                  error.toLowerCase().includes("saldo")) ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-text-secondary">
-                    Saldo de logística Flipy insuficiente. Esta cuenta demo no abre la recarga; puedes
-                    transferir Ganancias a Operaciones si hay saldo.
-                  </p>
-                  {canTransferGanancias && walletSaldo ? (
-                    <Button
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => transferGananciasForShipment()}
-                    >
-                      {pending
-                        ? "Transfiriendo…"
-                        : `Pasar ${formatCurrency(walletSaldo.billeteraGanancias, "PEN")} a Operaciones`}
-                    </Button>
-                  ) : null}
                 </div>
               ) : null}
             </div>

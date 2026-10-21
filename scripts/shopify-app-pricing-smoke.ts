@@ -9,7 +9,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { evaluateAppStoreBillingGates } from "../lib/billing/app-store-gates";
 import { buildShopifyAppPricingPlansUrl } from "../lib/billing/shopify-pricing-url";
-import { isShopifyAppReviewMode } from "../lib/shopify/app-store-review";
 
 function readTomlApplicationUrl(): string {
   try {
@@ -36,7 +35,6 @@ const gates = evaluateAppStoreBillingGates({
   applicationUrl: applicationUrl || "https://app.codtracked.com/embed",
   oauthReturnSample: "/a/acme/s/tienda/integrations/shopify",
   embedPricingUrl,
-  reviewMode: isShopifyAppReviewMode(),
 });
 
 const envChecks = [
@@ -53,7 +51,6 @@ const envChecks = [
 
 console.log("\n=== Shopify App Pricing · phase 5 smoke ===\n");
 console.log(`application_url (toml): ${applicationUrl || "(missing)"}`);
-console.log(`review mode: ${isShopifyAppReviewMode() ? "ON" : "off"}`);
 console.log("\n-- Product gates --");
 for (const check of gates.checks) {
   console.log(`${check.ok ? "PASS" : "FAIL"}  ${check.id}: ${check.detail}`);
@@ -66,17 +63,18 @@ for (const check of envChecks) {
 
 console.log(`
 -- Manual Partner checklist --
-[ ] Partner → Pricing = Shopify App Pricing; plans starter/growth/scale
+[ ] Partner → Pricing = Shopify App Pricing; Free plan + starter/growth/scale
 [ ] Welcome link = https://app.codtracked.com/embed
 [ ] Install / open app → /embed (orders) — no Stripe Checkout
 [ ] Decline plan → re-approve → embed shows plan + sync subscriptions
 [ ] Upgrade/downgrade in Admin → Sincronizar estado in Facturación (cod.*)
 [ ] Uninstall + reinstall → embed reconnects without /billing
-[ ] SHOPIFY_APP_REVIEW_MODE=true during review (hide Flipy wallet top-up)
-[ ] Theme app embed onboarding steps in review notes
+[ ] Review store shows the Flipy top-up (opens Flipy's own domain, never hidden from reviewers)
+[ ] FLIPY_EMBED_ORIGIN is a Flipy-branded domain, not *.vercel.app
+[ ] Review notes pasted from docs/SHOPIFY_REVIEW_NOTES.md (Flipy + theme app embed)
 [ ] Host split: PRODUCT_APP_URL=https://cod.codtracked.com (Stripe legado off app host)
 
-Docs: docs/SHOPIFY_APP_PRICING.md · docs/APP_STORE_BILLING_EXTERNAL.md
+Docs: docs/SHOPIFY_APP_PRICING.md · docs/APP_STORE_BILLING_EXTERNAL.md · docs/SHOPIFY_REVIEW_NOTES.md
 `);
 
 const gateFailed = !gates.ok;

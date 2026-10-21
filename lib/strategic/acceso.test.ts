@@ -99,7 +99,6 @@ describe("strategic · acceso", () => {
       applicationUrl,
       oauthReturnSample: "/a/acme/s/tienda/integrations/shopify",
       embedPricingUrl: pricing,
-      reviewMode: false,
     });
     assert.equal(report.checks.find((check) => check.id === "application_url_embed")?.ok, true);
     assert.equal(report.checks.find((check) => check.id === "oauth_return_not_billing")?.ok, true);

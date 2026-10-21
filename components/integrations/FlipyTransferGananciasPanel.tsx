@@ -21,8 +21,6 @@ type Props = {
   transferGananciasDisponible?: boolean | null;
   destinoRetiroConfigurado?: boolean | null;
   appOrigin?: string | null;
-  /** When false, this demo store does not open the Flipy logistics top-up. */
-  allowWalletTopup?: boolean;
 };
 
 export function FlipyTransferGananciasPanel({
@@ -35,7 +33,6 @@ export function FlipyTransferGananciasPanel({
   transferGananciasDisponible = false,
   destinoRetiroConfigurado = false,
   appOrigin = null,
-  allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
   const [operaciones, setOperaciones] = useState(initialOperaciones);
@@ -238,21 +235,14 @@ export function FlipyTransferGananciasPanel({
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        {allowWalletTopup ? (
-          <Button
-            size="md"
-            className="flex-1 sm:flex-none"
-            disabled={walletPending}
-            onClick={() => openWalletTopup()}
-          >
-            {walletPending ? "Abriendo recarga…" : "Recargar en Flipy"}
-          </Button>
-        ) : (
-          <p className="text-[12px] text-text-secondary">
-            Recarga con tarjeta deshabilitada en esta cuenta demo. El saldo Flipy es de logística,
-            no el plan COD-tracked.
-          </p>
-        )}
+        <Button
+          size="md"
+          className="flex-1 sm:flex-none"
+          disabled={walletPending}
+          onClick={() => openWalletTopup()}
+        >
+          {walletPending ? "Abriendo recarga…" : "Recargar en Flipy"}
+        </Button>
         {canTransfer ? (
           <Button
             size="md"
@@ -266,12 +256,10 @@ export function FlipyTransferGananciasPanel({
         ) : null}
       </div>
 
-      {allowWalletTopup ? (
-        <p className="text-[12px] text-text-secondary">
-          La recarga abre la página de Flipy. El pago con tarjeta es saldo de logística, no el plan
-          de CODTracked.
-        </p>
-      ) : null}
+      <p className="text-[12px] text-text-secondary">
+        La recarga abre la página de Flipy. El pago con tarjeta es saldo de logística, no el plan
+        de CODTracked.
+      </p>
 
       {canTransfer ? (
         <div className="space-y-2">

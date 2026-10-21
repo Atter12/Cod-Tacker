@@ -24,7 +24,7 @@ Copy listing (ajuste):
 ## Cuenta App Review
 
 - [ ] Dev store + plan de prueba ($0 / trial) o plan marcado free-to-test.
-- [ ] Credenciales en notas de revisión.
+- [ ] Credenciales y notas de revisión: copiar de [SHOPIFY_REVIEW_NOTES.md](./SHOPIFY_REVIEW_NOTES.md).
 - [ ] Script mínimo:
 
   1. Instalar y abrir la app → `/embed` (pedidos, sin Stripe Checkout).
@@ -32,8 +32,10 @@ Copy listing (ajuste):
   3. Volver al embed; ver plan sincronizado.
   4. Opcional: consola `cod.codtracked.com` → Facturación → **Administrar en Shopify**.
 
-- [ ] La recarga de logística abre `flipy-panel` `/partner/recarga` a pantalla completa (token de partner, `returnUrl`). El formulario de tarjeta no va dentro del iframe.
-- [ ] `SHOPIFY_APP_REVIEW_STORE_IDS=<uuid>` oculta esa recarga solo en tiendas demo.
+- [ ] La recarga de logística abre Flipy `/partner/recarga` a pantalla completa (token de partner, `returnUrl`). El formulario de tarjeta no va dentro del iframe.
+- [ ] La tienda de revisión ve la misma recarga que cualquier merchant. No se oculta nada a App Review (requisito 4.5.5: acceso completo). Ya no existen `SHOPIFY_APP_REVIEW_MODE` ni `SHOPIFY_APP_REVIEW_STORE_IDS`.
+- [ ] `FLIPY_EMBED_ORIGIN` apunta a un dominio de Flipy, no a `*.vercel.app`.
+- [ ] CODTracked no cobra ni recibe comisión por la recarga ni por los envíos Flipy (verificado en código: solo lee saldos y fees de Flipy para conciliar).
 
 OAuth / install **no** redirigen a `/billing` (gates en código + `npm run smoke:app-pricing`).
 
@@ -60,7 +62,7 @@ Onboarding App Embed `codtracked-attribution` en Integraciones → Shopify e ins
 
 ```bash
 npm run smoke:app-pricing
-npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.test.ts lib/billing/console-billing-mode.test.ts lib/shopify/app-store-review.test.ts
+npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.test.ts lib/billing/console-billing-mode.test.ts lib/billing/provider.test.ts lib/strategic/flipy-recarga.test.ts
 ```
 
 Manual:
@@ -69,7 +71,7 @@ Manual:
 - [ ] Decline charge → re-approve → sync.
 - [ ] Upgrade/downgrade → **Sincronizar estado** en Facturación.
 - [ ] Uninstall + reinstall.
-- [ ] Review: sin iframe “Recarga segura · Stripe” de Flipy.
+- [ ] Review: la recarga Flipy abre el dominio de Flipy a pantalla completa (sin iframe de tarjeta).
 - [ ] Capturas: embed + plan Shopify; Facturación consola en modo App Pricing.
 
 ---
@@ -82,5 +84,4 @@ Manual:
 | `SHOPIFY_PARTNER_ORG_ID` / `SHOPIFY_PARTNER_API_TOKEN` | Sync `activeSubscription` |
 | `BILLING_PROVIDER` | `shopify` \| `stripe` \| `demo` |
 | `PRODUCT_APP_URL` | Consola / Stripe legado |
-| `SHOPIFY_APP_REVIEW_MODE` | Oculta Flipy wallet top-up |
-| `SHOPIFY_APP_REVIEW_STORE_IDS` | Tiendas review sin top-up |
+| `FLIPY_EMBED_ORIGIN` | Dominio de Flipy para la recarga (no `*.vercel.app`) |

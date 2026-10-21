@@ -63,8 +63,6 @@ type Props = {
   canCreate: boolean;
   canManage: boolean;
   pickupOrder: boolean;
-  /** When false, hide Flipy Stripe wallet top-up (App Store review). */
-  allowWalletTopup?: boolean;
 };
 
 export function FlipyShipmentPanel({
@@ -100,7 +98,6 @@ export function FlipyShipmentPanel({
   canCreate,
   canManage,
   pickupOrder,
-  allowWalletTopup = true,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -428,7 +425,6 @@ export function FlipyShipmentPanel({
         customerEmail={customerEmail}
         open={open}
         onOpenChange={setOpen}
-        allowWalletTopup={allowWalletTopup}
       />
     </>
   );

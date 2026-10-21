@@ -43,7 +43,6 @@ export function evaluateAppStoreBillingGates(input: {
   applicationUrl: string;
   oauthReturnSample: string;
   embedPricingUrl: string | null;
-  reviewMode: boolean;
 }): AppStoreGateReport {
   const checks: AppStoreGateReport["checks"] = [];
 
@@ -73,14 +72,6 @@ export function evaluateAppStoreBillingGates(input: {
     detail: pricingOk
       ? "URL de plan del embed es Admin Shopify o vacía"
       : "URL de plan del embed no puede ser Stripe ni Facturación en cod.*",
-  });
-
-  checks.push({
-    id: "review_mode_flag_readable",
-    ok: typeof input.reviewMode === "boolean",
-    detail: input.reviewMode
-      ? "SHOPIFY_APP_REVIEW_MODE activo (oculta Flipy wallet top-up)"
-      : "SHOPIFY_APP_REVIEW_MODE inactivo (activar en deploy de review)",
   });
 
   return { ok: checks.every((c) => c.ok), checks };

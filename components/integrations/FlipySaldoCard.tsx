@@ -8,7 +8,6 @@ import {
   resolveFlipyPartnerKeyFromIntegration,
 } from "@/lib/integrations/flipy/credentials";
 import { getFlipyEnv } from "@/lib/integrations/flipy/env";
-import { isFlipyWalletTopupDisabledForStore } from "@/lib/shopify/app-store-review";
 import type { IntegrationRow } from "@/types/database";
 
 type Props = {
@@ -91,7 +90,6 @@ export async function FlipySaldoCard({
             }
             destinoRetiroConfigurado={saldo.destinoRetiroConfigurado}
             appOrigin={appOrigin}
-            allowWalletTopup={!isFlipyWalletTopupDisabledForStore(storeId)}
           />
         </div>
       </section>

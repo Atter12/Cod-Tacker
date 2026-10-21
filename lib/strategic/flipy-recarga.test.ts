@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import {
   buildFlipyWalletEmbedUrl,
   decideFlipyWalletTopLevelOpen,
@@ -10,23 +10,10 @@ import {
   navigateFlipyWalletTopLevel,
   stripFlipyWalletReturnParam,
 } from "@/lib/integrations/flipy/embed-urls";
-import { isFlipyWalletTopupDisabledForStore } from "@/lib/shopify/app-store-review";
 
 const ROOT = resolve(process.cwd());
 const APP_ORIGIN = "https://app.codtracked.com";
 const ORDER_PAGE = `${APP_ORIGIN}/a/acme/s/tienda/orders/order-1?tab=flipy`;
-
-const ORIGINAL_REVIEW = {
-  mode: process.env.SHOPIFY_APP_REVIEW_MODE,
-  stores: process.env.SHOPIFY_APP_REVIEW_STORE_IDS,
-};
-
-afterEach(() => {
-  if (ORIGINAL_REVIEW.mode === undefined) delete process.env.SHOPIFY_APP_REVIEW_MODE;
-  else process.env.SHOPIFY_APP_REVIEW_MODE = ORIGINAL_REVIEW.mode;
-  if (ORIGINAL_REVIEW.stores === undefined) delete process.env.SHOPIFY_APP_REVIEW_STORE_IDS;
-  else process.env.SHOPIFY_APP_REVIEW_STORE_IDS = ORIGINAL_REVIEW.stores;
-});
 
 function read(path: string): string {
   return readFileSync(resolve(ROOT, path), "utf8");
@@ -138,15 +125,19 @@ describe("strategic · flipy recarga", () => {
     );
   });
 
-  it("keeps the handoff in review mode and blocks only a listed demo store", () => {
-    delete process.env.SHOPIFY_APP_REVIEW_STORE_IDS;
-    process.env.SHOPIFY_APP_REVIEW_MODE = "true";
-    assert.equal(isFlipyWalletTopupDisabledForStore("store-reviewer"), false);
-
-    process.env.SHOPIFY_APP_REVIEW_MODE = "false";
-    process.env.SHOPIFY_APP_REVIEW_STORE_IDS = "store-demo";
-    assert.equal(isFlipyWalletTopupDisabledForStore("store-demo"), true);
-    assert.equal(isFlipyWalletTopupDisabledForStore("store-live"), false);
+  it("shows the same top-up to App Review as to every merchant", () => {
+    for (const file of [
+      "app/actions/flipy-widgets.ts",
+      "app/a/[agencySlug]/s/[storeSlug]/orders/[orderId]/page.tsx",
+      "components/integrations/FlipySaldoCard.tsx",
+      "components/integrations/FlipyTransferGananciasPanel.tsx",
+      "components/orders/FlipyShipmentPanel.tsx",
+      "components/flipy/FlipyCreateShipmentModal.tsx",
+    ]) {
+      const source = read(file);
+      assert.doesNotMatch(source, /SHOPIFY_APP_REVIEW|allowWalletTopup|app-store-review/);
+    }
+    assert.equal(existsSync(resolve(ROOT, "lib/shopify/app-store-review.ts")), false);
   });
 
   it("wires the button, the action, and the return notice to that same rule", () => {

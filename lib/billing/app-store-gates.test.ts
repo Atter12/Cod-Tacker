@@ -42,9 +42,8 @@ describe("app store billing gates", () => {
         storeHandle: "demo",
         appHandle: "codtracked",
       }),
-      reviewMode: true,
     });
     assert.equal(report.ok, true);
-    assert.equal(report.checks.length >= 4, true);
+    assert.equal(report.checks.length >= 3, true);
   });
 });

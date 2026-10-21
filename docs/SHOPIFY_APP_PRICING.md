@@ -41,24 +41,25 @@ Detalle operativo de Partner: [APP_STORE_BILLING_EXTERNAL.md](./APP_STORE_BILLIN
 
 - `lib/billing/app-store-gates.ts` — OAuth ≠ `/billing`; plan embed = Admin Shopify.
 - `/api/integrations/shopify/install` sin tenant → redirect a `/embed` (nunca login→Facturación).
-- `SHOPIFY_APP_REVIEW_MODE` oculta Flipy wallet top-up (Stripe logística ≠ suscripción app).
+- Agencias que vienen de Shopify (embed o tienda conectada) siempre usan App Pricing; solo una suscripción Stripe ya guardada se mantiene (`decideAgencyBillingProvider`).
+- La recarga Flipy (saldo del courier, no cobro de la app) se muestra igual en review: nunca se oculta a App Review.
 - Host split: `/api/internal/*` no rebota fuera de `app.*` (crons).
 
 ### Comando
 
 ```bash
 npm run smoke:app-pricing
-npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.test.ts lib/billing/console-billing-mode.test.ts lib/shopify/app-store-review.test.ts lib/hosts/host-gate.test.ts
+npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.test.ts lib/billing/console-billing-mode.test.ts lib/billing/provider.test.ts lib/strategic/flipy-recarga.test.ts lib/hosts/host-gate.test.ts
 ```
 
 ### Checklist manual (Partner / prod)
 
-1. [ ] App Pricing activo; welcome → `/embed`.
+1. [ ] App Pricing activo con plan Free declarado; welcome → `/embed`.
 2. [ ] Install → embed con pedidos; CTA plan → Admin; sin Stripe Checkout.
 3. [ ] Decline → re-approve → sync (`subscriptions.billing_provider=shopify`).
 4. [ ] Upgrade/downgrade → Facturación consola → **Sincronizar estado**.
 5. [ ] Uninstall + reinstall.
-6. [ ] Review deploy: `SHOPIFY_APP_REVIEW_MODE=true`.
+6. [ ] Notas de revisión pegadas desde [SHOPIFY_REVIEW_NOTES.md](./SHOPIFY_REVIEW_NOTES.md).
 7. [ ] `PRODUCT_APP_URL=https://cod.codtracked.com` + Stripe webhooks en host producto.
 8. [ ] Theme app embed onboarding en notas de revisión.
 9. [ ] Reenviar en Partner Dashboard.
@@ -71,4 +72,3 @@ npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.
 | `SHOPIFY_PARTNER_ORG_ID` / `SHOPIFY_PARTNER_API_TOKEN` | Sync |
 | `BILLING_PROVIDER` | Preferir `shopify` para nuevas agencias App Store |
 | `PRODUCT_APP_URL` | Consola / Stripe legado |
-| `SHOPIFY_APP_REVIEW_MODE` | Review |
