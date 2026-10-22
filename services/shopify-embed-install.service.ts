@@ -16,6 +16,36 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduledShopifySync } from "@/services/integrations.service";
 import type { Json } from "@/types/database.generated";
 
+/**
+ * Shops linked before the 90-day import existed only pulled 7 days of orders.
+ * Flag the import so the next job sweep (every minute) brings the history in.
+ */
+async function queueInitialBackfillIfMissing(
+  admin: ReturnType<typeof createAdminClient>,
+  storeId: string,
+): Promise<void> {
+  const { data: integration } = await admin
+    .from("integrations")
+    .select("id, metadata")
+    .eq("store_id", storeId)
+    .eq("provider", "shopify")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!integration) return;
+  const meta =
+    integration.metadata && typeof integration.metadata === "object" && !Array.isArray(integration.metadata)
+      ? (integration.metadata as Record<string, unknown>)
+      : {};
+  if (meta.shopify_initial_backfill_done === true || meta.shopify_initial_backfill_pending === true) {
+    return;
+  }
+  await admin
+    .from("integrations")
+    .update({ metadata: { ...meta, shopify_initial_backfill_pending: true } as Json })
+    .eq("id", integration.id);
+}
+
 function shopHandle(shop: string): string {
   return shop
     .replace(/\.myshopify\.com$/i, "")
@@ -59,6 +89,7 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
         shopDomain: shop,
       });
     }
+    await queueInitialBackfillIfMissing(admin, existing.data.id);
     return { shop, ...(await loadShopifyEmbedHome(shop)) };
   }
 
@@ -129,6 +160,8 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
         shop_domain: shop,
         origin: "shopify_admin_embed",
         currency_code: shopInfo.currencyCode,
+        // First pull imports ~90 days of orders, not just the last 7.
+        shopify_initial_backfill_pending: true,
       } as Json,
       settings: {
         shop_domain: shop,
@@ -156,6 +189,8 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
           mode: "live",
           shop_domain: shop,
           origin: "shopify_admin_embed",
+          currency_code: shopInfo.currencyCode,
+          shopify_initial_backfill_pending: true,
           webhooks: { callback_uri: registration.callbackUri, registered_at: now, results: registration.results },
         } as Json,
       })
@@ -171,13 +206,14 @@ export async function openEmbeddedShopifyShop(sessionToken: string): Promise<Sho
   }
 
   try {
+    // Historical pull (~90 days); on success runSync marks the backfill done.
     await scheduledShopifySync(admin, {
       agencyId: agency.data.id,
       storeId: store.data.id,
-      syncType: "incremental",
+      syncType: "backfill",
     });
   } catch {
-    // The embed still opens; the next scheduled sync can fill orders.
+    // The embed still opens; the pending flag makes the next job sweep retry the import.
   }
 
   await syncShopifyAppPricingForAgencySafe({

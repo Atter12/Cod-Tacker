@@ -105,3 +105,38 @@ describe("shopify live filter + initial backfill", () => {
     );
   });
 });
+
+describe("initial 90-day import from the Shopify embed", () => {
+  it("runs a pending backfill on the next sweep instead of 8h later", () => {
+    const now = Date.parse("2026-10-22T16:00:00.000Z");
+    const justSynced = {
+      last_success_at: "2026-10-22T15:59:00.000Z",
+      last_error_at: null,
+    };
+    assert.equal(isShopifySyncDue(justSynced, now), false);
+    assert.equal(
+      isShopifySyncDue({ ...justSynced, metadata: { shopify_initial_backfill_pending: true } }, now),
+      true,
+    );
+    assert.equal(
+      resolveShopifyScheduledSyncType({
+        last_success_at: justSynced.last_success_at,
+        metadata: { shopify_initial_backfill_pending: true },
+      }),
+      "backfill",
+    );
+  });
+
+  it("installs from the embed with a historical pull and a pending flag", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const source = readFileSync(
+      resolve(process.cwd(), "services/shopify-embed-install.service.ts"),
+      "utf8",
+    );
+    assert.match(source, /syncType: "backfill"/);
+    assert.doesNotMatch(source, /syncType: "incremental"/);
+    assert.equal((source.match(/shopify_initial_backfill_pending: true/g) ?? []).length >= 2, true);
+    assert.match(source, /await queueInitialBackfillIfMissing\(admin, existing\.data\.id\)/);
+  });
+});

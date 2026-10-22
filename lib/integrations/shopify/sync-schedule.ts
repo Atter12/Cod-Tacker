@@ -15,10 +15,16 @@ export function lastShopifySyncAttemptAt(integration: {
 }
 
 export function isShopifySyncDue(
-  integration: { last_success_at: string | null; last_error_at: string | null },
+  integration: {
+    last_success_at: string | null;
+    last_error_at: string | null;
+    metadata?: unknown;
+  },
   nowMs = Date.now(),
   intervalMs = SHOPIFY_SYNC_INTERVAL_MS,
 ): boolean {
+  // A pending initial backfill runs on the next sweep, not 8h later.
+  if (asMeta(integration.metadata).shopify_initial_backfill_pending === true) return true;
   const last = lastShopifySyncAttemptAt(integration);
   if (!last) return true;
   return nowMs - last.getTime() >= intervalMs;
