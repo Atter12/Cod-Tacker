@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { PlanBadge } from "@/components/billing/PlanUpsell";
 import { routes } from "@/config/routes";
+import type { PlanSection } from "@/lib/billing/entitlements";
 import { labelProviderKind } from "@/lib/integrations/catalog";
 import { labelOverviewStatus } from "@/lib/integrations/overview";
 import { cn } from "@/lib/utils/cn";
@@ -11,10 +13,12 @@ export function IntegrationOverviewCard({
   item,
   agencySlug,
   storeSlug,
+  lockedSection,
 }: {
   item: IntegrationOverviewItem;
   agencySlug: string;
   storeSlug: string;
+  lockedSection?: PlanSection;
 }) {
   const href = routes.store.integrationDetail(agencySlug, storeSlug, item.provider);
   const statusLabel = labelOverviewStatus(item.overviewStatus);
@@ -34,8 +38,11 @@ export function IntegrationOverviewCard({
     >
       <IntegrationProviderIcon provider={item.provider} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold leading-snug text-text-primary">
-          {item.name}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[14px] font-semibold leading-snug text-text-primary">
+            {item.name}
+          </span>
+          {lockedSection ? <PlanBadge section={lockedSection} /> : null}
         </span>
         <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-text-secondary">
           {labelProviderKind(item.kind)}

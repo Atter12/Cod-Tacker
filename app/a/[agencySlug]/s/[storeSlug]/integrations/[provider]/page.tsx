@@ -2,6 +2,7 @@ import Link from "next/link";
 import { EnviaConnectForm } from "@/components/integrations/EnviaConnectForm";
 import { FlipyAppAccessPanel } from "@/components/integrations/FlipyAppAccessPanel";
 import { FlipyAutoCreateSettings } from "@/components/integrations/FlipyAutoCreateSettings";
+import { PlanUpsellCard, PlanUpsellInline } from "@/components/billing/PlanUpsell";
 import { FlipyConciliacionExportPanel } from "@/components/integrations/FlipyConciliacionExportPanel";
 import { FlipyConnectForm } from "@/components/integrations/FlipyConnectForm";
 import { FlipyPickupSettings } from "@/components/integrations/FlipyPickupSettings";
@@ -52,6 +53,8 @@ import {
   parseShopifyWebhooksMetadata,
   summarizeShopifyWebhooks,
 } from "@/lib/integrations/shopify/webhooks-meta";
+import { integrationProviderPlanSection } from "@/lib/billing/entitlements";
+import { getAgencyEntitlements } from "@/lib/billing/plan-gate";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
@@ -80,6 +83,20 @@ export default async function IntegrationDetailPage({
   }
   if (!isStoreIntegrationProvider(p.provider)) {
     return <ErrorState title="Proveedor desconocido" description="Este proveedor no está en el catálogo de la tienda." />;
+  }
+
+  // Connecting Shopify, ads or couriers stays open; Flipy and WhatsApp need their plan.
+  const { entitlements } = await getAgencyEntitlements(member.agencyId);
+  const providerSection = integrationProviderPlanSection(p.provider);
+  if (providerSection && !entitlements.sections[providerSection]) {
+    return (
+      <PlanUpsellCard
+        agencySlug={p.agencySlug}
+        section={providerSection}
+        backHref={routes.store.integrations(p.agencySlug, p.storeSlug)}
+        backLabel="Volver a integraciones"
+      />
+    );
   }
 
   const catalog = getCatalogEntry(p.provider);
@@ -386,13 +403,17 @@ export default async function IntegrationDetailPage({
               />
             </div>
           ) : null}
-          <FlipyConciliacionExportPanel
-            agencySlug={p.agencySlug}
-            storeSlug={p.storeSlug}
-            apiBaseUrl={getFlipyEnv().apiBaseUrl}
-            flipyTiendaId={readFlipyTiendaId(integration.settings) ?? integration.external_account_id}
-            canManage={canManage}
-          />
+          {entitlements.sections.reconciliation ? (
+            <FlipyConciliacionExportPanel
+              agencySlug={p.agencySlug}
+              storeSlug={p.storeSlug}
+              apiBaseUrl={getFlipyEnv().apiBaseUrl}
+              flipyTiendaId={readFlipyTiendaId(integration.settings) ?? integration.external_account_id}
+              canManage={canManage}
+            />
+          ) : (
+            <PlanUpsellInline agencySlug={p.agencySlug} section="reconciliation" />
+          )}
         </>
       ) : null}
 

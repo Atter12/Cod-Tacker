@@ -36,6 +36,7 @@ import {
   type AgencyBrandTheme,
 } from "@/lib/branding/theme";
 import { cn } from "@/lib/utils/cn";
+import { navPathPlanSection, PLAN_SECTION_MIN_PLAN } from "@/lib/billing/entitlements";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 const SIDEBAR_KEY = "codtracked.sidebar.collapsed";
@@ -206,7 +207,7 @@ export function AppSidebar({
   activeAlertCount?: number;
   brand?: AgencyBrandTheme | null;
   onNavigate?: () => void;
-  /** Store nav hrefs the agency plan does not unlock (still linkable, shows the upgrade notice). */
+  /** Nav hrefs the agency plan does not unlock (still linkable, shows the upgrade notice). */
   lockedNavHrefs?: readonly string[];
 }) {
   const pathname = usePathname();
@@ -241,7 +242,10 @@ export function AppSidebar({
           ? agencyIcons[item.href] ?? Store
           : Store;
     const active = isActivePath(pathname, href);
-    const locked = scope === "store" && lockedNavHrefs.includes(item.href);
+    const lockedSection = lockedNavHrefs.includes(item.href)
+      ? navPathPlanSection(scope, item.href)
+      : null;
+    const locked = lockedSection !== null;
     const showAlertBadge = !locked && item.label === "Alertas" && activeAlertCount > 0;
     const link = (
       <Link
@@ -263,8 +267,14 @@ export function AppSidebar({
         ) : null}
         <Icon className={cn("size-[16px] shrink-0", active && "text-brand-primary")} aria-hidden />
         {!compact ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-        {!compact && locked ? (
-          <Lock className="size-3 shrink-0 text-text-secondary" aria-label="Plan de pago" />
+        {!compact && lockedSection ? (
+          <span
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-brand-softer px-1.5 py-0.5 text-[10px] font-semibold text-brand-primary"
+            title={`Disponible desde el plan ${PLAN_SECTION_MIN_PLAN[lockedSection]}`}
+          >
+            <Lock className="size-2.5" aria-hidden />
+            {PLAN_SECTION_MIN_PLAN[lockedSection]}
+          </span>
         ) : null}
         {!compact && showAlertBadge ? (
           <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">
@@ -279,7 +289,7 @@ export function AppSidebar({
 
     if (compact) {
       return (
-        <Tooltip key={item.label} content={item.label} className="block">
+        <Tooltip key={item.label} content={lockedSection ? `${item.label} · plan ${PLAN_SECTION_MIN_PLAN[lockedSection]}` : item.label} className="block">
           {link}
         </Tooltip>
       );

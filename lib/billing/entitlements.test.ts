@@ -194,7 +194,7 @@ describe("console sections are gated by plan", () => {
       ["app/actions/flipy-activation.ts", "console"],
       ["app/actions/flipy-inbox.ts", "console"],
       ["app/actions/flipy-settings.ts", "console"],
-      ["app/actions/flipy-settlement.ts", "console"],
+      ["app/actions/flipy-settlement.ts", "reconciliation"],
       ["app/actions/flipy-shipments.ts", "console"],
       ["app/actions/flipy-wallet.ts", "console"],
       ["app/actions/flipy-widgets.ts", "console"],

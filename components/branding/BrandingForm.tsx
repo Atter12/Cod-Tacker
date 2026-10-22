@@ -265,7 +265,7 @@ export function BrandingForm({
             <div>
               <h2 className="text-[14px] font-semibold text-text-primary">White-label</h2>
               <p className="mt-0.5 text-[12.5px] text-text-secondary">
-                Ocultar la marca CODTracked requiere plan Growth o Scale.
+                Ocultar la marca CODTracked está disponible desde el plan Scale.
               </p>
             </div>
             <label className="flex items-start gap-2.5 text-[13px] text-text-primary">
@@ -279,7 +279,7 @@ export function BrandingForm({
                 Activar white-label
                 {!whiteLabelAllowed ? (
                   <span className="mt-0.5 block text-[12px] text-text-secondary">
-                    Disponible desde Growth+
+                    Disponible desde el plan Scale
                   </span>
                 ) : (
                   <span className="mt-0.5 block text-[12px] text-text-secondary">

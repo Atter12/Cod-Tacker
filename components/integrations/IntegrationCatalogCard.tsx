@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { PlanBadge } from "@/components/billing/PlanUpsell";
 import { routes } from "@/config/routes";
+import type { PlanSection } from "@/lib/billing/entitlements";
 import { DemoModeBadge } from "@/components/ui/DemoModeBadge";
 import { cn } from "@/lib/utils/cn";
 import type { IntegrationOverviewItem } from "@/types/integrations";
@@ -14,12 +16,14 @@ export function IntegrationCatalogCard({
   storeSlug,
   canManage,
   demo = false,
+  lockedSection,
 }: {
   item: IntegrationOverviewItem;
   agencySlug: string;
   storeSlug: string;
   canManage: boolean;
   demo?: boolean;
+  lockedSection?: PlanSection;
 }) {
   const href = routes.store.integrationDetail(agencySlug, storeSlug, item.provider);
   const showDemo = demo || item.demo;
@@ -29,7 +33,10 @@ export function IntegrationCatalogCard({
       <IntegrationProviderIcon provider={item.provider} className="size-11" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[14px] font-semibold text-text-primary">{item.name}</h3>
+          <h3 className="flex items-center gap-2 text-[14px] font-semibold text-text-primary">
+            {item.name}
+            {lockedSection ? <PlanBadge section={lockedSection} /> : null}
+          </h3>
           {showDemo ? <DemoModeBadge compact /> : null}
         </div>
         <p className="mt-1 text-[12.5px] leading-relaxed text-text-secondary">{item.description}</p>

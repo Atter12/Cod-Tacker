@@ -50,6 +50,8 @@ import { readFlipyEmbedBidsEvalEnabled } from "@/lib/integrations/flipy/settings
 import { readFlipyOriginFromSettings } from "@/lib/integrations/flipy/webhook-ingress";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { PlanUpsellInline } from "@/components/billing/PlanUpsell";
+import { getAgencyEntitlements } from "@/lib/billing/plan-gate";
 import { can } from "@/lib/permissions/can";
 import { getByProvider } from "@/services/integrations.service";
 import { getOrderDetail } from "@/services/orders.service";
@@ -107,13 +109,15 @@ export default async function OrderDetailPage({
 
   const client = await createClient();
   const flipyLive = getIntegrationRuntimeMode() === "live";
-  const [detail, storeResult, flipyIntegration] = await Promise.all([
+  const [detail, storeResult, flipyIntegration, { entitlements }] = await Promise.all([
     getOrderDetail(client, member.storeId, p.orderId),
     client.from("stores").select("timezone").eq("id", member.storeId).maybeSingle(),
     flipyLive
       ? getByProvider(client, member.agencyId, member.storeId, "flipy")
       : Promise.resolve(null),
+    getAgencyEntitlements(member.agencyId),
   ]);
+  const plan = entitlements.sections;
   if (!detail) notFound();
 
   const storeTimeZone = storeResult.data?.timezone?.trim() || "America/Lima";
@@ -154,9 +158,11 @@ export default async function OrderDetailPage({
       customData: row.custom_data,
       attributedPlatform,
     }));
-  const pendingConversions = conversionItems.filter(
-    (item) => item.releaseStatus === "pending_review",
-  ).length;
+  const pendingConversions = !plan.conversions
+    ? 0
+    : conversionItems.filter(
+        (item) => item.releaseStatus === "pending_review",
+      ).length;
   const flipyCtx = buildFlipyOrderShipmentContext(
     order,
     flipyIntegration?.settings,
@@ -631,21 +637,27 @@ export default async function OrderDetailPage({
                 <p>Confirmado en: {order.confirmed_at ? formatWhen(order.confirmed_at) : "—"}</p>
                 <p>Conversaciones WhatsApp: {detail.whatsappConversations.length}</p>
                 <p>Mensajes: {detail.whatsappMessages.length}</p>
-                <RequestWhatsappConfirmationButton
-                  agencySlug={p.agencySlug}
-                  storeSlug={p.storeSlug}
-                  orderId={order.id}
-                  paymentStatus={order.payment_status}
-                  confirmationStatus={order.confirmation_status}
-                  canManage={canManage || canWhatsappManage}
-                />
+                {plan.whatsapp ? (
+                  <RequestWhatsappConfirmationButton
+                    agencySlug={p.agencySlug}
+                    storeSlug={p.storeSlug}
+                    orderId={order.id}
+                    paymentStatus={order.payment_status}
+                    confirmationStatus={order.confirmation_status}
+                    canManage={canManage || canWhatsappManage}
+                  />
+                ) : (
+                  <PlanUpsellInline agencySlug={p.agencySlug} section="whatsapp" />
+                )}
               </div>
             ),
           },
           {
             value: "conciliacion",
             label: "Conciliación",
-            content: detail.settlementItems.length ? (
+            content: !plan.reconciliation ? (
+              <PlanUpsellInline agencySlug={p.agencySlug} section="reconciliation" />
+            ) : detail.settlementItems.length ? (
               <DataTable
                 data={detail.settlementItems}
                 getRowId={(row) => row.id}
@@ -673,13 +685,17 @@ export default async function OrderDetailPage({
                       Si se avisó a la plataforma de anuncios: enviado, falló o prueba · última vez.
                     </p>
                   </div>
-                  <ConversionReleasePanel
-                    agencySlug={p.agencySlug}
-                    storeSlug={p.storeSlug}
-                    events={conversionItems}
-                    canManage={canManage}
-                    timeZone={storeTimeZone}
-                  />
+                  {plan.conversions ? (
+                    <ConversionReleasePanel
+                      agencySlug={p.agencySlug}
+                      storeSlug={p.storeSlug}
+                      events={conversionItems}
+                      canManage={canManage}
+                      timeZone={storeTimeZone}
+                    />
+                  ) : (
+                    <PlanUpsellInline agencySlug={p.agencySlug} section="conversions" />
+                  )}
                 </section>
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">Historial</h3>

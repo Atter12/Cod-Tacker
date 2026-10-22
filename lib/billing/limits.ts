@@ -201,7 +201,7 @@ export async function assertCanImportCsvRows(
 }
 
 export function planAllowsWhiteLabel(limits: PlanLimits | null): boolean {
-  if (!limits) return false;
+  if (!limits || !evaluateSubscriptionAccess(limits).allowed) return false;
   // Canonical catalog uses `white_label`; keep hide_branding for older rows.
   return limits.features.white_label === true || limits.features.hide_branding === true;
 }

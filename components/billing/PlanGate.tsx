@@ -1,16 +1,15 @@
 import "server-only";
 
-import { Lock } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { PlanUpsellCard } from "@/components/billing/PlanUpsell";
 import { routes } from "@/config/routes";
-import { planUpgradeMessage, type PlanSection } from "@/lib/billing/entitlements";
+import type { PlanSection } from "@/lib/billing/entitlements";
 import { agencyPlanAllows } from "@/lib/billing/plan-gate";
 import { requireAgencyAccess } from "@/lib/tenant/require-agency-access";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 
 /**
- * Renders children only when the agency plan unlocks `section`; otherwise an
- * upgrade notice that leads to Facturación (Shopify plans open App Pricing there).
+ * Renders children only when the agency plan unlocks `section`; otherwise a calm
+ * upgrade card that leads to Facturación (Shopify plans open App Pricing there).
  */
 export async function PlanGate({
   agencySlug,
@@ -28,14 +27,8 @@ export async function PlanGate({
     : await requireAgencyAccess(agencySlug);
   if (await agencyPlanAllows(membership.agencyId, section)) return children;
 
-  return (
-    <div className="mx-auto max-w-2xl py-10">
-      <EmptyState
-        icon={<Lock className="size-8" aria-hidden />}
-        title={section === "console" ? "Elige un plan" : "Mejora tu plan"}
-        description={`${planUpgradeMessage(section)} Tus pedidos de Shopify siguen sincronizando y aparecerán aquí con el plan activo.`}
-        action={{ label: "Ver planes", href: routes.agency.billing(agencySlug) }}
-      />
-    </div>
-  );
+  // A Starter store can go back to its overview; without a plan there is nothing to go back to.
+  const backHref =
+    storeSlug && section !== "console" ? routes.store.dashboard(agencySlug, storeSlug) : undefined;
+  return <PlanUpsellCard agencySlug={agencySlug} section={section} backHref={backHref} />;
 }

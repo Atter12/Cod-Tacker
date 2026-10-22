@@ -116,7 +116,7 @@ export async function updateAgencyBranding(
 
     if (input.hideCodtrackedBranding && !planAllowsWhiteLabel(limits)) {
       throw new ValidationError(
-        "Ocultar el branding de CODTracked requiere un plan con white-label (Growth o Scale).",
+        "Ocultar el branding de CODTracked requiere el plan Scale (marca blanca).",
       );
     }
     if (input.isWhiteLabelEnabled && !planAllowsWhiteLabel(limits)) {

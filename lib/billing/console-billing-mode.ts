@@ -34,7 +34,7 @@ export function resolveConsoleBillingChrome(mode: ConsoleBillingMode): ConsoleBi
       planCtaLabel: ({ current, selfServe }) =>
         current ? "Plan actual" : !selfServe ? "Hablar con ventas" : "Elegir en Shopify",
       comparePlansHint:
-        "Límites de tiendas y pedidos en COD-tracked. El cobro self-serve se aprueba en Shopify.",
+        "Qué incluye cada plan. El cambio de plan se aprueba en Shopify y se cobra en tu factura.",
       footerNote:
         "No se almacenan tarjetas en COD-tracked. Shopify factura al merchant y sincronizamos el estado del plan.",
       invoicesEmpty:
@@ -54,9 +54,9 @@ export function resolveConsoleBillingChrome(mode: ConsoleBillingMode): ConsoleBi
       planCtaOpensShopify: false,
       planCtaLabel: ({ current, selfServe }) =>
         current ? "Plan actual" : !selfServe ? "Hablar con ventas" : "Comenzar ahora",
-      comparePlansHint: "Límites de tiendas y pedidos en COD-tracked.",
+      comparePlansHint: "Qué incluye cada plan. Puedes cambiar de plan cuando quieras.",
       footerNote:
-        "No se almacenan datos de tarjeta. Stripe Checkout / Portal gestionan el cobro. Los límites se aplican al crear tiendas e importar CSV.",
+        "No se almacenan datos de tarjeta. Stripe Checkout / Portal gestionan el cobro.",
       invoicesEmpty: "Sin facturas aún.",
       hideStripeInvoiceExpectation: false,
     };
@@ -72,7 +72,7 @@ export function resolveConsoleBillingChrome(mode: ConsoleBillingMode): ConsoleBi
     planCtaOpensShopify: false,
     planCtaLabel: ({ current, selfServe }) =>
       current ? "Plan actual" : !selfServe ? "Hablar con ventas" : "Seleccionar",
-    comparePlansHint: "Límites de tiendas y pedidos en COD-tracked (demo).",
+    comparePlansHint: "Qué incluye cada plan (demo: el cambio se aplica sin cargo).",
     footerNote: "No se almacenan datos de tarjeta. Modo demo aplica el plan al instante.",
     invoicesEmpty: "Sin facturas aún.",
     hideStripeInvoiceExpectation: false,

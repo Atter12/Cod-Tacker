@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import { Check, Minus } from "lucide-react";
 import {
   openBillingPortal,
   reactivateSubscription,
@@ -26,7 +27,83 @@ import {
   type BillingInterval,
 } from "@/lib/integrations/contracts/billing";
 import { cn } from "@/lib/utils/cn";
+import {
+  comparisonFeatures,
+  PLAN_COMPARISON_ROWS,
+  planCardHighlights,
+  SELF_SERVE_PLAN_ORDER,
+} from "@/lib/billing/plan-catalog";
 import type { BillingOverview, BillingPlanCard } from "@/services/billing.service";
+
+/** Feature × plan table for the self-serve tiers (values from the plan rows). */
+function PlanComparisonTable({
+  plans,
+  currentPlanCode,
+}: {
+  plans: BillingPlanCard[];
+  currentPlanCode: string | null;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-[12.5px]">
+            <caption className="sr-only">Comparación de funciones por plan</caption>
+            <thead>
+              <tr className="border-b border-border">
+                <th scope="col" className="px-4 py-3 font-medium text-text-secondary">
+                  Funciones
+                </th>
+                {plans.map((plan) => (
+                  <th
+                    key={plan.code}
+                    scope="col"
+                    className={cn(
+                      "px-4 py-3 text-center font-semibold text-text-primary",
+                      plan.code === currentPlanCode && "text-brand-primary",
+                    )}
+                  >
+                    {plan.name}
+                    {plan.code === currentPlanCode ? (
+                      <span className="block text-[10px] font-medium text-brand-primary">Tu plan</span>
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PLAN_COMPARISON_ROWS.map((row) => (
+                <tr key={row.label} className="border-b border-border last:border-0">
+                  <th scope="row" className="px-4 py-2.5 font-normal text-text-primary">
+                    {row.label}
+                  </th>
+                  {plans.map((plan) => {
+                    const value = row.value({
+                      store_limit: plan.store_limit,
+                      order_limit: plan.order_limit,
+                      features: comparisonFeatures(plan.features),
+                    });
+                    return (
+                      <td key={plan.code} className="px-4 py-2.5 text-center">
+                        {value === true ? (
+                          <Check className="mx-auto size-4 text-brand-primary" aria-label="Incluido" />
+                        ) : value === false ? (
+                          <Minus className="mx-auto size-4 text-text-secondary/60" aria-label="No incluido" />
+                        ) : (
+                          <span className="font-medium text-text-primary">{value}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function formatUsd(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -172,6 +249,9 @@ export function BillingPanel({
     .map(annualSavingsPercent)
     .find((n): n is number => n != null && n > 0);
   const shopifyPlansUrl = overview.shopifyPricingPlansUrl;
+  const selfServePlans = SELF_SERVE_PLAN_ORDER.map((code) =>
+    overview.availablePlans.find((plan) => plan.code === code),
+  ).filter((plan): plan is BillingPlanCard => Boolean(plan));
 
   return (
     <div className="min-w-0 space-y-6">
@@ -367,7 +447,7 @@ export function BillingPanel({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes de agencia</h3>
+            <h3 className="text-[15px] font-semibold text-text-primary">Comparar planes</h3>
             <p className="text-[12px] text-text-secondary">{chrome.comparePlansHint}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -419,14 +499,10 @@ export function BillingPanel({
             const selfServe = isSelfServePlanCode(plan.code);
             const display = planDisplayPrice(plan, interval);
             const savePct = annualSavingsPercent(plan);
-            const features = Array.isArray(plan.features)
-              ? (plan.features as unknown[])
-                  .filter((f): f is string => typeof f === "string")
-                  .slice(0, 3)
-              : [
-                  `${plan.store_limit ?? "∞"} tiendas`,
-                  `${plan.order_limit ?? "∞"} pedidos/mes`,
-                ];
+            const tierIndex = selfServePlans.findIndex((p) => p.code === plan.code);
+            const features = selfServe
+              ? planCardHighlights(plan, tierIndex > 0 ? (selfServePlans[tierIndex - 1] ?? null) : null)
+              : ["Todo lo de Scale", "Límites a medida"];
 
             const ctaLabel = chrome.planCtaLabel({ current, selfServe });
 
@@ -458,13 +534,18 @@ export function BillingPanel({
                   </div>
                   <ul className="flex-1 space-y-1 text-[12px] text-text-secondary">
                     {features.map((f) => (
-                      <li key={f}>• {f}</li>
-                    ))}
-                    {!features.includes(`${plan.store_limit ?? "∞"} tiendas`) ? (
-                      <li>
-                        • {plan.store_limit ?? "∞"} tiendas · {plan.order_limit ?? "∞"} pedidos
+                      <li key={f} className="flex gap-1.5">
+                        <Check className="mt-0.5 size-3 shrink-0 text-brand-primary" aria-hidden />
+                        <span>{f}</span>
                       </li>
-                    ) : null}
+                    ))}
+                    <li className="flex gap-1.5">
+                      <Check className="mt-0.5 size-3 shrink-0 text-brand-primary" aria-hidden />
+                      <span>
+                        {plan.store_limit ?? "∞"} {plan.store_limit === 1 ? "tienda" : "tiendas"} ·{" "}
+                        {plan.order_limit?.toLocaleString("es") ?? "∞"} pedidos/mes
+                      </span>
+                    </li>
                   </ul>
                   {canManage ? (
                     <Button
@@ -488,6 +569,9 @@ export function BillingPanel({
             );
           })}
         </div>
+        {selfServePlans.length > 1 ? (
+          <PlanComparisonTable plans={selfServePlans} currentPlanCode={limits?.planCode ?? null} />
+        ) : null}
         <p className="text-xs text-text-secondary">{chrome.footerNote}</p>
       </div>
 

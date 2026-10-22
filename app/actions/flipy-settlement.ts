@@ -29,7 +29,7 @@ export async function syncFlipySettlements(input: {
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     if (!can(membership.roles, "reconciliation.manage") && !can(membership.roles, "integrations.manage")) {
       throw new ValidationError("No tienes permiso para sincronizar conciliación Flipy.");
     }

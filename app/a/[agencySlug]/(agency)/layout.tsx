@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackToStoreButton } from "@/components/layout/BackToStoreButton";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
+import { agencyNavigation } from "@/config/navigation";
 import { routes } from "@/config/routes";
 import { getProfile } from "@/lib/auth/get-profile";
+import { lockedNavHrefs } from "@/lib/billing/entitlements";
+import { getAgencyEntitlements } from "@/lib/billing/plan-gate";
 import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveTenantPreference } from "@/lib/tenant/active-tenant-cookie";
@@ -51,7 +54,15 @@ export default async function AgencyConsoleLayout({
     getActiveTenantPreference(),
     createClient(),
   ]);
-  const brand = await getAgencyBrandTheme(client, membership.agencyId);
+  const [brand, { entitlements }] = await Promise.all([
+    getAgencyBrandTheme(client, membership.agencyId),
+    getAgencyEntitlements(membership.agencyId),
+  ]);
+  const lockedAgencyNav = lockedNavHrefs(
+    "agency",
+    entitlements,
+    agencyNavigation.map((item) => item.href),
+  );
   const agencyStores = stores.filter((store) => store.agencySlug === agencySlug);
   const agencyName = agencyStores[0]?.agencyName ?? agencySlug;
   const tenants = agencyStores.map((store) => ({
@@ -78,6 +89,7 @@ export default async function AgencyConsoleLayout({
       breadcrumbs={[{ label: agencyName, href: routes.agency.overview(agencySlug) }]}
       roles={membership.roles}
       brand={brand}
+      lockedNavHrefs={lockedAgencyNav}
       user={{
         name: profile?.full_name ?? undefined,
         email: user.email ?? profile?.email ?? undefined,

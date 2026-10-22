@@ -14,6 +14,8 @@ import { can } from "@/lib/permissions/can";
 import { logger } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
+import { integrationProviderPlanSection, type PlanSection } from "@/lib/billing/entitlements";
+import { getAgencyEntitlements } from "@/lib/billing/plan-gate";
 import { listIntegrationOverviews } from "@/services/integrations.service";
 
 export default async function IntegrationsPage({
@@ -68,6 +70,13 @@ export default async function IntegrationsPage({
     );
   }
 
+  const { entitlements } = await getAgencyEntitlements(member.agencyId);
+  const lockedProviders: Record<string, PlanSection> = {};
+  for (const item of items) {
+    const section = integrationProviderPlanSection(item.provider);
+    if (section && !entitlements.sections[section]) lockedProviders[item.provider] = section;
+  }
+
   const configuredItems = items.filter(isConfiguredOverviewItem);
   const availableProviders = items.filter(isAvailableCatalogItem);
 
@@ -88,6 +97,7 @@ export default async function IntegrationsPage({
             items={configuredItems}
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}
+            lockedProviders={lockedProviders}
           />
         ) : (
           <IntegrationsEmptyState
@@ -107,6 +117,7 @@ export default async function IntegrationsPage({
             description="Proveedores listos para conectar en esta tienda."
           />
           <IntegrationCatalogGrid
+            lockedProviders={lockedProviders}
             items={availableProviders}
             agencySlug={p.agencySlug}
             storeSlug={p.storeSlug}

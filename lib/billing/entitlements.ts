@@ -114,15 +114,47 @@ export function storePathPlanSection(subpath: string): PlanSection | null {
   return null;
 }
 
-/** Store nav hrefs the plan does not unlock (shown with a lock, still linkable). */
-export function lockedStoreNavHrefs(
+/**
+ * Integration detail pages that only make sense with a plan. Shopify, ads and
+ * couriers stay connectable without one (connecting is how setup starts).
+ */
+export function integrationProviderPlanSection(provider: string): PlanSection | null {
+  if (provider === "flipy") return "console";
+  if (provider === "whatsapp") return "whatsapp";
+  return null;
+}
+
+/** Agency console paths (after `/a/[agencySlug]`) gated by plan. */
+export function agencyPathPlanSection(subpath: string): PlanSection | null {
+  return subpath === "/api-keys" || subpath.startsWith("/api-keys/") ? "api" : null;
+}
+
+export function navPathPlanSection(
+  scope: "store" | "agency" | "admin",
+  href: string,
+): PlanSection | null {
+  if (scope === "store") return storePathPlanSection(href);
+  if (scope === "agency") return agencyPathPlanSection(href);
+  return null;
+}
+
+/** Nav hrefs the plan does not unlock (shown with a plan pill, still linkable). */
+export function lockedNavHrefs(
+  scope: "store" | "agency",
   entitlements: PlanEntitlements,
   hrefs: readonly string[],
 ): string[] {
   return hrefs.filter((href) => {
-    const section = storePathPlanSection(href);
+    const section = navPathPlanSection(scope, href);
     return section !== null && !entitlements.sections[section];
   });
+}
+
+export function lockedStoreNavHrefs(
+  entitlements: PlanEntitlements,
+  hrefs: readonly string[],
+): string[] {
+  return lockedNavHrefs("store", entitlements, hrefs);
 }
 
 export type MonthlyOrderUsage = {
