@@ -2,14 +2,21 @@ import type { BillingInterval } from "@/lib/integrations/contracts/billing";
 import { shopifyHandleToPlanCode } from "@/lib/billing/shopify-plans";
 import type { Enums } from "@/types/database.generated";
 
-export type ShopifyActiveSubscriptionSnapshot = {
-  billingPeriod: string | null;
-  cancelAtEndOfCycle: boolean;
-  trialEndsAt: string | null;
-  currentBillingCycle: { startTime: string | null; endTime: string | null } | null;
-  items: Array<{ handle: string | null }>;
-  pendingUpdate: { items: Array<{ handle: string | null }> } | null;
-  legacySubscriptionId: string | null;
+/**
+ * One AppSubscription from the Admin API
+ * (`currentAppInstallation.activeSubscriptions`), read with the shop's own token.
+ */
+export type ShopifyAppSubscriptionSnapshot = {
+  id: string;
+  /** Plan name shown on Shopify's pricing page (Starter / Growth / Scale). */
+  name: string;
+  /** ACTIVE | FROZEN | PENDING | ACCEPTED | CANCELLED | DECLINED | EXPIRED */
+  status: string;
+  createdAt: string | null;
+  currentPeriodEnd: string | null;
+  trialDays: number | null;
+  /** AppPricingInterval of the recurring line item (EVERY_30_DAYS | ANNUAL). */
+  interval: string | null;
 };
 
 export type MappedShopifySubscription = {
@@ -23,7 +30,7 @@ export type MappedShopifySubscription = {
   providerSubscriptionId: string;
 };
 
-/** Map Partner AppPricingInterval → local billing interval. */
+/** Map AppPricingInterval → local billing interval. */
 export function mapShopifyBillingPeriod(
   billingPeriod: string | null | undefined,
 ): BillingInterval | null {
@@ -48,44 +55,57 @@ export function mapShopifyBillingPeriod(
   return null;
 }
 
-export function pickShopifyPlanHandle(
-  snapshot: Pick<ShopifyActiveSubscriptionSnapshot, "items" | "pendingUpdate">,
-): string | null {
-  for (const item of snapshot.items) {
-    const handle = item.handle?.trim();
-    if (handle) return handle;
-  }
-  for (const item of snapshot.pendingUpdate?.items ?? []) {
-    const handle = item.handle?.trim();
-    if (handle) return handle;
+/**
+ * App Pricing exposes the plan by its display name, not its handle.
+ * "Growth", " growth ", "Plan Growth" → growth (handles default to the plan codes).
+ */
+export function shopifyPlanNameToPlanCode(name: string | null | undefined): string | null {
+  const normalized = (name ?? "").trim().toLowerCase().replace(/^plan\s+/, "");
+  if (!normalized) return null;
+  return shopifyHandleToPlanCode(normalized);
+}
+
+/** Statuses that keep the app paid: ACTIVE, and FROZEN (store on hold, Shopify retries). */
+const PAID_STATUSES = ["ACTIVE", "FROZEN"] as const;
+
+/** The subscription that decides the plan: ACTIVE first, then FROZEN. */
+export function pickCurrentAppSubscription(
+  subscriptions: readonly ShopifyAppSubscriptionSnapshot[],
+): ShopifyAppSubscriptionSnapshot | null {
+  for (const status of PAID_STATUSES) {
+    const match = subscriptions.find((sub) => sub.status.toUpperCase() === status);
+    if (match) return match;
   }
   return null;
 }
 
-export function mapShopifyActiveSubscription(
-  snapshot: ShopifyActiveSubscriptionSnapshot,
-  input: { shopGid: string; now?: Date } = { shopGid: "" },
+function addDaysIso(iso: string, days: number): string | null {
+  const start = Date.parse(iso);
+  if (!Number.isFinite(start)) return null;
+  return new Date(start + days * 86_400_000).toISOString();
+}
+
+export function mapShopifyAppSubscription(
+  snapshot: ShopifyAppSubscriptionSnapshot,
+  input: { now?: Date } = {},
 ): MappedShopifySubscription {
   const now = input.now ?? new Date();
-  const trialEndsAt = snapshot.trialEndsAt;
-  const trialActive =
-    Boolean(trialEndsAt) && Number.isFinite(Date.parse(trialEndsAt!)) && Date.parse(trialEndsAt!) > now.getTime();
-
-  const planHandle = pickShopifyPlanHandle(snapshot);
-  const planCode = planHandle ? shopifyHandleToPlanCode(planHandle) : null;
-
-  const providerSubscriptionId =
-    snapshot.legacySubscriptionId?.trim() ||
-    `shopify-app-pricing:${input.shopGid || "unknown"}`;
+  const trialEndsAt =
+    snapshot.trialDays && snapshot.trialDays > 0 && snapshot.createdAt
+      ? addDaysIso(snapshot.createdAt, snapshot.trialDays)
+      : null;
+  const trialActive = trialEndsAt !== null && Date.parse(trialEndsAt) > now.getTime();
+  const frozen = snapshot.status.toUpperCase() === "FROZEN";
 
   return {
-    status: trialActive ? "trialing" : "active",
-    planCode,
-    billingInterval: mapShopifyBillingPeriod(snapshot.billingPeriod),
-    cancelAtPeriodEnd: Boolean(snapshot.cancelAtEndOfCycle),
-    currentPeriodStart: snapshot.currentBillingCycle?.startTime ?? null,
-    currentPeriodEnd: snapshot.currentBillingCycle?.endTime ?? null,
+    status: frozen ? "past_due" : trialActive ? "trialing" : "active",
+    planCode: shopifyPlanNameToPlanCode(snapshot.name),
+    billingInterval: mapShopifyBillingPeriod(snapshot.interval),
+    // The Admin API has no "cancel at end of cycle" flag; cancelling ends the subscription.
+    cancelAtPeriodEnd: false,
+    currentPeriodStart: null,
+    currentPeriodEnd: snapshot.currentPeriodEnd,
     trialEndsAt,
-    providerSubscriptionId,
+    providerSubscriptionId: snapshot.id,
   };
 }

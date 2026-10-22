@@ -3,7 +3,7 @@
  *
  *   npm run smoke:app-pricing
  *
- * Does not call Partner API or mutate data. Prints a Partner/manual checklist.
+ * Does not call Shopify or mutate data. Prints a Partner/manual checklist.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -39,9 +39,6 @@ const gates = evaluateAppStoreBillingGates({
 
 const envChecks = [
   { id: "SHOPIFY_APP_HANDLE", ok: envReady("SHOPIFY_APP_HANDLE") },
-  { id: "SHOPIFY_APP_GID", ok: envReady("SHOPIFY_APP_GID") },
-  { id: "SHOPIFY_PARTNER_ORG_ID", ok: envReady("SHOPIFY_PARTNER_ORG_ID") },
-  { id: "SHOPIFY_PARTNER_API_TOKEN", ok: envReady("SHOPIFY_PARTNER_API_TOKEN") },
   { id: "SHOPIFY_CLIENT_ID", ok: envReady("SHOPIFY_CLIENT_ID") },
   {
     id: "PRODUCT_APP_URL_or_fallback",

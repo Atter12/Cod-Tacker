@@ -44,7 +44,7 @@ async function pricingPlansUrlForAgency(agencyId: string): Promise<string> {
 /**
  * Shopify App Pricing adapter.
  * Does not create charges in code — redirects to Shopify's hosted plan page.
- * Subscription sync (Partner API) lands in a later phase.
+ * Plan state syncs with the shop token (lib/billing/shopify-subscription-sync.ts).
  */
 export function createShopifyBillingProvider(): BillingProvider {
   return {

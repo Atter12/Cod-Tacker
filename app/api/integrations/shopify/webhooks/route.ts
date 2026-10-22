@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
  * Topics:
  * - orders/create, orders/updated (enqueue jobs)
  * - customers/data_request, customers/redact, shop/redact (GDPR: HMAC + 200 + log)
+ * - app_subscriptions/update (re-sync the App Pricing plan with the shop token)
  * Auth: X-Shopify-Hmac-Sha256 over raw body using SHOPIFY_CLIENT_SECRET.
  * After a successful order enqueue, drains a small job batch so orders land without waiting for cron.
  */

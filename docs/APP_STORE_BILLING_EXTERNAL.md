@@ -12,7 +12,8 @@ Implementación por fases: [SHOPIFY_APP_PRICING.md](./SHOPIFY_APP_PRICING.md).
 - [ ] Welcome link = `https://app.codtracked.com/embed`.
 - [ ] URLs: `application_url` = `https://app.codtracked.com/embed`, `embedded = true`, OAuth callback y compliance webhooks alineados con [`shopify.app.toml`](../shopify.app.toml).
 - [ ] Scopes Partner = toml + `SHOPIFY_SCOPES`.
-- [ ] Env prod: `SHOPIFY_APP_HANDLE`, `SHOPIFY_APP_GID`, `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN`.
+- [ ] Env prod: `SHOPIFY_APP_HANDLE` (el plan se sincroniza con el token de cada tienda; no hace falta Partner API).
+- [ ] `shopify app deploy` publicado con el webhook `app_subscriptions/update` de `shopify.app.toml`.
 - [ ] Host producto: `PRODUCT_APP_URL=https://cod.codtracked.com` (Facturación Stripe legado fuera de `app.*`).
 
 Copy listing (ajuste):
@@ -80,8 +81,7 @@ Manual:
 
 | Variable | Uso |
 | --- | --- |
-| `SHOPIFY_APP_HANDLE` / `SHOPIFY_APP_GID` | Planes + Partner query |
-| `SHOPIFY_PARTNER_ORG_ID` / `SHOPIFY_PARTNER_API_TOKEN` | Sync `activeSubscription` |
+| `SHOPIFY_APP_HANDLE` | URL de la página de planes de Shopify |
 | `BILLING_PROVIDER` | `shopify` \| `stripe` \| `demo` |
 | `PRODUCT_APP_URL` | Consola / Stripe legado |
 | `FLIPY_EMBED_ORIGIN` | Dominio de Flipy para la recarga (no `*.vercel.app`) |

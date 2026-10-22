@@ -3,13 +3,12 @@ import "server-only";
 import { mergeSubscriptionBillingMetadata } from "@/lib/billing/subscription-metadata";
 import { normalizeShopifyShopGid } from "@/lib/billing/shopify-gids";
 import {
-  getShopifyPartnerEnv,
-  isShopifyPartnerApiConfigured,
-} from "@/lib/billing/shopify-partner-env";
-import { mapShopifyActiveSubscription } from "@/lib/billing/shopify-subscription-map";
-import { fetchShopifyShopInfo } from "@/lib/integrations/shopify/admin-api";
+  mapShopifyAppSubscription,
+  pickCurrentAppSubscription,
+} from "@/lib/billing/shopify-subscription-map";
+import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
+import { fetchShopifyAppSubscriptions } from "@/lib/integrations/shopify/app-subscription";
 import { ensureShopifyAccessToken } from "@/lib/integrations/shopify/credentials";
-import { fetchShopifyActiveSubscription } from "@/lib/integrations/shopify/partner-api";
 import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DatabaseClient } from "@/services/_shared";
@@ -60,79 +59,73 @@ async function loadAgencySubscription(
   return data;
 }
 
-async function resolveShopGid(
+/** Connected Shopify integration of the agency's store for this shop (token holder). */
+async function loadShopIntegration(
   admin: DatabaseClient,
-  input: { agencyId: string; shopDomain: string; shopGid?: string | null },
-): Promise<string | null> {
-  const hinted = input.shopGid ? normalizeShopifyShopGid(input.shopGid) : null;
-  if (hinted) return hinted;
-
-  const { data: integration } = await admin
-    .from("integrations")
-    .select("id, agency_id, store_id, external_account_id, secret_reference, settings, metadata")
+  input: { agencyId: string; shopDomain: string },
+) {
+  const { data: store, error: storeError } = await admin
+    .from("stores")
+    .select("id")
     .eq("agency_id", input.agencyId)
-    .eq("provider", "shopify")
-    .eq("status", "connected")
-    .order("connected_at", { ascending: false })
+    .eq("shopify_shop_domain", input.shopDomain)
     .limit(1)
     .maybeSingle();
+  if (storeError) throw storeError;
+  if (!store) return null;
 
-  const fromRow = integration?.external_account_id
-    ? normalizeShopifyShopGid(integration.external_account_id)
-    : null;
-  if (fromRow) return fromRow;
-
-  if (!integration?.secret_reference) return null;
-
-  try {
-    const accessToken = await ensureShopifyAccessToken(admin, integration, input.shopDomain);
-    const shopInfo = await fetchShopifyShopInfo(input.shopDomain, accessToken);
-    const gid = normalizeShopifyShopGid(shopInfo.id);
-    if (gid) {
-      await admin
-        .from("integrations")
-        .update({
-          external_account_id: shopInfo.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", integration.id);
-    }
-    return gid;
-  } catch {
+  const { data: integration, error } = await admin
+    .from("integrations")
+    .select("id, agency_id, store_id, external_account_id, secret_reference, status, settings, metadata")
+    .eq("agency_id", input.agencyId)
+    .eq("store_id", store.id)
+    .eq("provider", "shopify")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (
+    !integration ||
+    integration.status === "disconnected" ||
+    integration.status === "revoked" ||
+    !isEncryptedSecretRef(integration.secret_reference)
+  ) {
     return null;
   }
+  return integration;
 }
 
 /**
- * Pull Shopify App Pricing state into local `subscriptions`.
- * Never overwrites a Stripe (or other non-shopify) paid subscription.
+ * Pull this app's Shopify App Pricing subscription into local `subscriptions`,
+ * reading `currentAppInstallation.activeSubscriptions` with the shop's own token
+ * (Admin API). Shopify is the only paid provider, so it replaces demo or retired
+ * Stripe rows. Runs on install, from "Sincronizar estado", on the
+ * app_subscriptions/update webhook and from the cron sweep.
  */
 export async function syncShopifyAppPricingForAgency(input: {
   agencyId: string;
   shopDomain: string;
+  /** Shop GID when the caller already has it; stored as provider_customer_id. */
   shopGid?: string | null;
   admin?: DatabaseClient;
 }): Promise<ShopifySubscriptionSyncResult> {
-  if (!isShopifyPartnerApiConfigured()) {
-    return { kind: "skipped", reason: "partner_api_not_configured" };
-  }
-
   const admin = input.admin ?? createAdminClient();
-  const existing = await loadAgencySubscription(admin, input.agencyId);
-  // Shopify App Pricing is the only paid provider: it replaces demo or retired Stripe rows.
-
-  const shopGid = await resolveShopGid(admin, input);
-  if (!shopGid) {
-    return { kind: "skipped", reason: "missing_shop_gid" };
+  const integration = await loadShopIntegration(admin, input);
+  if (!integration) {
+    return { kind: "skipped", reason: "shopify_not_connected" };
   }
 
-  const partner = getShopifyPartnerEnv()!;
-  const remote = await fetchShopifyActiveSubscription({
-    appGid: partner.appGid,
-    shopGid,
-    env: partner,
-  });
+  const accessToken = await ensureShopifyAccessToken(admin, integration, input.shopDomain);
+  const current = pickCurrentAppSubscription(
+    await fetchShopifyAppSubscriptions(input.shopDomain, accessToken),
+  );
 
+  const existing = await loadAgencySubscription(admin, input.agencyId);
+  const shopGid =
+    (input.shopGid ? normalizeShopifyShopGid(input.shopGid) : null) ??
+    (integration.external_account_id
+      ? normalizeShopifyShopGid(integration.external_account_id)
+      : null);
   const prevMeta =
     existing?.metadata &&
     typeof existing.metadata === "object" &&
@@ -140,7 +133,7 @@ export async function syncShopifyAppPricingForAgency(input: {
       ? (existing.metadata as Record<string, unknown>)
       : {};
 
-  if (!remote) {
+  if (!current) {
     if (!existing || existing.billing_provider !== "shopify") {
       return { kind: "unchanged", reason: "no_active_shopify_subscription" };
     }
@@ -148,10 +141,9 @@ export async function syncShopifyAppPricingForAgency(input: {
     const metadata = mergeSubscriptionBillingMetadata({
       previous: prevMeta,
       status: "cancelled",
-      sourceEvent: "shopify.activeSubscription.null",
+      sourceEvent: "shopify.currentAppInstallation.none",
       currentPeriodEnd: null,
     });
-    metadata.shopify_shop_gid = shopGid;
     metadata.shopify_shop_domain = input.shopDomain;
 
     const { error } = await admin
@@ -168,41 +160,37 @@ export async function syncShopifyAppPricingForAgency(input: {
     return { kind: "cleared", subscriptionId: existing.id };
   }
 
-  const mapped = mapShopifyActiveSubscription(remote, { shopGid });
-  let planId = existing?.plan_id ?? null;
-  if (mapped.planCode) {
-    const { data: plan } = await admin
-      .from("plans")
-      .select("id")
-      .eq("code", mapped.planCode)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!plan?.id) {
-      return { kind: "skipped", reason: `unknown_plan_${mapped.planCode}` };
-    }
-    planId = plan.id;
+  const mapped = mapShopifyAppSubscription(current);
+  if (!mapped.planCode) {
+    return { kind: "skipped", reason: `unknown_plan_name_${current.name || "empty"}` };
   }
-  if (!planId) {
-    return { kind: "skipped", reason: "missing_plan_id" };
+  const { data: plan } = await admin
+    .from("plans")
+    .select("id")
+    .eq("code", mapped.planCode)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!plan?.id) {
+    return { kind: "skipped", reason: `unknown_plan_${mapped.planCode}` };
   }
 
   const metadata = mergeSubscriptionBillingMetadata({
     previous: prevMeta,
     status: mapped.status,
     billingInterval: mapped.billingInterval,
-    sourceEvent: "shopify.activeSubscription",
+    sourceEvent: "shopify.currentAppInstallation",
     currentPeriodEnd: mapped.currentPeriodEnd,
   });
-  metadata.shopify_shop_gid = shopGid;
+  if (shopGid) metadata.shopify_shop_gid = shopGid;
   metadata.shopify_shop_domain = input.shopDomain;
-  metadata.shopify_plan_handle = pickHandle(remote);
+  metadata.shopify_plan_name = current.name;
 
   const row = {
     agency_id: input.agencyId,
-    plan_id: planId,
+    plan_id: plan.id,
     status: mapped.status,
     billing_provider: "shopify",
-    provider_customer_id: shopGid,
+    provider_customer_id: shopGid ?? input.shopDomain,
     provider_subscription_id: mapped.providerSubscriptionId,
     cancel_at_period_end: mapped.cancelAtPeriodEnd,
     current_period_start: mapped.currentPeriodStart,
@@ -239,17 +227,6 @@ export async function syncShopifyAppPricingForAgency(input: {
   };
 }
 
-function pickHandle(remote: {
-  items: Array<{ handle: string | null }>;
-  pendingUpdate: { items: Array<{ handle: string | null }> } | null;
-}): string | null {
-  return (
-    remote.items.find((i) => i.handle)?.handle ??
-    remote.pendingUpdate?.items.find((i) => i.handle)?.handle ??
-    null
-  );
-}
-
 /** Best-effort sync; never throws to callers that must stay available (embed). */
 export async function syncShopifyAppPricingForAgencySafe(
   input: Parameters<typeof syncShopifyAppPricingForAgency>[0],
@@ -269,8 +246,29 @@ export async function syncShopifyAppPricingForAgencySafe(
   }
 }
 
+/** Sync the agency that owns this shop (app_subscriptions/update webhook). */
+export async function syncShopifyAppPricingForShop(input: {
+  shopDomain: string;
+  admin?: DatabaseClient;
+}): Promise<ShopifySubscriptionSyncResult> {
+  const admin = input.admin ?? createAdminClient();
+  const { data: store, error } = await admin
+    .from("stores")
+    .select("agency_id")
+    .eq("shopify_shop_domain", input.shopDomain)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!store?.agency_id) return { kind: "skipped", reason: "shop_not_linked" };
+  return syncShopifyAppPricingForAgencySafe({
+    agencyId: store.agency_id,
+    shopDomain: input.shopDomain,
+    admin,
+  });
+}
+
 /**
- * Reconcile App Pricing for connected Shopify stores (cron).
+ * Reconcile App Pricing for connected Shopify stores (cron safety net behind the webhook).
  */
 export async function sweepShopifyAppPricingSubscriptions(
   admin: DatabaseClient = createAdminClient(),
@@ -285,10 +283,6 @@ export async function sweepShopifyAppPricingSubscriptions(
     errors: 0,
     results: [],
   };
-
-  if (!isShopifyPartnerApiConfigured()) {
-    return result;
-  }
 
   const { data: stores, error } = await admin
     .from("stores")

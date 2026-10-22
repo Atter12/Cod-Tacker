@@ -6,7 +6,6 @@ import "server-only";
  *   BILLING_PROVIDER=demo|stripe|shopify  — default demo (mock plan changes)
  *   Shopify App Pricing (Partner-hosted plans): see docs/SHOPIFY_APP_PRICING.md
  *     SHOPIFY_APP_HANDLE, SHOPIFY_PLAN_HANDLE_STARTER|GROWTH|SCALE
- *     SHOPIFY_PARTNER_ORG_ID, SHOPIFY_PARTNER_API_TOKEN, SHOPIFY_APP_GID
  *   STRIPE_SECRET_KEY              — sk_live_… (or sk_test_… if only testing)
  *   STRIPE_WEBHOOK_SECRET          — whsec_… (live endpoint)
  *   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY — pk_… (optional until Elements/UI needs it)

@@ -34,10 +34,6 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `BILLING_PROVIDER` | Server only | `demo` (default, local) or `shopify` (App Pricing, prod). `stripe` is retired: agencies resolve to Shopify App Pricing. Independent of `INTEGRATION_MODE`. See [SHOPIFY_APP_PRICING.md](./SHOPIFY_APP_PRICING.md). |
 | `SHOPIFY_APP_HANDLE` | Server only | App handle for hosted plan URLs (`admin.shopify.com/.../charges/{handle}/pricing_plans`). Required when `BILLING_PROVIDER=shopify`. |
 | `SHOPIFY_PLAN_HANDLE_STARTER` / `_GROWTH` / `_SCALE` | Server only | Optional Partner plan_handle overrides; default equals `plans.code`. |
-| `SHOPIFY_PARTNER_ORG_ID` | Server only | Partner organization id for App Pricing `activeSubscription` sync. |
-| `SHOPIFY_PARTNER_API_TOKEN` | Server only | Partner API client token (Manage apps). Never `NEXT_PUBLIC_*`. |
-| `SHOPIFY_APP_GID` | Server only | `gid://shopify/App/{id}` (or numeric app id) for Partner queries. |
-| `SHOPIFY_PARTNER_API_VERSION` | Server only | Partner GraphQL version; default `2026-07`. |
 | `STRIPE_SECRET_KEY` | Server only | Stripe **live** secret key (`sk_live_…`). Required when `BILLING_PROVIDER=stripe`. |
 | `STRIPE_WEBHOOK_SECRET` | Server only | Live webhook signing secret (`whsec_…`) for `/api/billing/webhooks/stripe`. |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Public | Optional until client-side Stripe Elements are used. |
@@ -51,7 +47,7 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 
 Webhook URL (Stripe Dashboard — register in **both** Live and Test): `{PRODUCT_APP_URL}/api/billing/webhooks/stripe` once the product host is live. Until then it stays on the host that already receives Stripe. The app host (`SHOPIFY_APP_URL`) redirects every path except the Shopify connector, so a webhook still pointed at `app.codtracked.com` will not be delivered after the split.
 
-Shopify App Pricing does not use this Stripe webhook; subscription state will sync via Partner API (phase 2).
+Shopify App Pricing does not use this Stripe webhook; plan state syncs with each shop's token (Admin API `currentAppInstallation.activeSubscriptions`) on install, on the `app_subscriptions/update` webhook and from the billing cron. No Partner API token is needed.
 
 `scripts/test-rls.mjs` uses separate `SUPABASE_URL` and `ANON_KEY` variables so its purpose is explicit. See [RLS_TESTING.md](./RLS_TESTING.md).
 

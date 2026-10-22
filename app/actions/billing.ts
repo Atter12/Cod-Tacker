@@ -201,9 +201,21 @@ export async function reactivateSubscription(agencySlug: string): Promise<Billin
   }
 }
 
-/**
- * Pull latest Shopify App Pricing state into local subscriptions (console dual billing).
- */
+/** Merchant-facing reason when "Sincronizar estado" changes nothing. */
+function shopifySyncSkipDetail(reason: string): string {
+  if (reason === "no_active_shopify_subscription") {
+    return "Shopify todavía no tiene un plan aprobado para esta tienda. Elige uno en Shopify.";
+  }
+  if (reason === "shopify_not_connected") {
+    return "La tienda Shopify no está conectada. Reconéctala en Integraciones.";
+  }
+  if (reason.startsWith("unknown_plan")) {
+    return "El plan aprobado en Shopify no coincide con Starter, Growth o Scale. Revisa los nombres de los planes.";
+  }
+  return `Sin cambios (${reason}).`;
+}
+
+/** Pull the shop's Shopify App Pricing subscription into local subscriptions. */
 export async function refreshShopifyBillingStatus(
   agencySlug: string,
 ): Promise<ActionResult<{ synced: boolean; detail: string }>> {
@@ -211,13 +223,6 @@ export async function refreshShopifyBillingStatus(
     const user = await requireUser();
     const membership = await requireAgencyAccess(agencySlug);
     assertBillingManage(membership.roles);
-
-    const providerId = await resolveAgencyBillingProviderId(membership.agencyId);
-    if (providerId === "stripe") {
-      throw new ValidationError(
-        "Esta agencia factura con Stripe. No se sincroniza App Pricing sobre una suscripción Stripe.",
-      );
-    }
 
     const client = await createClient();
     const { data: store } = await client
@@ -265,13 +270,7 @@ export async function refreshShopifyBillingStatus(
         detail: "Shopify ya no tiene contrato activo; la suscripción local quedó cancelada.",
       });
     }
-    return actionOk({
-      synced: false,
-      detail:
-        "reason" in result
-          ? `Sin cambios (${result.reason}).`
-          : "Sin cambios en el estado del plan.",
-    });
+    return actionOk({ synced: false, detail: shopifySyncSkipDetail(result.reason) });
   } catch (error) {
     return actionFail(error);
   }

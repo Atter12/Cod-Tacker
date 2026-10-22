@@ -1,84 +1,109 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
-  mapShopifyActiveSubscription,
+  mapShopifyAppSubscription,
   mapShopifyBillingPeriod,
-  pickShopifyPlanHandle,
+  pickCurrentAppSubscription,
+  shopifyPlanNameToPlanCode,
+  type ShopifyAppSubscriptionSnapshot,
 } from "@/lib/billing/shopify-subscription-map";
-import { normalizeShopifyAppGid, normalizeShopifyShopGid } from "@/lib/billing/shopify-gids";
+import { normalizeShopifyShopGid } from "@/lib/billing/shopify-gids";
 
-describe("shopify partner gids", () => {
-  it("normalizes app and shop gids", () => {
-    assert.equal(normalizeShopifyAppGid("1234"), "gid://shopify/App/1234");
-    assert.equal(normalizeShopifyAppGid("gid://shopify/App/99"), "gid://shopify/App/99");
+function sub(overrides: Partial<ShopifyAppSubscriptionSnapshot> = {}): ShopifyAppSubscriptionSnapshot {
+  return {
+    id: "gid://shopify/AppSubscription/1",
+    name: "Growth",
+    status: "ACTIVE",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    currentPeriodEnd: "2026-11-01T00:00:00.000Z",
+    trialDays: 0,
+    interval: "EVERY_30_DAYS",
+    ...overrides,
+  };
+}
+
+describe("shopify gids", () => {
+  it("normalizes shop gids", () => {
     assert.equal(normalizeShopifyShopGid("5678"), "gid://shopify/Shop/5678");
     assert.equal(normalizeShopifyShopGid("gid://shopify/Shop/1"), "gid://shopify/Shop/1");
     assert.equal(normalizeShopifyShopGid("nope"), null);
   });
 });
 
-describe("shopify subscription mapping", () => {
+describe("shopify App Pricing subscription (Admin API)", () => {
   it("maps billing periods", () => {
     assert.equal(mapShopifyBillingPeriod("EVERY_30_DAYS"), "month");
     assert.equal(mapShopifyBillingPeriod("ANNUAL"), "year");
     assert.equal(mapShopifyBillingPeriod("weird"), null);
   });
 
-  it("picks plan handle from items then pending update", () => {
-    assert.equal(
-      pickShopifyPlanHandle({
-        items: [{ handle: "growth" }],
-        pendingUpdate: { items: [{ handle: "scale" }] },
-      }),
-      "growth",
-    );
-    assert.equal(
-      pickShopifyPlanHandle({
-        items: [{ handle: null }],
-        pendingUpdate: { items: [{ handle: "starter" }] },
-      }),
-      "starter",
-    );
+  it("maps plan display names to plan codes", () => {
+    assert.equal(shopifyPlanNameToPlanCode("Starter"), "starter");
+    assert.equal(shopifyPlanNameToPlanCode(" growth "), "growth");
+    assert.equal(shopifyPlanNameToPlanCode("Plan Scale"), "scale");
+    assert.equal(shopifyPlanNameToPlanCode("Conector"), null);
+    assert.equal(shopifyPlanNameToPlanCode(""), null);
   });
 
-  it("maps active trial and paid contracts", () => {
-    const future = new Date(Date.now() + 86400000).toISOString();
-    const trial = mapShopifyActiveSubscription(
-      {
-        billingPeriod: "EVERY_30_DAYS",
-        cancelAtEndOfCycle: false,
-        trialEndsAt: future,
-        currentBillingCycle: null,
-        items: [{ handle: "starter" }],
-        pendingUpdate: null,
-        legacySubscriptionId: "gid://shopify/AppSubscription/1",
-      },
-      { shopGid: "gid://shopify/Shop/9", now: new Date() },
+  it("picks the active subscription, then a frozen one", () => {
+    assert.equal(pickCurrentAppSubscription([]), null);
+    assert.equal(
+      pickCurrentAppSubscription([sub({ id: "a", status: "FROZEN" }), sub({ id: "b" })])?.id,
+      "b",
     );
-    assert.equal(trial.status, "trialing");
-    assert.equal(trial.planCode, "starter");
-    assert.equal(trial.billingInterval, "month");
-    assert.equal(trial.providerSubscriptionId, "gid://shopify/AppSubscription/1");
+    assert.equal(pickCurrentAppSubscription([sub({ id: "c", status: "FROZEN" })])?.id, "c");
+    assert.equal(pickCurrentAppSubscription([sub({ status: "PENDING" })]), null);
+  });
 
-    const paid = mapShopifyActiveSubscription(
-      {
-        billingPeriod: "ANNUAL",
-        cancelAtEndOfCycle: true,
-        trialEndsAt: null,
-        currentBillingCycle: {
-          startTime: "2026-01-01T00:00:00Z",
-          endTime: "2027-01-01T00:00:00Z",
-        },
-        items: [{ handle: "scale" }],
-        pendingUpdate: null,
-        legacySubscriptionId: null,
-      },
-      { shopGid: "gid://shopify/Shop/9" },
+  it("maps a paid monthly plan", () => {
+    const mapped = mapShopifyAppSubscription(sub(), { now: new Date("2026-10-15T00:00:00Z") });
+    assert.equal(mapped.status, "active");
+    assert.equal(mapped.planCode, "growth");
+    assert.equal(mapped.billingInterval, "month");
+    assert.equal(mapped.currentPeriodEnd, "2026-11-01T00:00:00.000Z");
+    assert.equal(mapped.providerSubscriptionId, "gid://shopify/AppSubscription/1");
+    assert.equal(mapped.trialEndsAt, null);
+  });
+
+  it("maps an annual plan in trial", () => {
+    const mapped = mapShopifyAppSubscription(
+      sub({ name: "Scale", interval: "ANNUAL", trialDays: 14 }),
+      { now: new Date("2026-10-05T00:00:00Z") },
     );
-    assert.equal(paid.status, "active");
-    assert.equal(paid.planCode, "scale");
-    assert.equal(paid.billingInterval, "year");
-    assert.equal(paid.cancelAtPeriodEnd, true);
-    assert.equal(paid.providerSubscriptionId, "shopify-app-pricing:gid://shopify/Shop/9");
+    assert.equal(mapped.status, "trialing");
+    assert.equal(mapped.planCode, "scale");
+    assert.equal(mapped.billingInterval, "year");
+    assert.equal(mapped.trialEndsAt, "2026-10-15T00:00:00.000Z");
+  });
+
+  it("maps a frozen subscription to past_due", () => {
+    assert.equal(mapShopifyAppSubscription(sub({ status: "FROZEN" })).status, "past_due");
+  });
+});
+
+describe("plan sync without the Partner API", () => {
+  const ROOT = process.cwd();
+
+  it("reads the plan with the shop token (Admin API)", () => {
+    const sync = readFileSync(resolve(ROOT, "lib/billing/shopify-subscription-sync.ts"), "utf8");
+    assert.match(sync, /fetchShopifyAppSubscriptions\(/);
+    assert.match(sync, /ensureShopifyAccessToken\(/);
+    assert.doesNotMatch(sync, /partner/i);
+    const fetcher = readFileSync(resolve(ROOT, "lib/integrations/shopify/app-subscription.ts"), "utf8");
+    assert.match(fetcher, /currentAppInstallation\s*\{\s*activeSubscriptions/);
+  });
+
+  it("re-syncs on the app_subscriptions/update webhook", () => {
+    const ingress = readFileSync(resolve(ROOT, "lib/integrations/shopify/webhook-ingress.ts"), "utf8");
+    assert.match(ingress, /SHOPIFY_APP_SUBSCRIPTIONS_UPDATE_TOPIC = "app_subscriptions\/update"/);
+    assert.match(ingress, /syncShopifyAppPricingForShop\(/);
+    // HMAC is checked before any topic is handled.
+    assert.ok(
+      ingress.indexOf("verifyShopifyWebhookHmac(") < ingress.indexOf("SHOPIFY_APP_SUBSCRIPTIONS_UPDATE_TOPIC) {"),
+    );
+    const toml = readFileSync(resolve(ROOT, "shopify.app.toml"), "utf8");
+    assert.match(toml, /topics = \["app_subscriptions\/update"\]\r?\nuri = "\/api\/integrations\/shopify\/webhooks"/);
   });
 });

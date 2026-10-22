@@ -1,5 +1,6 @@
 import "server-only";
 
+import { syncShopifyAppPricingForShop } from "@/lib/billing/shopify-subscription-sync";
 import { isEncryptedSecretRef } from "@/lib/crypto/secret-box";
 import { enqueueRawEventAndJob } from "@/lib/jobs/enqueue";
 import { ensureShopifyAccessToken } from "@/lib/integrations/shopify/credentials";
@@ -23,6 +24,9 @@ import {
 import { logger } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
+
+/** Shopify sends this topic when the merchant approves, changes or cancels a plan. */
+export const SHOPIFY_APP_SUBSCRIPTIONS_UPDATE_TOPIC = "app_subscriptions/update";
 
 export type ShopifyWebhookHandled = {
   ok: true;
@@ -71,6 +75,14 @@ export async function handleShopifyWebhookIngress(input: {
     shop = assertShopifyShopDomain(input.shopHeader ?? "");
   } catch {
     return { status: 400, body: { error: "Shop inválido" } };
+  }
+
+  // App Pricing: approve / change / cancel. Re-read the plan with the shop token so the
+  // console unlocks or locks right away; the cron sweep covers a missed delivery.
+  if (topic === SHOPIFY_APP_SUBSCRIPTIONS_UPDATE_TOPIC) {
+    const outcome = await syncShopifyAppPricingForShop({ shopDomain: shop });
+    logger.info("shopify.webhook.app_subscription", { shop, outcome: outcome.kind });
+    return { status: 200, body: { ok: true, billing: outcome.kind } };
   }
 
   const orderJobType = shopifyOrderWebhookJobType(topic);

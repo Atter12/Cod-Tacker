@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mapShopifyActiveSubscription } from "@/lib/billing/shopify-subscription-map";
+import { mapShopifyAppSubscription } from "@/lib/billing/shopify-subscription-map";
 import { resolveConsoleBillingChrome } from "@/lib/billing/console-billing-mode";
 import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
 import { matchSettlementRow } from "@/lib/reconciliation/matching";
@@ -99,22 +99,16 @@ describe("strategic · dinero", () => {
     );
   });
 
-  it("writes a Shopify plan and refuses to replace an active Stripe subscription", () => {
-    const mapped = mapShopifyActiveSubscription(
-      {
-        billingPeriod: "EVERY_30_DAYS",
-        cancelAtEndOfCycle: false,
-        trialEndsAt: null,
-        currentBillingCycle: {
-          startTime: "2026-10-01T00:00:00.000Z",
-          endTime: "2026-11-01T00:00:00.000Z",
-        },
-        items: [{ handle: "growth" }],
-        pendingUpdate: null,
-        legacySubscriptionId: "gid://shopify/AppSubscription/1",
-      },
-      { shopGid: "gid://shopify/Shop/9" },
-    );
+  it("writes the Shopify App Pricing plan read with the shop token", () => {
+    const mapped = mapShopifyAppSubscription({
+      id: "gid://shopify/AppSubscription/1",
+      name: "Growth",
+      status: "ACTIVE",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      currentPeriodEnd: "2026-11-01T00:00:00.000Z",
+      trialDays: 0,
+      interval: "EVERY_30_DAYS",
+    });
     assert.equal(mapped.planCode, "growth");
     assert.equal(mapped.status, "active");
   });

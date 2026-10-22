@@ -44,7 +44,7 @@ Precios: `public.plans` (migración `20261022120000_plans_prices_9_19_99.sql`). 
 | --- | --- |
 | 0 | Partner checklist, mapeo `plan_handle`, migración `provider=shopify` |
 | 1 | Adapter `createShopifyBillingProvider` + router por agencia |
-| 2 | Partner API `activeSubscription` → `subscriptions` + cron |
+| 2 | Admin API `currentAppInstallation.activeSubscriptions` (token de la tienda) → `subscriptions` + webhook `app_subscriptions/update` + cron |
 | 3 | CTA plan en `/embed` (`open … _top`) + welcome `plan_handle` |
 | 4 | Facturación dual (Shopify solo lectura / Stripe intacto) |
 | 5 | Gates App Store, smoke script, docs de reenvío |
@@ -86,7 +86,6 @@ npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.
 
 | Variable | Uso |
 | --- | --- |
-| `SHOPIFY_APP_HANDLE` / `SHOPIFY_APP_GID` | Planes + Partner |
-| `SHOPIFY_PARTNER_ORG_ID` / `SHOPIFY_PARTNER_API_TOKEN` | Sync |
+| `SHOPIFY_APP_HANDLE` | URL de la página de planes (`…/charges/<handle>/pricing_plans`) |
 | `BILLING_PROVIDER` | `shopify` en prod (`stripe` ya no se usa); `demo` en local |
 | `PRODUCT_APP_URL` | Consola / Stripe legado |

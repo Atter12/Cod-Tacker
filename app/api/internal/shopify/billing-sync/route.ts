@@ -1,5 +1,4 @@
 import { getServerEnv } from "@/config/env";
-import { isShopifyPartnerApiConfigured } from "@/lib/billing/shopify-partner-env";
 import { sweepShopifyAppPricingSubscriptions } from "@/lib/billing/shopify-subscription-sync";
 import { createRequestContext } from "@/lib/observability/request-context";
 import { logger } from "@/lib/observability/logger";
@@ -62,15 +61,6 @@ async function runBillingSync(request: Request) {
         },
       },
     );
-  }
-
-  if (!isShopifyPartnerApiConfigured()) {
-    return Response.json({
-      ok: true,
-      skipped: true,
-      reason: "partner_api_not_configured",
-      request_id: ctx.request_id,
-    });
   }
 
   try {
