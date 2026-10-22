@@ -104,6 +104,18 @@ describe("plan sync without the Partner API", () => {
       ingress.indexOf("verifyShopifyWebhookHmac(") < ingress.indexOf("SHOPIFY_APP_SUBSCRIPTIONS_UPDATE_TOPIC) {"),
     );
     const toml = readFileSync(resolve(ROOT, "shopify.app.toml"), "utf8");
-    assert.match(toml, /topics = \["app_subscriptions\/update"\]\r?\nuri = "\/api\/integrations\/shopify\/webhooks"/);
+    assert.match(
+      toml,
+      /topics = \["app_subscriptions\/update"\]\r?\nuri = "https:\/\/app\.codtracked\.com\/api\/integrations\/shopify\/webhooks"/,
+    );
+  });
+
+  it("declares absolute webhook URIs (a relative path would land under /embed and 404)", () => {
+    const toml = readFileSync(resolve(ROOT, "shopify.app.toml"), "utf8");
+    const uris = [...toml.matchAll(/^uri = "([^"]+)"/gm)].map((m) => m[1]);
+    assert.equal(uris.length >= 2, true);
+    for (const uri of uris) {
+      assert.equal(uri, "https://app.codtracked.com/api/integrations/shopify/webhooks");
+    }
   });
 });

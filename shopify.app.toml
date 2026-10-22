@@ -26,11 +26,12 @@ api_version = "2026-07"
 # App Pricing plan changes (approve / upgrade / cancel) -> re-sync the shop's plan.
 [[webhooks.subscriptions]]
 topics = ["app_subscriptions/update"]
-uri = "/api/integrations/shopify/webhooks"
+uri = "https://app.codtracked.com/api/integrations/shopify/webhooks"
 
 # Mandatory App Store / GDPR compliance webhooks (same HTTPS receiver as order webhooks).
+# Absolute URIs: a relative path would be built under application_url (/embed/...) and 404.
 # Deploy with: shopify app deploy
 # Docs: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
 [[webhooks.subscriptions]]
 compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "/api/integrations/shopify/webhooks"
+uri = "https://app.codtracked.com/api/integrations/shopify/webhooks"
