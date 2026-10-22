@@ -130,7 +130,15 @@ export function ShopifyEmbeddedApp({
     ensureAppBridge(apiKey);
     const bridge = await waitForAppBridge();
     if (!bridge?.idToken) {
-      setPhase({ kind: "outside" });
+      // Inside the Admin iframe App Bridge should always load; say so instead of "open from Apps".
+      setPhase(
+        window.top !== window.self
+          ? {
+              kind: "error",
+              message: "No se pudo conectar con Shopify. Recarga la app desde el Admin.",
+            }
+          : { kind: "outside" },
+      );
       return;
     }
     try {

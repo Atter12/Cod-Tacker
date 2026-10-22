@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import "./globals.css";
@@ -14,6 +13,8 @@ const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
 });
+
+const APP_BRIDGE_SRC = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
 
 export const metadata: Metadata = {
   title: "CODTracked",
@@ -33,10 +34,16 @@ export default function RootLayout({
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       {shopifyApiKey ? (
-        <>
+        <head>
           <meta name="shopify-api-key" content={shopifyApiKey} />
-          <Script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" strategy="beforeInteractive" />
-        </>
+          {/*
+            App Bridge must be a plain, synchronous <script> in <head>.
+            next/script (even beforeInteractive) injects it async, App Bridge
+            refuses to start and window.shopify never appears in the embed.
+          */}
+          {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+          <script src={APP_BRIDGE_SRC} />
+        </head>
       ) : null}
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>
