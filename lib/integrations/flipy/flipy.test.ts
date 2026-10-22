@@ -36,7 +36,7 @@ describe("flipy embed-urls", () => {
       prefillLat: -12.12,
       prefillLng: -77.03,
     });
-    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/ubicacion\?/);
+    assert.match(url, /^https:\/\/partner\.flipyexpress\.com\/partner\/ubicacion\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /prefillAddress=Miraflores/);
     assert.match(url, /gestureHandling=greedy/);
@@ -48,7 +48,7 @@ describe("flipy embed-urls", () => {
       embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
       token: "jwt-token",
     });
-    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/recarga\?/);
+    assert.match(url, /^https:\/\/partner\.flipyexpress\.com\/partner\/recarga\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /theme=light/);
     assert.match(url, /appearance=light/);
@@ -128,7 +128,7 @@ describe("flipy embed-urls", () => {
       true,
     );
     assert.equal(
-      isFlipyAppActivationUrl("https://flipy-panel.vercel.app/partner/ubicacion?token=abc"),
+      isFlipyAppActivationUrl("https://partner.flipyexpress.com/partner/ubicacion?token=abc"),
       false,
     );
   });
@@ -139,7 +139,7 @@ describe("flipy embed-urls", () => {
       token: "jwt-token",
       envioId: "env123",
     });
-    assert.match(url, /^https:\/\/flipy-panel\.vercel\.app\/partner\/pujas\?/);
+    assert.match(url, /^https:\/\/partner\.flipyexpress\.com\/partner\/pujas\?/);
     assert.match(url, /token=jwt-token/);
     assert.match(url, /envioId=env123/);
     assert.match(url, /theme=light/);
@@ -167,6 +167,22 @@ describe("flipy embed-urls", () => {
       buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=fallback`,
     });
     assert.equal(url, `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/ubicacion?token=abc`);
+  });
+
+  it("uses the partner domain, never the admin panel hosts", () => {
+    assert.equal(FLIPY_DEFAULT_EMBED_ORIGIN, "https://partner.flipyexpress.com");
+    for (const panel of ["https://flipy-panel.vercel.app", "https://panel.flipyexpress.com"]) {
+      const url = resolveFlipyScopedEmbedUrl({
+        scope: "wallet_topup",
+        apiEmbedUrl: `${panel}/partner/recarga?token=abc&theme=light`,
+        embedOrigin: FLIPY_DEFAULT_EMBED_ORIGIN,
+        appOrigin: FLIPY_DEFAULT_APP_ORIGIN,
+        buildFallback: () => `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/recarga?token=fallback`,
+      });
+      assert.equal(url, `${FLIPY_DEFAULT_EMBED_ORIGIN}/partner/recarga?token=abc&theme=light`, panel);
+      // Iframes still open on the old host keep talking to CODTracked.
+      assert.equal(isAllowedFlipyPostMessageOrigin(panel, FLIPY_DEFAULT_EMBED_ORIGIN), true, panel);
+    }
   });
 
   it("rewrites tienda app host embeds onto FLIPY_EMBED_ORIGIN", () => {

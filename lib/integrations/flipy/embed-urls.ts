@@ -6,8 +6,21 @@ export type FlipyLocationEmbedParams = {
   prefillLng?: number | null;
 };
 
-/** Prod partner embed host (web-app on Vercel). Not tienda.flipyexpress.com. */
-export const FLIPY_DEFAULT_EMBED_ORIGIN = "https://flipy-panel.vercel.app";
+/**
+ * Prod partner embed host (Flipy web-app, partner-only domain: the root and
+ * /admin redirect to flipyexpress.com). Not tienda.flipyexpress.com.
+ */
+export const FLIPY_DEFAULT_EMBED_ORIGIN = "https://partner.flipyexpress.com";
+
+/**
+ * Same web-app on its panel / Vercel hosts. The Partner API may still return
+ * embed URLs there; they are rewritten to FLIPY_EMBED_ORIGIN so merchants never
+ * land on the admin panel domain.
+ */
+export const FLIPY_PANEL_ORIGINS = [
+  "https://flipy-panel.vercel.app",
+  "https://panel.flipyexpress.com",
+] as const;
 
 /** Prod tienda app (pujas / envíos). Not used for partner iframes. */
 export const FLIPY_DEFAULT_APP_ORIGIN = "https://tienda.flipyexpress.com";
@@ -51,21 +64,24 @@ export function assertFlipyEmbedPath(url: string, expectedPath: string): string 
 }
 
 /**
- * If Partner API returns a partner path on the tienda app host, rewrite to
- * FLIPY_EMBED_ORIGIN (web-app panel) keeping path + query (token).
+ * If Partner API returns a partner path on the tienda app host or on the panel
+ * hosts, rewrite to FLIPY_EMBED_ORIGIN keeping path + query (token).
  */
 export function rewriteFlipyEmbedAwayFromTiendaApp(input: {
   url: string;
   embedOrigin: string;
   appOrigin: string;
 }): string {
-  if (!originsMatchFlipyHost(input.url, input.appOrigin)) return input.url;
+  const onTienda = originsMatchFlipyHost(input.url, input.appOrigin);
+  const onPanel = FLIPY_PANEL_ORIGINS.some((origin) => originsMatchFlipyHost(input.url, origin));
+  if (!onTienda && !onPanel) return input.url;
   if (originsMatchFlipyHost(input.embedOrigin, input.appOrigin)) {
     throw new Error(
       `FLIPY_EMBED_ORIGIN no puede ser la app tienda (${input.appOrigin}). ` +
-        `Configura FLIPY_EMBED_ORIGIN=https://flipy-panel.vercel.app en Vercel.`,
+        `Configura FLIPY_EMBED_ORIGIN=${FLIPY_DEFAULT_EMBED_ORIGIN} en Vercel.`,
     );
   }
+  if (originsMatchFlipyHost(input.url, input.embedOrigin)) return input.url;
   const parsed = new URL(input.url);
   const base = normalizeFlipyEmbedOrigin(input.embedOrigin);
   return `${base}${parsed.pathname}${parsed.search}${parsed.hash}`;
@@ -95,7 +111,7 @@ export function resolveFlipyScopedEmbedUrl(input: {
     throw new Error(
       `FLIPY_EMBED_ORIGIN no puede ser la app tienda (${input.appOrigin}). ` +
         `Los embeds partner viven en el web-app de Flipy (${expectedPath}). ` +
-        `Configura FLIPY_EMBED_ORIGIN=https://flipy-panel.vercel.app en Vercel.`,
+        `Configura FLIPY_EMBED_ORIGIN=${FLIPY_DEFAULT_EMBED_ORIGIN} en Vercel.`,
     );
   }
 
@@ -138,6 +154,7 @@ export function isAllowedFlipyPostMessageOrigin(origin: string, embedOrigin: str
   const candidates = [
     embedOrigin,
     FLIPY_DEFAULT_EMBED_ORIGIN,
+    ...FLIPY_PANEL_ORIGINS,
     FLIPY_DEFAULT_APP_ORIGIN,
   ];
   return candidates.some((entry) => {

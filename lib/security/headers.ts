@@ -1,11 +1,12 @@
 import type { NextConfig } from "next";
-import { FLIPY_DEFAULT_EMBED_ORIGIN } from "../integrations/flipy/embed-urls";
+import { FLIPY_DEFAULT_EMBED_ORIGIN, FLIPY_PANEL_ORIGINS } from "../integrations/flipy/embed-urls";
 
 const production = process.env.NODE_ENV === "production";
 
 function readFlipyFrameSrcOrigins(): string {
   const configured = process.env.FLIPY_EMBED_ORIGIN?.trim().replace(/\/$/, "");
-  const origins = new Set<string>([FLIPY_DEFAULT_EMBED_ORIGIN]);
+  // Panel hosts stay allowed while Flipy's API still hands out embed URLs there.
+  const origins = new Set<string>([FLIPY_DEFAULT_EMBED_ORIGIN, ...FLIPY_PANEL_ORIGINS]);
   if (configured) origins.add(configured);
   return Array.from(origins).join(" ");
 }

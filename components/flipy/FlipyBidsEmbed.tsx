@@ -131,7 +131,7 @@ export function FlipyBidsEmbed({ agencySlug, storeSlug, orderId, envioId, embedO
         <div className="space-y-2">
           <p>
             El iframe falló (CSP / token / frame-ancestors). Verifica{" "}
-            <code className="text-xs">FLIPY_EMBED_ORIGIN=https://flipy-panel.vercel.app</code> en
+            <code className="text-xs">FLIPY_EMBED_ORIGIN=https://partner.flipyexpress.com</code> en
             Vercel CT y que el token tenga scope <code className="text-xs">bids_panel</code>.
           </p>
           <button
