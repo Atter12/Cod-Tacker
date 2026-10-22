@@ -11,86 +11,99 @@ import {
   storePathPlanSection,
 } from "@/lib/billing/entitlements";
 
-const STARTER = { api: false, whatsapp: false, automations: false, white_label: false };
-const GROWTH = { api: false, whatsapp: true, automations: true, white_label: false };
-const SCALE = { api: true, whatsapp: true, automations: true, white_label: false };
+// Mirrors supabase/migrations/20261022140000_plans_features_no_free.sql.
+const STARTER = {
+  reconciliation: false,
+  whatsapp: false,
+  automations: false,
+  conversions: false,
+  api: false,
+  white_label: false,
+};
+const GROWTH = { ...STARTER, reconciliation: true, whatsapp: true, automations: true };
+const SCALE = { ...GROWTH, conversions: true, api: true, white_label: true };
 
 function paid(planCode: string, features: Record<string, unknown>) {
   return resolvePlanEntitlements({ planCode, planName: planCode, features, accessAllowed: true });
 }
 
-describe("plan entitlements", () => {
-  it("free (no plan) keeps only the connector", () => {
-    const free = resolvePlanEntitlements(null);
-    assert.equal(free.tier, "free");
-    assert.deepEqual(free.sections, {
-      console: false,
-      whatsapp: false,
-      automations: false,
-      api: false,
-    });
+describe("plan entitlements (no free plan)", () => {
+  it("without a plan nothing in the console is unlocked", () => {
+    const none = resolvePlanEntitlements(null);
+    assert.equal(none.tier, "none");
+    assert.equal(Object.values(none.sections).some(Boolean), false);
   });
 
-  it("a blocked subscription falls back to free", () => {
+  it("a blocked subscription behaves like no plan", () => {
     const blocked = resolvePlanEntitlements({
       planCode: "scale",
       planName: "Scale",
       features: SCALE,
       accessAllowed: false,
     });
-    assert.equal(blocked.tier, "free");
+    assert.equal(blocked.tier, "none");
     assert.equal(blocked.sections.console, false);
   });
 
   it("starter, growth and scale unlock their sections", () => {
     assert.deepEqual(paid("starter", STARTER).sections, {
       console: true,
+      reconciliation: false,
       whatsapp: false,
       automations: false,
+      conversions: false,
       api: false,
     });
     assert.deepEqual(paid("growth", GROWTH).sections, {
       console: true,
+      reconciliation: true,
       whatsapp: true,
       automations: true,
+      conversions: false,
       api: false,
     });
     assert.deepEqual(paid("scale", SCALE).sections, {
       console: true,
+      reconciliation: true,
       whatsapp: true,
       automations: true,
+      conversions: true,
       api: true,
     });
   });
 
-  it("maps store paths to sections and keeps connector pages free", () => {
-    assert.equal(storePathPlanSection("/attribution"), "console");
-    assert.equal(storePathPlanSection("/reconciliation/import"), "console");
+  it("maps store paths to sections and keeps setup pages open", () => {
+    for (const path of ["", "/dashboard", "/orders/1", "/flipy", "/logistics", "/attribution", "/rto/products"]) {
+      assert.equal(storePathPlanSection(path), "console", path);
+    }
+    assert.equal(storePathPlanSection("/reconciliation/import"), "reconciliation");
     assert.equal(storePathPlanSection("/whatsapp/templates"), "whatsapp");
     assert.equal(storePathPlanSection("/automations/new"), "automations");
-    for (const free of ["", "/orders", "/flipy", "/integrations", "/operations", "/settings"]) {
-      assert.equal(storePathPlanSection(free), null, free);
-    }
+    assert.equal(storePathPlanSection("/integrations"), null);
+    assert.equal(storePathPlanSection("/settings"), null);
     assert.equal(storePathPlanSection("/rtox"), null);
   });
 
   it("locks nav items the plan does not unlock", () => {
-    const hrefs = ["", "/orders", "/attribution", "/whatsapp", "/automations", "/flipy"];
+    const hrefs = ["", "/orders", "/reconciliation", "/whatsapp", "/integrations", "/settings"];
     assert.deepEqual(lockedStoreNavHrefs(resolvePlanEntitlements(null), hrefs), [
-      "/attribution",
+      "",
+      "/orders",
+      "/reconciliation",
       "/whatsapp",
-      "/automations",
     ]);
     assert.deepEqual(lockedStoreNavHrefs(paid("starter", STARTER), hrefs), [
+      "/reconciliation",
       "/whatsapp",
-      "/automations",
     ]);
     assert.deepEqual(lockedStoreNavHrefs(paid("growth", GROWTH), hrefs), []);
   });
 
   it("names the cheapest plan in upgrade messages", () => {
-    assert.match(planUpgradeMessage("console"), /Starter/);
+    assert.match(planUpgradeMessage("console"), /Elige un plan/);
+    assert.match(planUpgradeMessage("reconciliation"), /Growth/);
     assert.match(planUpgradeMessage("whatsapp"), /Growth/);
+    assert.match(planUpgradeMessage("conversions"), /Scale/);
     assert.match(planUpgradeMessage("api"), /Scale/);
   });
 
@@ -108,6 +121,20 @@ describe("plan entitlements", () => {
       evaluateMonthlyOrderUsage({ entitlements: resolvePlanEntitlements(null), orderLimit: 300, used: 900 }),
       { used: 900, limit: null, overLimit: false },
     );
+  });
+
+  it("matches the plan features migration", () => {
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20261022140000_plans_features_no_free.sql"),
+      "utf8",
+    );
+    for (const [code, features] of [
+      ["starter", STARTER],
+      ["growth", GROWTH],
+      ["scale", SCALE],
+    ] as const) {
+      assert.match(sql, new RegExp(`'${JSON.stringify(features)}'::jsonb[\\s\\S]*?where code = '${code}'`));
+    }
   });
 });
 
@@ -133,19 +160,23 @@ describe("payment messages by billing provider", () => {
   });
 });
 
-describe("paid sections are gated in the console", () => {
+describe("console sections are gated by plan", () => {
   const ROOT = process.cwd();
   const STORE = "app/a/[agencySlug]/s/[storeSlug]";
 
-  it("wraps every paid section in PlanGate", () => {
+  it("wraps every store section in PlanGate", () => {
     const sections: Array<[string, string]> = [
+      [`${STORE}/dashboard/layout.tsx`, "console"],
+      [`${STORE}/orders/layout.tsx`, "console"],
+      [`${STORE}/flipy/layout.tsx`, "console"],
+      [`${STORE}/operations/layout.tsx`, "console"],
       [`${STORE}/attribution/layout.tsx`, "console"],
       [`${STORE}/campaigns/layout.tsx`, "console"],
       [`${STORE}/ads/layout.tsx`, "console"],
       [`${STORE}/rto/layout.tsx`, "console"],
-      [`${STORE}/reconciliation/layout.tsx`, "console"],
       [`${STORE}/logistics/layout.tsx`, "console"],
       [`${STORE}/alerts/layout.tsx`, "console"],
+      [`${STORE}/reconciliation/layout.tsx`, "reconciliation"],
       [`${STORE}/whatsapp/layout.tsx`, "whatsapp"],
       [`${STORE}/automations/layout.tsx`, "automations"],
       ["app/a/[agencySlug]/(agency)/api-keys/layout.tsx", "api"],
@@ -157,15 +188,23 @@ describe("paid sections are gated in the console", () => {
     }
   });
 
-  it("checks the plan in paid server actions", () => {
+  it("checks the plan in every store server action", () => {
     const actions: Array<[string, string]> = [
+      ["app/actions/orders.ts", "console"],
+      ["app/actions/flipy-activation.ts", "console"],
+      ["app/actions/flipy-inbox.ts", "console"],
+      ["app/actions/flipy-settings.ts", "console"],
+      ["app/actions/flipy-settlement.ts", "console"],
+      ["app/actions/flipy-shipments.ts", "console"],
+      ["app/actions/flipy-wallet.ts", "console"],
+      ["app/actions/flipy-widgets.ts", "console"],
       ["app/actions/attribution.ts", "console"],
-      ["app/actions/reconciliation.ts", "console"],
       ["app/actions/alerts.ts", "console"],
       ["app/actions/shipments.ts", "console"],
-      ["app/actions/conversions.ts", "console"],
+      ["app/actions/reconciliation.ts", "reconciliation"],
       ["app/actions/whatsapp.ts", "whatsapp"],
       ["app/actions/automations.ts", "automations"],
+      ["app/actions/conversions.ts", "conversions"],
       ["app/actions/api-keys.ts", "api"],
     ];
     for (const [file, section] of actions) {
@@ -173,13 +212,26 @@ describe("paid sections are gated in the console", () => {
       const memberships = source.match(/const membership = await require(Store|Agency)Access\(/g) ?? [];
       const checks =
         source.match(new RegExp(`assertPlanSection\\(membership\\.agencyId, "${section}"\\)`, "g")) ?? [];
+      assert.equal(memberships.length > 0, true, file);
       assert.equal(checks.length, memberships.length, file);
     }
   });
 
-  it("keeps the free connector actions ungated", () => {
-    for (const file of ["app/actions/orders.ts", "app/actions/flipy-widgets.ts", "app/actions/integrations.ts"]) {
-      assert.doesNotMatch(readFileSync(resolve(ROOT, file), "utf8"), /assertPlanSection/, file);
-    }
+  it("keeps connecting Shopify open without a plan", () => {
+    assert.doesNotMatch(
+      readFileSync(resolve(ROOT, "app/actions/integrations.ts"), "utf8"),
+      /assertPlanSection/,
+    );
+  });
+
+  it("only sends conversions on plans with the conversions feature", () => {
+    const source = readFileSync(resolve(ROOT, "lib/conversions/record-purchase-conversion.ts"), "utf8");
+    assert.match(source, /entitlements\.sections\.conversions/);
+    assert.equal((source.match(/await planSendsConversions\(/g) ?? []).length, 2);
+  });
+
+  it("hides embed orders until a plan is active", () => {
+    const home = readFileSync(resolve(ROOT, "lib/integrations/shopify/embed-home.ts"), "utf8");
+    assert.match(home, /planRequired \? \[\]/);
   });
 });

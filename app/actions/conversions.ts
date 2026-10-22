@@ -24,7 +24,7 @@ async function loadManagedConversion(
 ) {
   const user = await requireUser();
   const membership = await requireStoreAccess(agencySlug, storeSlug);
-  await assertPlanSection(membership.agencyId, "console");
+  await assertPlanSection(membership.agencyId, "conversions");
   if (!can(membership.roles, "orders.manage")) {
     throw new ValidationError("No tienes permiso para gestionar conversiones.");
   }

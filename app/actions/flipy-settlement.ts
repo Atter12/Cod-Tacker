@@ -17,6 +17,7 @@ import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export async function syncFlipySettlements(input: {
   agencySlug: string;
@@ -28,6 +29,7 @@ export async function syncFlipySettlements(input: {
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "reconciliation.manage") && !can(membership.roles, "integrations.manage")) {
       throw new ValidationError("No tienes permiso para sincronizar conciliación Flipy.");
     }

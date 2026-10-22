@@ -18,6 +18,7 @@ import { can } from "@/lib/permissions/can";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
 import { toUserMessage } from "@/lib/errors/to-user-message";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type FlipyWalletSaldoActionResult = {
   billeteraOperaciones: number;
@@ -49,6 +50,7 @@ export async function fetchFlipyWalletSaldo(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "integrations.view")) {
       throw new ValidationError("No tienes permiso para ver la billetera Flipy.");
     }
@@ -83,6 +85,7 @@ export async function transferFlipyGananciasToOperaciones(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "integrations.manage")) {
       throw new ValidationError("No tienes permiso para transferir saldo Flipy.");
     }

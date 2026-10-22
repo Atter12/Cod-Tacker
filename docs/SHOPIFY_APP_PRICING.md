@@ -20,20 +20,20 @@ Cobro de la app por **Shopify App Pricing** (cargo en la factura Shopify del mer
 
 ## Qué desbloquea cada plan
 
-Handles en Partner Dashboard: `conector` (Free), `starter`, `growth`, `scale`. Código: [`lib/billing/entitlements.ts`](../lib/billing/entitlements.ts).
+Sin plan gratis y sin prueba: se paga desde el primer día. Handles en Partner Dashboard: `starter`, `growth`, `scale` (`conector` queda fuera de los planes públicos). Código: [`lib/billing/entitlements.ts`](../lib/billing/entitlements.ts); features: migración `20261022140000_plans_features_no_free.sql`.
 
 | Plan | Precio (mes / año) | Incluye |
 | --- | --- | --- |
-| Free (`conector`, o sin plan / plan bloqueado) | $0 | Embed, pedidos, resumen, integraciones, Flipy, operaciones, configuración. 1 tienda. |
-| Starter | $9 / $90 | + Atribución, campañas, RTO, conciliación, logística, alertas. 1 tienda, 300 pedidos/mes. |
-| Growth | $19 / $190 | + WhatsApp y automatizaciones (`plans.features`). 3 tiendas, 1,000 pedidos/mes. |
-| Scale | $99 / $990 | + Claves API. 5 tiendas, 5,000 pedidos/mes. |
+| Sin plan (o plan bloqueado) | — | Solo Facturación, Integraciones y Configuración. Los pedidos de Shopify siguen sincronizando; el embed pide elegir un plan. |
+| Starter | $9 / $90 | Embed y consola: pedidos, resumen (ROAS / RTO), Flipy y couriers, atribución, campañas, RTO, alertas, operaciones. 1 tienda, 300 pedidos/mes. |
+| Growth | $19 / $190 | + Conciliación de cobros, WhatsApp, automatizaciones. 3 tiendas, 1,000 pedidos/mes. |
+| Scale | $99 / $990 | + Conversiones a Meta / TikTok, claves API, marca blanca. 5 tiendas, 5,000 pedidos/mes. |
 
 Precios: `public.plans` (migración `20261022120000_plans_prices_9_19_99.sql`). Los planes de Partner Dashboard y los Price IDs de Stripe se cambian a mano y deben coincidir.
 
-- Secciones de pago: `PlanGate` en el `layout.tsx` de cada sección muestra “Ver planes”; el menú las marca con candado.
-- Server actions de esas secciones llaman `assertPlanSection`.
-- Jobs: sin `automations` solo corren reglas de sistema (Flipy sin puja 24h); sin `whatsapp` no se encola la confirmación COD.
+- Secciones: `PlanGate` en el `layout.tsx` de cada sección muestra “Elige un plan” / “Mejora tu plan”; el menú las marca con candado.
+- Server actions de pedidos, Flipy y secciones de pago llaman `assertPlanSection`. Conectar Shopify (`app/actions/integrations.ts`) queda abierto.
+- Jobs: sin `automations` solo corren reglas de sistema (Flipy sin puja 24h); sin `whatsapp` no se encola la confirmación COD; sin `conversions` no se registran ni envían conversiones.
 - Límite de pedidos: cuenta también los pedidos de Shopify del mes; al superarlo se muestra un aviso, la sincronización no se corta.
 - Mensajes de pago vencido / cancelado apuntan al Admin de Shopify cuando `billing_provider = shopify`.
 
@@ -73,8 +73,8 @@ npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.
 
 ### Checklist manual (Partner / prod)
 
-1. [ ] App Pricing activo con plan Free declarado; welcome → `/embed`.
-2. [ ] Install → embed con pedidos; CTA plan → Admin; sin Stripe Checkout.
+1. [ ] App Pricing activo con Starter / Growth / Scale públicos, sin plan Free ni prueba, “Free for partners and developers” marcado; welcome → `/embed`.
+2. [ ] Install → embed pide plan; CTA plan → Admin; tras elegir plan se ven los pedidos; sin Stripe Checkout.
 3. [ ] Decline → re-approve → sync (`subscriptions.billing_provider=shopify`).
 4. [ ] Upgrade/downgrade → Facturación consola → **Sincronizar estado**.
 5. [ ] Uninstall + reinstall.

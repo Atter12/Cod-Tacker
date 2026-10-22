@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadAgencyEntitlements } from "@/lib/billing/limits";
 import { getShopifyAppHandle } from "@/lib/billing/shopify-billing-env";
 import { resolveEmbedPlanState } from "@/lib/billing/embed-plan-state";
 import { buildShopifyAppPricingPlansUrlFromShop } from "@/lib/billing/shopify-pricing-url";
@@ -49,6 +50,7 @@ export async function loadShopifyEmbedHome(shop: string): Promise<ShopifyEmbedHo
       storeName: null,
       lastSyncedAt: null,
       orders: [],
+      planRequired: true,
       billing: emptyBilling(shop),
     };
   }
@@ -75,6 +77,9 @@ export async function loadShopifyEmbedHome(shop: string): Promise<ShopifyEmbedHo
   if (ordersLookup.error) {
     throw new Error("No se pudieron leer los pedidos de la tienda.");
   }
+
+  const { entitlements } = await loadAgencyEntitlements(admin, storeLookup.data.agency_id);
+  const planRequired = entitlements.tier !== "paid";
 
   let subscriptionStatus: string | null = null;
   let planName: string | null = null;
@@ -117,7 +122,8 @@ export async function loadShopifyEmbedHome(shop: string): Promise<ShopifyEmbedHo
     linked: true,
     storeName: storeLookup.data.name,
     lastSyncedAt: integrationLookup.data?.last_success_at ?? null,
-    orders: (ordersLookup.data ?? []).map((row) => ({
+    planRequired,
+    orders: (planRequired ? [] : (ordersLookup.data ?? [])).map((row) => ({
       id: row.id,
       orderNumber: row.order_number?.trim() || row.external_order_id,
       totalAmount: row.total_amount,

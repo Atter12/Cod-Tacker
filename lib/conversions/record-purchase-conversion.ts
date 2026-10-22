@@ -1,5 +1,7 @@
 import "server-only";
 
+import { loadAgencyEntitlements } from "@/lib/billing/limits";
+
 import { purchaseConversionEventId } from "@/lib/conversions/purchase-event-id";
 import { decidePurchaseResend } from "@/lib/conversions/purchase-send-gate";
 import {
@@ -176,6 +178,9 @@ export async function sendQueuedPurchaseConversion(input: {
   storeId: string;
   conversionEventRowId: string;
 }): Promise<RecordPurchaseConversionResult> {
+  if (!(await planSendsConversions(input.admin, input.agencyId))) {
+    return planSkippedResult("", input.conversionEventRowId);
+  }
   const row = await input.admin
     .from("conversion_events")
     .select(
@@ -387,10 +392,34 @@ export async function sendQueuedPurchaseConversion(input: {
  * Held candidates stay `queued` + `pending_review` for the manual queue;
  * `rejected` candidates are never resent.
  */
+/** Conversions to Meta / TikTok are a Scale feature (`plans.features.conversions`). */
+async function planSendsConversions(admin: DatabaseClient, agencyId: string): Promise<boolean> {
+  const { entitlements } = await loadAgencyEntitlements(admin, agencyId);
+  return entitlements.sections.conversions;
+}
+
+function planSkippedResult(
+  eventId: string,
+  conversionEventRowId: string | null,
+): RecordPurchaseConversionResult {
+  return {
+    created: false,
+    eventId,
+    conversionEventRowId,
+    deliveryStatus: "skipped_plan",
+    capiMode: "dry_run",
+    releaseStatus: null,
+    holdReason: "plan_without_conversions",
+  };
+}
+
 export async function recordPurchaseConversionEvent(
   input: RecordPurchaseConversionInput,
 ): Promise<RecordPurchaseConversionResult> {
   const eventId = purchaseConversionEventId(input.orderId);
+  if (!(await planSendsConversions(input.admin, input.agencyId))) {
+    return planSkippedResult(eventId, null);
+  }
   const eventTime = input.eventTime ?? new Date().toISOString();
 
   const existing = await input.admin

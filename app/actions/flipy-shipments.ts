@@ -27,6 +27,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
 import { toUserMessage } from "@/lib/errors/to-user-message";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type CreateFlipyShipmentResult = {
   envioId: string;
@@ -110,6 +111,7 @@ export async function calificarFlipyMotorizado(input: {
 
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -176,6 +178,7 @@ export async function refreshFlipyEnvioStatus(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -224,6 +227,7 @@ export async function confirmFlipyDevolucion(input: {
 
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -290,6 +294,7 @@ export async function cancelFlipyShipment(input: {
 
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -376,6 +381,7 @@ export async function cotizarFlipyFlete(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -425,6 +431,7 @@ export async function geocodeFlipyDeliveryAddress(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -487,6 +494,7 @@ export async function createFlipyShipmentFromOrder(input: {
 
     const user = await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 

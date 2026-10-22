@@ -21,6 +21,7 @@ import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type RejectFlipyOfertaResult = {
   envioId: string;
@@ -42,6 +43,7 @@ export async function loadFlipyInbox(input: {
   try {
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "orders.view") && !can(membership.roles, "shipments.view")) {
       throw new ValidationError("No tienes permiso para ver el inbox Flipy.");
     }
@@ -80,6 +82,7 @@ export async function rejectFlipyOferta(input: {
     }
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 

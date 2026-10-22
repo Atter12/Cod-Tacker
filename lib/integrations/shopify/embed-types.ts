@@ -14,6 +14,8 @@ export type ShopifyEmbedHome = {
   storeName: string | null;
   lastSyncedAt: string | null;
   orders: ShopifyEmbedOrder[];
+  /** No active plan: orders keep syncing but the embed asks to pick a plan first. */
+  planRequired: boolean;
   /** App Pricing surface for the embed (never Stripe / never product host). */
   billing: EmbedPlanState;
 };

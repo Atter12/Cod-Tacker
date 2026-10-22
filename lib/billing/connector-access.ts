@@ -1,7 +1,6 @@
 /**
- * Shopify Admin connector (App Store listing) vs paid agency extras.
- * Order sync for the installed shop does not consult the subscription.
- * Another store on the console is the paid extra.
+ * Shopify Admin connector (App Store listing). Order sync for the installed shop
+ * does not consult the subscription; using CODTracked needs a paid plan.
  */
 
 export function additionalStoreLimitMessage(input: {
@@ -10,7 +9,7 @@ export function additionalStoreLimitMessage(input: {
   shopifyConnectorIncluded: boolean;
 }): string {
   if (input.shopifyConnectorIncluded && !input.planName) {
-    return `La tienda conectada desde Shopify está incluida. Crear otra tienda es un extra de la consola (límite actual: ${input.storeLimit}).`;
+    return `Elige un plan para usar CODTracked y crear más tiendas (límite sin plan: ${input.storeLimit}).`;
   }
   const plan = input.planName ? ` (${input.planName})` : "";
   return `Has alcanzado el límite de ${input.storeLimit} tienda(s) de tu plan${plan}. Mejora el plan para crear más.`;

@@ -113,7 +113,7 @@ export async function previewSettlementCsv(
   try {
     await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
 
     const file = formData.get("file");
@@ -195,7 +195,7 @@ export async function confirmSettlementCsvImport(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -322,7 +322,7 @@ export async function connectEcartPay(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -432,7 +432,7 @@ export async function syncEcartPaySettlements(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId || !membership.agencyId) {
       throw new ValidationError("Tienda inválida.");
@@ -477,7 +477,7 @@ export async function confirmCollectedMatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -590,7 +590,7 @@ export async function approveSettlementBatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -773,7 +773,7 @@ export async function reopenSettlementBatch(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -849,7 +849,7 @@ export async function manualMatchSettlementItem(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -928,7 +928,7 @@ export async function resolveSettlementDiscrepancy(
   try {
     const user = await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationManage(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 
@@ -991,7 +991,7 @@ export async function exportBatchResultsCsv(
   try {
     await requireUser();
     const membership = await requireStoreAccess(agencySlug, storeSlug);
-    await assertPlanSection(membership.agencyId, "console");
+    await assertPlanSection(membership.agencyId, "reconciliation");
     assertReconciliationView(membership.roles);
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
 

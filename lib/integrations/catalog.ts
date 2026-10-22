@@ -60,7 +60,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = [
     provider: "shopify",
     name: "Shopify",
     description:
-      "Conector Free: sincroniza pedidos, clientes, ítems y señal COD vs prepaid. El plan de la plataforma se gestiona en Facturación de la agencia.",
+      "Conector: sincroniza pedidos, clientes, ítems y señal COD vs prepaid. El plan de la plataforma se gestiona en Facturación de la agencia.",
     kind: "commerce",
   },
   {

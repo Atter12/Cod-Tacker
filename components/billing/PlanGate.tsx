@@ -32,8 +32,8 @@ export async function PlanGate({
     <div className="mx-auto max-w-2xl py-10">
       <EmptyState
         icon={<Lock className="size-8" aria-hidden />}
-        title="Función de un plan de pago"
-        description={`${planUpgradeMessage(section)} La tienda conectada desde Shopify sigue sincronizando pedidos con el plan gratis.`}
+        title={section === "console" ? "Elige un plan" : "Mejora tu plan"}
+        description={`${planUpgradeMessage(section)} Tus pedidos de Shopify siguen sincronizando y aparecerán aquí con el plan activo.`}
         action={{ label: "Ver planes", href: routes.agency.billing(agencySlug) }}
       />
     </div>

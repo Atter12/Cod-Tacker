@@ -6,14 +6,14 @@ import {
 } from "@/lib/billing/connector-access";
 
 describe("shopify connector access", () => {
-  it("treats the installed shop as included and the next store as a console extra", () => {
+  it("asks a Shopify install without a plan to pick one before adding stores", () => {
     const message = additionalStoreLimitMessage({
       storeLimit: 1,
       planName: null,
       shopifyConnectorIncluded: true,
     });
-    assert.match(message, /incluida/);
-    assert.match(message, /extra de la consola/);
+    assert.match(message, /Elige un plan/);
+    assert.doesNotMatch(message, /incluida/);
   });
 
   it("keeps the plan message when the agency already pays", () => {

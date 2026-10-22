@@ -21,12 +21,14 @@ import { createClient } from "@/lib/supabase/server";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { getOrderById } from "@/services/orders.service";
 import type { ConfirmationStatus, OrderStatus, PaymentStatus } from "@/types/orders";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type OrderActionResult = ActionResult;
 
 async function loadManagedOrder(agencySlug: string, storeSlug: string, orderId: string) {
   const user = await requireUser();
   const membership = await requireStoreAccess(agencySlug, storeSlug);
+  await assertPlanSection(membership.agencyId, "console");
   assertCanManageOrders(can(membership.roles, "orders.manage"));
   if (!membership.storeId) throw new ValidationError("Tienda inválida.");
   const client = await createClient();

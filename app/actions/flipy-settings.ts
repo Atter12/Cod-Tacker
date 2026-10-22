@@ -19,6 +19,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
 import type { Json } from "@/types/database.generated";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export async function updateFlipyPickupKeywordsAction(input: {
   agencySlug: string;
@@ -28,6 +29,7 @@ export async function updateFlipyPickupKeywordsAction(input: {
   try {
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "integrations.manage")) {
       throw new ValidationError("No tienes permiso para editar integraciones.");
     }
@@ -77,6 +79,7 @@ export async function updateFlipyAutoCreateSettingsAction(input: {
   try {
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     if (!can(membership.roles, "integrations.manage")) {
       throw new ValidationError("No tienes permiso para editar integraciones.");
     }

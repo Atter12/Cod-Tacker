@@ -9,7 +9,7 @@ export default async function Layout({
 }) {
   const { agencySlug, storeSlug } = await params;
   return (
-    <PlanGate agencySlug={agencySlug} storeSlug={storeSlug} section="console">
+    <PlanGate agencySlug={agencySlug} storeSlug={storeSlug} section="reconciliation">
       {children}
     </PlanGate>
   );

@@ -17,6 +17,7 @@ import { can } from "@/lib/permissions/can";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStoreAccess } from "@/lib/tenant/require-store-access";
 import { requireUser } from "@/lib/auth/require-user";
+import { assertPlanSection } from "@/lib/billing/plan-gate";
 
 export type FlipyWidgetTokenResult = {
   token: string;
@@ -43,6 +44,7 @@ export async function issueFlipyWidgetTokenAction(input: {
 
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     const scope = input.scope ?? "location_picker";
     if (scope === "wallet_topup") {
       if (!can(membership.roles, "integrations.view")) {
@@ -250,6 +252,7 @@ export async function reverseGeocodeFlipyLocationAction(input: {
     }
     await requireUser();
     const membership = await requireStoreAccess(input.agencySlug, input.storeSlug);
+    await assertPlanSection(membership.agencyId, "console");
     assertCanManageOrders(can(membership.roles, "orders.manage"));
     if (!membership.storeId) throw new ValidationError("Tienda inválida.");
     if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {

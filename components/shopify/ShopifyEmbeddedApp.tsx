@@ -186,8 +186,8 @@ export function ShopifyEmbeddedApp({
           </p>
           <h1 className="mt-1 text-lg font-semibold text-text-primary">Pedidos de la tienda</h1>
           <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">
-            Sincroniza los pedidos de esta tienda dentro del Admin. La conexión está incluida; los
-            planes de plataforma se cobran en tu factura de Shopify.
+            Sigue los pedidos contra entrega de esta tienda dentro del Admin. Los planes se cobran
+            en tu factura de Shopify.
           </p>
         </div>
         {ready ? (
@@ -310,7 +310,12 @@ export function ShopifyEmbeddedApp({
           <p className="mt-3 text-[12px] text-text-secondary">
             Última sincronización: {formatWhen(ready.lastSyncedAt)}
           </p>
-          {ready.orders.length === 0 ? (
+          {ready.planRequired ? (
+            <p className="mt-4 text-sm text-text-secondary">
+              Elige un plan para ver y seguir tus pedidos. Tus pedidos ya se están sincronizando y
+              aparecerán aquí en cuanto el plan esté activo.
+            </p>
+          ) : ready.orders.length === 0 ? (
             <p className="mt-4 text-sm text-text-secondary">
               Cuando entren pedidos en Shopify, aparecerán aquí.
             </p>

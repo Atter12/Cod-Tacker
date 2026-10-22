@@ -228,7 +228,7 @@ export default async function IntegrationDetailPage({
 
       {shopifyLive ? (
         <Alert variant="info" title="Conector Shopify">
-          Credenciales de app configuradas. Autoriza la tienda vía OAuth (conector Free). El plan
+          Credenciales de app configuradas. Autoriza la tienda vía OAuth. El plan
           COD-tracked de la agencia se gestiona en Facturación, fuera de este flujo.
         </Alert>
       ) : null}

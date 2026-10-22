@@ -19,7 +19,7 @@ Shopify sigue con `application_url = https://app.codtracked.com/embed` y `embedd
 
 - `/embed` + App Bridge en el `<head>` (`app/layout.tsx`, `app/embed/page.tsx`, `components/shopify/ShopifyEmbeddedApp.tsx`).
 - Session token → token offline → tienda + sync (`services/shopify-embed-install.service.ts`, `POST /api/integrations/shopify/embed/session`).
-- La agencia nueva se marca `settings.shopify_connector = "free"`.
+- La agencia nueva se marca `settings.shopify_connector = "free"` (marca de origen Shopify; ya no implica plan gratis: sin plan solo se sincronizan pedidos, ver SHOPIFY_APP_PRICING.md).
 - Crear otra tienda, sin plan, usa el mensaje de extra de consola (`lib/billing/connector-access.ts`, `assertCanCreateStore` en `lib/billing/limits.ts`).
 - El embed no enlaza a Facturación.
 - `PRODUCT_APP_URL` en `config/env.ts` (`getProductAppUrl`). Stripe (`app/actions/billing.ts`), auth (`app/actions/auth.ts`) e invitaciones (`app/actions/invitations.ts`) usan esa URL. El callback de Shopify suma ese origen a la allowlist (`app/api/integrations/shopify/callback/route.ts`); el `redirect_uri` no cambia.
@@ -113,5 +113,5 @@ No se parte la base. No hace falta otra tabla para este corte.
 - `https://app.codtracked.com/a/.../billing` redirige a `https://cod.codtracked.com/...` y no renderiza Facturación en el host de la app.
 - Checkout de Stripe y el correo de invitación abren `cod.codtracked.com`.
 - Conectar Shopify desde la consola vuelve a `cod`, con el callback siguiendo en `app`.
-- Una agencia `shopify_connector: free` ve pedidos en el Admin. Crear una segunda tienda en la consola pide el extra de plan.
+- Una agencia instalada desde Shopify sin plan ve en el Admin el aviso para elegir plan; con plan ve sus pedidos.
 - `npx tsx --test lib/billing/connector-access.test.ts lib/integrations/shopify/session-token.test.ts lib/hosts/host-gate.test.ts` en verde: la app deja `/embed` y manda `/billing` al producto.

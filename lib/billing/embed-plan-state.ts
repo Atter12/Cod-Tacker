@@ -94,8 +94,8 @@ export function resolveEmbedPlanState(input: EmbedPlanStateInput): EmbedPlanStat
     managePlanLabel: "Administrar plan",
     statusLabel,
     billingNote: canOpenPlans
-      ? "Los planes de plataforma se eligen y cobran en tu factura de Shopify. No hay checkout de tarjeta dentro de esta app."
-      : "La conexión de esta tienda está incluida. Configura SHOPIFY_APP_HANDLE para ofrecer planes en Shopify.",
+      ? "Los planes se eligen y cobran en tu factura de Shopify. No hay checkout de tarjeta dentro de esta app."
+      : "Configura SHOPIFY_APP_HANDLE para ofrecer planes en Shopify.",
   };
 }
 
