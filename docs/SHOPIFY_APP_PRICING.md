@@ -22,12 +22,14 @@ Cobro de la app por **Shopify App Pricing** (cargo en la factura Shopify del mer
 
 Handles en Partner Dashboard: `conector` (Free), `starter`, `growth`, `scale`. Código: [`lib/billing/entitlements.ts`](../lib/billing/entitlements.ts).
 
-| Plan | Incluye |
-| --- | --- |
-| Free (`conector`, o sin plan / plan bloqueado) | Embed, pedidos, resumen, integraciones, Flipy, operaciones, configuración. 1 tienda. |
-| Starter | + Atribución, campañas, RTO, conciliación, logística, alertas. 1 tienda, 300 pedidos/mes. |
-| Growth | + WhatsApp y automatizaciones (`plans.features`). 3 tiendas, 1,000 pedidos/mes. |
-| Scale | + Claves API. 5 tiendas, 5,000 pedidos/mes. |
+| Plan | Precio (mes / año) | Incluye |
+| --- | --- | --- |
+| Free (`conector`, o sin plan / plan bloqueado) | $0 | Embed, pedidos, resumen, integraciones, Flipy, operaciones, configuración. 1 tienda. |
+| Starter | $9 / $90 | + Atribución, campañas, RTO, conciliación, logística, alertas. 1 tienda, 300 pedidos/mes. |
+| Growth | $19 / $190 | + WhatsApp y automatizaciones (`plans.features`). 3 tiendas, 1,000 pedidos/mes. |
+| Scale | $99 / $990 | + Claves API. 5 tiendas, 5,000 pedidos/mes. |
+
+Precios: `public.plans` (migración `20261022120000_plans_prices_9_19_99.sql`). Los planes de Partner Dashboard y los Price IDs de Stripe se cambian a mano y deben coincidir.
 
 - Secciones de pago: `PlanGate` en el `layout.tsx` de cada sección muestra “Ver planes”; el menú las marca con candado.
 - Server actions de esas secciones llaman `assertPlanSection`.

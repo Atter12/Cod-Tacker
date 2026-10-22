@@ -88,8 +88,8 @@ with expected(code, monthly_price, annual_price, store_limit, order_limit) as (
   values
     ('enterprise', 0::numeric, null::numeric, null::int, null::int),
     ('starter', 9::numeric, 90::numeric, 1, 300),
-    ('growth', 15::numeric, 150::numeric, 3, 1000),
-    ('scale', 19::numeric, 190::numeric, 5, 5000),
+    ('growth', 19::numeric, 190::numeric, 3, 1000),
+    ('scale', 99::numeric, 990::numeric, 5, 5000),
     ('agency', 399::numeric, 3830::numeric, null::int, 20000)
 )
 select
