@@ -14,24 +14,20 @@ export function parseBillingProviderId(
 /**
  * Provider for an agency's console charges.
  *
- * A stored subscription row wins (legacy Stripe agencies keep Stripe). Without one,
- * an agency that came from Shopify (embed install or a connected shop) must use
- * Shopify App Pricing (App Store 1.2.1), even when App Pricing is not configured:
- * the Shopify adapter then fails closed instead of opening Stripe Checkout.
+ * Stripe is no longer offered: every agency pays through Shopify App Pricing
+ * (App Store 1.2.1), including agencies with an old Stripe row. Only a demo
+ * environment (BILLING_PROVIDER=demo) keeps demo billing for agencies that did
+ * not come from Shopify. Without App Pricing configured the Shopify adapter
+ * fails closed; it never falls back to Stripe.
  */
-export type AgencyBillingProvider = Extract<BillingProviderId, "demo" | "stripe" | "shopify">;
+export type AgencyBillingProvider = Extract<BillingProviderId, "demo" | "shopify">;
 
 export function decideAgencyBillingProvider(input: {
   storedProvider: string | null | undefined;
-  envProvider: AgencyBillingProvider;
-  shopifyAppPricingConfigured: boolean;
+  envProvider: BillingProviderId;
   cameFromShopify: boolean;
 }): AgencyBillingProvider {
-  const parsed = parseBillingProviderId(input.storedProvider);
-  const stored =
-    parsed === "demo" || parsed === "stripe" || parsed === "shopify" ? parsed : null;
-  if (stored === "stripe") return "stripe";
-  if (input.cameFromShopify) return "shopify";
-  if (stored === "shopify" && !input.shopifyAppPricingConfigured) return input.envProvider;
-  return stored ?? input.envProvider;
+  const stored = parseBillingProviderId(input.storedProvider);
+  if (input.cameFromShopify || stored === "shopify") return "shopify";
+  return input.envProvider === "demo" ? "demo" : "shopify";
 }

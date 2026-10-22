@@ -114,6 +114,16 @@ describe("public plans in Facturación", () => {
     assert.doesNotMatch(sql, /is_active/);
   });
 
+  it("never shows Stripe in Facturación", () => {
+    for (const file of [
+      "app/a/[agencySlug]/(agency)/billing/page.tsx",
+      "components/billing/BillingPanel.tsx",
+    ]) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      assert.doesNotMatch(source, /stripe/i, file);
+    }
+  });
+
   it("only lists public plans in Facturación", () => {
     const source = readFileSync(resolve(process.cwd(), "services/billing.service.ts"), "utf8");
     const plansQueries = source.match(/\.from\("plans"\)[\s\S]*?\.order\("monthly_price"/g) ?? [];

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mapShopifyActiveSubscription } from "@/lib/billing/shopify-subscription-map";
-import { decideShopifySubscriptionSync } from "@/lib/billing/shopify-subscription-guard";
 import { resolveConsoleBillingChrome } from "@/lib/billing/console-billing-mode";
 import { gateConfirmCollectedRemesa } from "@/lib/reconciliation/collected-gate";
 import { matchSettlementRow } from "@/lib/reconciliation/matching";
@@ -118,13 +117,6 @@ describe("strategic · dinero", () => {
     );
     assert.equal(mapped.planCode, "growth");
     assert.equal(mapped.status, "active");
-    assert.deepEqual(decideShopifySubscriptionSync(null), { sync: true });
-    assert.deepEqual(decideShopifySubscriptionSync("demo"), { sync: true });
-    assert.deepEqual(decideShopifySubscriptionSync("shopify"), { sync: true });
-    assert.deepEqual(decideShopifySubscriptionSync("stripe"), {
-      sync: false,
-      reason: "agency_uses_stripe",
-    });
   });
 
   it("opens Shopify Admin from the console and does not start Stripe Checkout", () => {
@@ -133,6 +125,10 @@ describe("strategic · dinero", () => {
     assert.equal(chrome.planCtaLabel({ current: false, selfServe: true }), "Elegir en Shopify");
     assert.equal(chrome.manageLabel, "Administrar en Shopify");
     assert.equal(chrome.hideStripeInvoiceExpectation, true);
-    assert.match(chrome.platformNote, /No uses Stripe Checkout/);
+    assert.match(chrome.platformNote, /Administrar en Shopify/);
+    assert.doesNotMatch(
+      [chrome.providerLabel, chrome.banner, chrome.platformNote, chrome.footerNote].join(" "),
+      /Stripe/,
+    );
   });
 });

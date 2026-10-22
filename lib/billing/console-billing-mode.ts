@@ -1,5 +1,5 @@
 /**
- * Pure chrome for agency Facturación when the provider is Shopify vs Stripe/demo.
+ * Pure chrome for agency Facturación (Shopify App Pricing or demo; the Stripe branch is retired).
  */
 
 export type ConsoleBillingMode = "demo" | "stripe" | "shopify";
@@ -27,7 +27,7 @@ export function resolveConsoleBillingChrome(mode: ConsoleBillingMode): ConsoleBi
       banner:
         "Este plan se cobra en la factura de Shopify del merchant. Cambios de plan, cancelación y método de pago se administran en el Admin de Shopify.",
       platformNote:
-        "La consola muestra el estado sincronizado desde Shopify App Pricing. No uses Stripe Checkout para esta agencia.",
+        "El estado del plan se sincroniza desde Shopify. Para cambiarlo o cancelarlo, usa Administrar en Shopify.",
       manageLabel: "Administrar en Shopify",
       hideLocalCancelControls: true,
       planCtaOpensShopify: true,
@@ -66,7 +66,7 @@ export function resolveConsoleBillingChrome(mode: ConsoleBillingMode): ConsoleBi
     providerLabel: "Facturación de demostración",
     banner: "",
     platformNote:
-      "Modo demo: cambios de plan locales sin cargo real. En producción usa Stripe (legado) o Shopify App Pricing.",
+      "Modo demo: cambios de plan locales sin cargo real. En producción el plan se cobra con Shopify App Pricing.",
     manageLabel: "Portal de facturación",
     hideLocalCancelControls: false,
     planCtaOpensShopify: false,

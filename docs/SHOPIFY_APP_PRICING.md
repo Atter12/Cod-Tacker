@@ -10,13 +10,12 @@ Cobro de la app por **Shopify App Pricing** (cargo en la factura Shopify del mer
 
 | Adquisición | Proveedor | Dónde elige plan |
 | --- | --- | --- |
-| App Store / install embebido | `shopify` | Página hospedada de Shopify Admin |
-| Agencia ya en Stripe / fuera de Shopify | `stripe` | Facturación en `cod.codtracked.com` |
-| Local / demo | `demo` | Facturación aplica plan sin cargo |
+| Cualquier agencia (App Store o consola) | `shopify` | Página hospedada de Shopify Admin |
+| Local / demo (`BILLING_PROVIDER=demo`) | `demo` | Facturación aplica plan sin cargo |
 
-- Embed (`app.codtracked.com/embed`): nunca Stripe Checkout.
-- Consola: si `subscriptions.billing_provider = shopify`, “Elegir plan” / portal redirigen a App Pricing.
-- Sync nunca sobrescribe una suscripción `stripe` activa.
+- **Stripe está retirado:** `decideAgencyBillingProvider` nunca lo elige, ni con `BILLING_PROVIDER=stripe` ni con una fila `stripe` vieja. Facturación no muestra Stripe (sin modo test, portal ni textos).
+- Agencias sin tienda Shopify: “Elegir plan” pide conectar una tienda primero (el plan se cobra en su factura de Shopify).
+- La sincronización de App Pricing reemplaza filas `demo` o `stripe`. Una fila `stripe` existente sigue dando acceso a su plan hasta que la agencia elija uno en Shopify o se limpie.
 
 ## Qué desbloquea cada plan
 
@@ -89,5 +88,5 @@ npx tsx --test lib/billing/app-store-gates.test.ts lib/billing/embed-plan-state.
 | --- | --- |
 | `SHOPIFY_APP_HANDLE` / `SHOPIFY_APP_GID` | Planes + Partner |
 | `SHOPIFY_PARTNER_ORG_ID` / `SHOPIFY_PARTNER_API_TOKEN` | Sync |
-| `BILLING_PROVIDER` | Preferir `shopify` para nuevas agencias App Store |
+| `BILLING_PROVIDER` | `shopify` en prod (`stripe` ya no se usa); `demo` en local |
 | `PRODUCT_APP_URL` | Consola / Stripe legado |

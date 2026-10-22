@@ -31,7 +31,7 @@ Copy `.env.example` to `.env.local` for local development. Do not commit real cr
 | `ALLOW_DEMO_SEED` | Seed CLI only | Must be `true` to run `npm run seed:demo`. |
 | `DEMO_AGENCY_ID` | Seed CLI only | Target agency UUID for demo seed. |
 | `DEMO_STORE_ID` | Seed CLI only | Target store UUID (must belong to agency). |
-| `BILLING_PROVIDER` | Server only | `demo` (default), `stripe`, or `shopify` (App Pricing). Independent of `INTEGRATION_MODE`. See [SHOPIFY_APP_PRICING.md](./SHOPIFY_APP_PRICING.md). |
+| `BILLING_PROVIDER` | Server only | `demo` (default, local) or `shopify` (App Pricing, prod). `stripe` is retired: agencies resolve to Shopify App Pricing. Independent of `INTEGRATION_MODE`. See [SHOPIFY_APP_PRICING.md](./SHOPIFY_APP_PRICING.md). |
 | `SHOPIFY_APP_HANDLE` | Server only | App handle for hosted plan URLs (`admin.shopify.com/.../charges/{handle}/pricing_plans`). Required when `BILLING_PROVIDER=shopify`. |
 | `SHOPIFY_PLAN_HANDLE_STARTER` / `_GROWTH` / `_SCALE` | Server only | Optional Partner plan_handle overrides; default equals `plans.code`. |
 | `SHOPIFY_PARTNER_ORG_ID` | Server only | Partner organization id for App Pricing `activeSubscription` sync. |

@@ -7,7 +7,6 @@ import {
 } from "@/lib/billing/env";
 import { isFreeShopifyConnectorSettings } from "@/lib/billing/connector-access";
 import { decideAgencyBillingProvider } from "@/lib/billing/provider-id";
-import { isShopifyAppPricingConfigured } from "@/lib/billing/shopify-billing-env";
 import type { BillingProvider, BillingProviderId } from "@/lib/integrations/contracts/billing";
 import { createDemoBillingProvider } from "@/lib/integrations/mock/billing.mock";
 import { createShopifyBillingProvider } from "@/lib/integrations/shopify/live-billing";
@@ -42,8 +41,8 @@ export function isShopifyBillingMode(mode: BillingProviderMode = resolveBillingP
 }
 
 /**
- * Agency-aware provider: a stored Stripe subscription wins; agencies that came
- * from Shopify always use App Pricing; otherwise BILLING_PROVIDER.
+ * Agency-aware provider: Shopify App Pricing for every agency (demo only in a
+ * demo environment). Stripe is never chosen.
  * See `decideAgencyBillingProvider`.
  */
 export async function resolveAgencyBillingProviderId(
@@ -71,7 +70,6 @@ export async function resolveAgencyBillingProviderId(
   return decideAgencyBillingProvider({
     storedProvider: subscription.data?.billing_provider,
     envProvider: resolveBillingProviderMode(),
-    shopifyAppPricingConfigured: isShopifyAppPricingConfigured(),
     cameFromShopify:
       isFreeShopifyConnectorSettings(agency.data?.settings) || Boolean(shopifyStore.data),
   });

@@ -17,48 +17,30 @@ describe("billing provider id parse", () => {
 });
 
 describe("agency billing provider (App Store 1.2.1)", () => {
-  const base = {
-    storedProvider: null,
-    envProvider: "stripe" as const,
-    shopifyAppPricingConfigured: true,
-    cameFromShopify: false,
-  };
+  const base = { storedProvider: null, envProvider: "stripe" as const, cameFromShopify: false };
 
-  it("never sends a Shopify-origin agency without a subscription to Stripe", () => {
-    assert.equal(decideAgencyBillingProvider({ ...base, cameFromShopify: true }), "shopify");
-    assert.equal(
-      decideAgencyBillingProvider({ ...base, storedProvider: "demo", cameFromShopify: true }),
-      "shopify",
-    );
-  });
-
-  it("fails closed to Shopify when App Pricing is not configured", () => {
-    assert.equal(
-      decideAgencyBillingProvider({
-        ...base,
-        cameFromShopify: true,
-        shopifyAppPricingConfigured: false,
-      }),
-      "shopify",
-    );
-  });
-
-  it("keeps a stored Stripe subscription (legacy agency)", () => {
+  it("never chooses Stripe, even with BILLING_PROVIDER=stripe or an old Stripe row", () => {
+    assert.equal(decideAgencyBillingProvider(base), "shopify");
+    assert.equal(decideAgencyBillingProvider({ ...base, storedProvider: "stripe" }), "shopify");
     assert.equal(
       decideAgencyBillingProvider({ ...base, storedProvider: "stripe", cameFromShopify: true }),
-      "stripe",
+      "shopify",
     );
   });
 
-  it("uses BILLING_PROVIDER for console-only agencies", () => {
-    assert.equal(decideAgencyBillingProvider(base), "stripe");
+  it("uses Shopify App Pricing for agencies that came from Shopify", () => {
+    assert.equal(decideAgencyBillingProvider({ ...base, cameFromShopify: true }), "shopify");
     assert.equal(
-      decideAgencyBillingProvider({
-        ...base,
-        storedProvider: "shopify",
-        shopifyAppPricingConfigured: false,
-      }),
-      "stripe",
+      decideAgencyBillingProvider({ ...base, envProvider: "demo", cameFromShopify: true }),
+      "shopify",
+    );
+  });
+
+  it("keeps demo billing only in a demo environment", () => {
+    assert.equal(decideAgencyBillingProvider({ ...base, envProvider: "demo" }), "demo");
+    assert.equal(
+      decideAgencyBillingProvider({ ...base, envProvider: "demo", storedProvider: "shopify" }),
+      "shopify",
     );
   });
 });

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils/cn";
 const ESCENARIO_COBRO_HINT: Record<"1C" | "1E" | "1D", string> = {
   "1C": "El cliente paga en destino vía Yape directo al motorizado.",
   "1E": "El cliente paga en destino en efectivo al motorizado.",
-  "1D": "El cliente paga en destino con tarjeta/Stripe en el link de rastreo.",
+  "1D": "El cliente paga en destino con tarjeta en el link de rastreo de Flipy.",
 };
 
 type EscenarioOption = {
