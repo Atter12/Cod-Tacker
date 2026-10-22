@@ -104,6 +104,26 @@ describe("plan comparison in Facturación", () => {
   });
 });
 
+describe("public plans in Facturación", () => {
+  it("hides Agency but keeps it active for agencies already on it", () => {
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20261023100000_hide_agency_plan.sql"),
+      "utf8",
+    );
+    assert.match(sql, /set\s+is_public = false,[\s\S]*where code = 'agency';/);
+    assert.doesNotMatch(sql, /is_active/);
+  });
+
+  it("only lists public plans in Facturación", () => {
+    const source = readFileSync(resolve(process.cwd(), "services/billing.service.ts"), "utf8");
+    const plansQueries = source.match(/\.from\("plans"\)[\s\S]*?\.order\("monthly_price"/g) ?? [];
+    assert.equal(plansQueries.length, 2);
+    for (const query of plansQueries) {
+      assert.match(query, /\.eq\("is_public", true\)/);
+    }
+  });
+});
+
 describe("upgrade hints", () => {
   it("has friendly copy for every gated section", () => {
     for (const section of Object.keys(PLAN_SECTION_MIN_PLAN) as PlanSection[]) {
